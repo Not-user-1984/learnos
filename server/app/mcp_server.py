@@ -32,6 +32,36 @@ def list_sources(course_id: int) -> list[dict]:
 
 
 @mcp.tool()
+def process_source(source_id: int) -> dict:
+    """Обработать источник. book → PDF-сплиттер (TOC → главы); video → транскрипт YouTube → глава."""
+    return core.process_source(source_id)
+
+
+@mcp.tool()
+def list_chapters(source_id: int) -> list[dict]:
+    """Главы обработанного источника (idx, title, tokens_est, summary)."""
+    return core.list_chapters(source_id)
+
+
+@mcp.tool()
+def read_chapter(source_id: int, chapter: int, offset: int = 0, limit: int = 12000) -> dict:
+    """Текст главы (порционно: offset/next_offset — не грузим весь источник в контекст)."""
+    return core.read_chapter(source_id, chapter, offset, limit)
+
+
+@mcp.tool()
+def search_chunks(query: str, limit: int = 10) -> list[dict]:
+    """Поиск по главам обработанных источников (v0: подстрока)."""
+    return core.search_chunks(query, limit)
+
+
+@mcp.tool()
+def research_sources(topic: str, limit: int = 8) -> dict:
+    """Поиск источников по теме (web-search скилл). Возвращает кандидатов для add_source."""
+    return skills_loader.run_skill("web-search", {"query": f"лучшие книги и курсы: {topic}", "limit": limit})
+
+
+@mcp.tool()
 def start_session(course_id: int) -> dict:
     """Начать сессию обучения по курсу. Возвращает состояние стейт-машины."""
     return core.start_session(course_id)

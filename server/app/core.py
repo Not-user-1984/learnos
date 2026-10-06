@@ -162,6 +162,109 @@ def finish_session(session_id: int, block: dict) -> dict:
         conn.close()
 
 
+def process_source(source_id: int) -> dict:
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM sources WHERE id = ?", (source_id,)).fetchone()
+        if not row:
+            return {"error": f"source {source_id} not found"}
+        if row["status"] == "processed":
+            return {"ok": True, "note": "already processed", "chapters": list_chapters(source_id)}
+        kind, url = row["kind"], row["url"]
+    finally:
+        conn.close()
+
+    from . import skills_loader
+
+    if kind == "book":
+        return skills_loader.run_skill("book-splitter", {"source_id": source_id})
+    if kind == "video" and url:
+        res = skills_loader.run_skill("youtube-to-summary", {"url": url})
+        if res.get("ok"):
+            path = Path(res["path"])
+            text_len = path.stat().st_size
+            conn = get_db()
+            try:
+                conn.execute(
+                    "INSERT INTO chapters(source_id, idx, title, path, tokens_est, summary) VALUES (?,?,?,?,?,?)",
+                    (source_id, 1, res.get("title", url), str(path), max(1, text_len // 4), res.get("preview", "")[:280]),
+                )
+                conn.execute("UPDATE sources SET status = 'processed', meta_json = ? WHERE id = ?",
+                             (dumps({"video_id": res.get("video_id"), "lang": res.get("lang")}), source_id))
+                conn.commit()
+            finally:
+                conn.close()
+        return res
+    return {"error": f"не знаю, как обрабатывать kind='{kind}' (нужен url для video или local_path для book)"}
+
+
+def list_chapters(source_id: int) -> list[dict]:
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT idx, title, path, tokens_est, summary FROM chapters WHERE source_id = ? ORDER BY idx",
+            (source_id,),
+        ).fetchall()
+        return rows_to_dicts(rows)
+    finally:
+        conn.close()
+
+
+def read_chapter(source_id: int, chapter: int, offset: int = 0, limit: int = 12000) -> dict:
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM chapters WHERE source_id = ? AND idx = ?", (source_id, chapter)
+        ).fetchone()
+        if not row:
+            return {"error": f"chapter {chapter} of source {source_id} not found"}
+    finally:
+        conn.close()
+    text = Path(row["path"]).read_text(encoding="utf-8")
+    chunk = text[offset : offset + limit]
+    return {
+        "source_id": source_id,
+        "idx": row["idx"],
+        "title": row["title"],
+        "total_chars": len(text),
+        "offset": offset,
+        "next_offset": offset + limit if offset + limit < len(text) else None,
+        "text": chunk,
+    }
+
+
+def search_chunks(query: str, limit: int = 10) -> list[dict]:
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT ch.source_id, ch.idx, ch.title, ch.path, s.title AS source_title "
+            "FROM chapters ch JOIN sources s ON s.id = ch.source_id WHERE s.status = 'processed'"
+        ).fetchall()
+    finally:
+        conn.close()
+    needle = query.lower()
+    hits = []
+    for r in rows:
+        try:
+            text = Path(r["path"]).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        pos = text.lower().find(needle)
+        if pos == -1:
+            continue
+        start = max(0, pos - 150)
+        hits.append({
+            "source_id": r["source_id"],
+            "source_title": r["source_title"],
+            "chapter": r["idx"],
+            "chapter_title": r["title"],
+            "snippet": text[start : pos + len(query) + 200].replace("\n", " "),
+        })
+        if len(hits) >= limit:
+            break
+    return hits
+
+
 def list_blocks(course_id: int | None = None) -> list[dict]:
     conn = get_db()
     try:

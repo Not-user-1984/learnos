@@ -61,14 +61,14 @@
 ### Фаза 1 — MVP петли обучения (локально на маке, водит opencode)
 Цель: доказать петлю «источник → сессия → блок».
 
-- [ ] система скиллов `server/skills/` (drop-in, авт. регистрация как MCP-инструментов)
-- [ ] порт скиллов: `youtube-to-summary`, `web-search`
-- [ ] скилл `book-splitter`: PDF → TOC → главы → чанки на диске
-- [ ] модель данных: Course / Source / Chapter / Session / Block
+- [x] система скиллов `server/skills/` (drop-in, авт. регистрация как MCP-инструментов)
+- [x] порт скиллов: `youtube-to-summary`, `web-search`
+- [x] скилл `book-splitter`: PDF → TOC → главы → чанки на диске
+- [x] модель данных: Course / Source / Chapter / Session / Block
 - [ ] сессию водит opencode через MCP (разговор в терминале), сервис хранит состояние и валидирует переходы
 - [ ] генерация блока после сессии: тезисы + мои примеры + mermaid
 - [ ] веб-UI read-only: список/карточка блока (тезисы → примеры → mermaid), растёт параллельно петле
-- [ ] блоки — markdown в папке `kb/`
+- [x] блоки — markdown в папке `kb/`
 
 ### Фаза 2 — сервис на хомлаб + красивый UI
 - [ ] Docker на хомлабе (host-docker или отдельный LXC), данные на `/SSD256/learnos`

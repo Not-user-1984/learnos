@@ -52,6 +52,22 @@ def make_router():
     def sources_list(course_id: int):
         return core.list_sources(course_id)
 
+    @r.post("/sources/{source_id}/process")
+    def sources_process(source_id: int):
+        return core.process_source(source_id)
+
+    @r.get("/sources/{source_id}/chapters")
+    def chapters_list(source_id: int):
+        return core.list_chapters(source_id)
+
+    @r.get("/sources/{source_id}/chapters/{chapter}")
+    def chapters_read(source_id: int, chapter: int, offset: int = 0, limit: int = 12000):
+        return core.read_chapter(source_id, chapter, offset, limit)
+
+    @r.get("/search")
+    def search(q: str, limit: int = 10):
+        return core.search_chunks(q, limit)
+
     @r.post("/sessions")
     def sessions_start(course_id: int):
         return core.start_session(course_id)

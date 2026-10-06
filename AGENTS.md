@@ -7,15 +7,14 @@
 - [PLAN.md](PLAN.md) — идея, фазы, зафиксированные решения (§6)
 - [ARCHITECTURE.md](ARCHITECTURE.md) — компоненты, модель данных, MCP-инструменты, стейт-машина сессии
 
-## Текущий статус (2026-10-06, фаза 0)
+## Текущий статус (2026-10-06, фаза 1)
 
-Решения зафиксированы, кода ещё нет. Следующий шаг — фаза 0/1 (PLAN.md §4):
+Ядро `server/` работает и протестировано: ингест (PDF/YouTube) + сессии + блоки. Осталось из фазы 1:
 
-1. Skeleton `server/`: FastAPI + SQLite (модель из ARCHITECTURE.md §2) + MCP streamable HTTP
-2. Skeleton `web/`: Next.js + TS strict, типы API из OpenAPI
-3. Скилл-система `server/skills/` (drop-in, авт. регистрация как MCP-инструментов) + порты `youtube-to-summary`, `web-search`
-4. `book-splitter`: PDF → TOC (pymupdf) → главы → чанки-файлы + summary на главу
-5. Петля MVP: сессию водит opencode через MCP, блок пишется как markdown + frontmatter в `kb/`
+1. Реальная учебная сессия через MCP (водит opencode из этого проекта — рестартни opencode, MCP подхватится)
+2. Skeleton `web/`: Next.js + TS strict, типы API из OpenAPI (read-only карточки блоков)
+3. sqlite-vec для семантического поиска (сейчас подстрока)
+4. LLM-клиент (z.ai, ключ `ZAI_API_KEY` в sec): summary глав, генерация драфта блока из транскрипта
 
 ## Зафиксированные решения
 
@@ -35,10 +34,12 @@ uv sync
 uv run uvicorn app.main:app --port 8765
 ```
 
-- REST: `http://localhost:8765/api/*` (курсы/сессии/блоки/скиллы)
-- MCP: `http://localhost:8765/mcp` (streamable HTTP, 12+ инструментов)
-- Петля: `POST /api/courses` → `POST /api/sources` → `POST /api/sessions?course_id=N` → `advance` (theory_done → ask/answer → go_practice → practice_done) → `finish` с драфтом блока → файл в `kb/`
-- Скиллы: `server/skills/<name>/` (SKILL.md + run.py), подхватываются на старте, видны через `/api/skills` и MCP `list_skills`/`run_skill`
+- REST: `http://localhost:8765/api/*` (курсы/сессии/блоки/скиллы/главы/поиск)
+- MCP: `http://localhost:8765/mcp` (streamable HTTP, 17+ инструментов; подключён в `opencode.json` проекта)
+- Петля: `POST /api/courses` → `POST /api/sources` → `POST /api/sources/N/process` (PDF → главы; YouTube → транскрипт) → `POST /api/sessions?course_id=N` → `advance` (theory_done → ask/answer → go_practice → practice_done) → `finish` с драфтом блока → файл в `kb/`
+- Чтение источника: `GET /api/sources/N/chapters` → `GET /api/sources/N/chapters/X` (порционно), `GET /api/search?q=...` (пока подстрока; sqlite-vec — фаза 1.1)
+- Скиллы: `server/skills/<name>/` (SKILL.md + run.py), подхватываются на старте, видны через `/api/skills` и MCP `list_skills`/`run_skill`. Сейчас: `web-search` (DDG), `book-splitter` (PDF→главы), `youtube-to-summary` (субтитры, прокси 7890 автодетект)
+- YouTube работает через SOCKS5 `127.0.0.1:7890` (mihomo) — если не запущен, качает напрямую
 
 ## Хомлаб (для фазы 2 и песочниц)
 
