@@ -27,6 +27,19 @@
 - Фаза 1 целиком на маке; деплой на хомлаб — фаза 2
 - Git: только код и `kb/*.md`; книги/транскрипты в git не попадают
 
+## Как запустить (прототип)
+
+```bash
+cd server
+uv sync
+uv run uvicorn app.main:app --port 8765
+```
+
+- REST: `http://localhost:8765/api/*` (курсы/сессии/блоки/скиллы)
+- MCP: `http://localhost:8765/mcp` (streamable HTTP, 12+ инструментов)
+- Петля: `POST /api/courses` → `POST /api/sources` → `POST /api/sessions?course_id=N` → `advance` (theory_done → ask/answer → go_practice → practice_done) → `finish` с драфтом блока → файл в `kb/`
+- Скиллы: `server/skills/<name>/` (SKILL.md + run.py), подхватываются на старте, видны через `/api/skills` и MCP `list_skills`/`run_skill`
+
 ## Хомлаб (для фазы 2 и песочниц)
 
 Репо автоматизации: `~/my_dev/my_servak/proxmox` (читать его AGENTS.md перед работой с сервером).
