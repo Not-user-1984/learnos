@@ -9,12 +9,11 @@
 
 ## Текущий статус (2026-10-06, фаза 1)
 
-Ядро `server/` работает и протестировано: ингест (PDF/YouTube) + сессии + блоки. Осталось из фазы 1:
+Ядро `server/` работает и протестировано: ингест (PDF/YouTube) + сессии + блоки. Веб-скелет `web/` (Next.js 16 + TS strict): список блоков + карточка с mermaid. Осталось из фазы 1:
 
 1. Реальная учебная сессия через MCP (водит opencode из этого проекта — рестартни opencode, MCP подхватится)
-2. Skeleton `web/`: Next.js + TS strict, типы API из OpenAPI (read-only карточки блоков)
-3. sqlite-vec для семантического поиска (сейчас подстрока)
-4. LLM-клиент (z.ai, ключ `ZAI_API_KEY` в sec): summary глав, генерация драфта блока из транскрипта
+2. sqlite-vec для семантического поиска (сейчас подстрока)
+3. LLM-клиент (z.ai, ключ `ZAI_API_KEY` в sec): summary глав, генерация драфта блока из транскрипта
 
 ## Зафиксированные решения
 
@@ -33,6 +32,16 @@ cd server
 uv sync
 uv run uvicorn app.main:app --port 8765
 ```
+
+Веб (в отдельном терминале):
+
+```bash
+cd web
+npm install   # если npm висит: HTTPS_PROXY=http://127.0.0.1:7890 npm install
+npm run dev   # http://localhost:3000 (API — LEARNOS_API_URL, по умолчанию http://localhost:8765)
+```
+
+- Типы API: `npm run gen:api` (сервер должен быть запущен; openapi-typescript → `src/types/api.ts`)
 
 - REST: `http://localhost:8765/api/*` (курсы/сессии/блоки/скиллы/главы/поиск)
 - MCP: `http://localhost:8765/mcp` (streamable HTTP, 17+ инструментов; подключён в `opencode.json` проекта)
