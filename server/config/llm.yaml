@@ -1,0 +1,17 @@
+providers:
+  zai:
+    type: openai_compat
+    base_url: https://api.z.ai/api/coding/paas/v4
+    api_key_env: ZAI_API_KEY
+    capabilities: {tools: true, streaming: true, json_schema: false, vision: false}
+  ollama:
+    type: openai_compat
+    base_url: http://localhost:11434/v1
+    api_key_env: null
+    enabled: false
+
+roles:
+  chat:       {provider: zai, model: glm-5.3}
+  structured: {provider: zai, model: glm-5.3}
+  fast:       {provider: zai, model: glm-5.3}
+  vision:     {provider: zai, model: glm-4.6v}

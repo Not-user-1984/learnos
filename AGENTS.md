@@ -4,16 +4,15 @@
 
 **Обязательное чтение перед работой:**
 
+- [task_ai/README.md](task_ai/README.md) — **ТЗ на развитие (источник истины для цели)**: этапы, архитектура, правила кода; раздел «Изменения ТЗ» — читать при каждом новом этапе
 - [PLAN.md](PLAN.md) — идея, фазы, зафиксированные решения (§6)
 - [ARCHITECTURE.md](ARCHITECTURE.md) — компоненты, модель данных, MCP-инструменты, стейт-машина сессии
 
-## Текущий статус (2026-10-06, фаза 1)
+## Текущий статус (2026-10-13, этапы 1–6 ТЗ выполнены)
 
-Ядро `server/` работает и протестировано: ингест (PDF/YouTube) + сессии + блоки. Веб-скелет `web/` (Next.js 16 + TS strict): список блоков + карточка с mermaid. Осталось из фазы 1:
+Сервер переписан в модульный монолит (9 модулей, слои domain/service/infra, единый ToolRegistry → MCP `/mcp` + `/mcp/<module>` + агенты), схема v2 с миграциями Alembic, LLM-слой z.ai GLM (chat/structured/fast) и агентный рантайм (тьюторы чата, block_writer, categorizer, chapter_summarizer, course_planner; трейсы в `agent_runs`). Веб: чат с SSE и карточками, база знаний (категории/входящие/версии), библиотека (PDF/YouTube + читалка), курсы (прогресс + планировщик), настройки. Всё живёт в Docker Compose; живые сценарии (быстрый разбор → конспект, сессия → урок, планировщик курса, экспорт) прогнаны на GLM. Тесты: 87 (unit/integration/api/contract/agent), ruff 0, import-linter 3 контракта.
 
-1. Реальная учебная сессия через MCP (водит opencode из этого проекта — рестартни opencode, MCP подхватится)
-2. sqlite-vec для семантического поиска (сейчас подстрока)
-3. LLM-клиент (z.ai, ключ `ZAI_API_KEY` в sec): summary глав, генерация драфта блока из транскрипта
+Из незакрытого (бэклог, см. отчёты этапов): полный mypy, семантический поиск (sqlite-vec), YouTube-транскрипт в контейнере, Obsidian-валидация ZIP, Lighthouse.
 
 ## Зафиксированные решения
 
@@ -27,28 +26,34 @@
 
 ## Как запустить (прототип)
 
-```bash
-cd server
-uv sync
-uv run uvicorn app.main:app --port 8765
-```
+## Как запустить
 
-Веб (в отдельном терминале):
+**Docker (основной способ):**
 
 ```bash
-cd web
-npm install   # если npm висит: HTTPS_PROXY=http://127.0.0.1:7890 npm install
-npm run dev   # http://localhost:3000 (API — LEARNOS_API_URL, по умолчанию http://localhost:8765)
+docker compose build
+~/.local/bin/sec exec ZAI_API_KEY -- docker compose up -d   # с ключом GLM; без sec — LLM выключен, сервис работает
+# web: http://localhost:3000 · REST: http://localhost:8765/api · MCP: http://localhost:8765/mcp
 ```
 
-- Типы API: `npm run gen:api` (сервер должен быть запущен; openapi-typescript → `src/types/api.ts`)
+**Локально (разработка):**
 
-- REST: `http://localhost:8765/api/*` (курсы/сессии/блоки/скиллы/главы/поиск)
-- MCP: `http://localhost:8765/mcp` (streamable HTTP, 17+ инструментов; подключён в `opencode.json` проекта)
-- Петля: `POST /api/courses` → `POST /api/sources` → `POST /api/sources/N/process` (PDF → главы; YouTube → транскрипт) → `POST /api/sessions?course_id=N` → `advance` (theory_done → ask/answer → go_practice → practice_done) → `finish` с драфтом блока → файл в `kb/`
-- Чтение источника: `GET /api/sources/N/chapters` → `GET /api/sources/N/chapters/X` (порционно), `GET /api/search?q=...` (пока подстрока; sqlite-vec — фаза 1.1)
-- Скиллы: `server/skills/<name>/` (SKILL.md + run.py), подхватываются на старте, видны через `/api/skills` и MCP `list_skills`/`run_skill`. Сейчас: `web-search` (DDG), `book-splitter` (PDF→главы), `youtube-to-summary` (субтитры, прокси 7890 автодетект)
-- YouTube работает через SOCKS5 `127.0.0.1:7890` (mihomo) — если не запущен, качает напрямую
+```bash
+cd server && uv sync && uv run uvicorn app.main:app --port 8765   # миграции применяются на старте
+cd web && npm install && npm run dev                              # LEARNOS_API_URL, по умолчанию http://localhost:8765
+```
+
+- Проверка сервера: `cd server && uv run ruff check . && uv run ruff format --check . && uv run lint-imports && uv run pytest`
+- Проверка веба: `cd web && npm run lint && npx tsc --noEmit && npm run build`; типы API: `npm run gen:api`
+- Живой LLM-smoke: `sec exec ZAI_API_KEY -- uv run python -m app.cli smoke-llm` (или в контейнере)
+- CLI: `uv run python -m app.cli migrate|reindex|smoke-llm|seed-demo`
+
+## Ключевые эндпоинты
+
+- REST: `/api/health`, `/api/conversations` (+`/{uid}/messages` SSE, `/stop`), `/api/kb/*` (блоки/категории/входящие/версии/reindex), `/api/sources` (+`/upload`, `/{id}/process`, главы), `/api/activities`, `/api/sessions` (+advance/finish), `/api/courses` (+`/plan`, `/from-plan`, items), `/api/search`, `/api/export`
+- MCP: `/mcp` (все ~40 инструментов) и `/mcp/<module>` (knowledge, library, learning, chat, courses, profile, search, export, skills)
+- Чат-режимы: free / quick / session; сессия-урок создается первым сообщением в разговоре session-режима
+- Скиллы: `server/skills/<name>/` (web-search, book-splitter, youtube-to-summary) — те же, что и раньше, видны в MCP и агентам
 
 ## Хомлаб (для фазы 2 и песочниц)
 

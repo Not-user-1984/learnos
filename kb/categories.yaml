@@ -1,0 +1,20 @@
+- path: kubernetes
+  title: kubernetes
+- path: infra
+  title: Инфраструктура
+  children:
+  - path: infra/kubernetes
+    title: Kubernetes
+- path: life
+  title: Личное
+  children:
+  - path: life/cooking
+    title: Кулинария
+- path: programming
+  title: Программирование
+  children:
+  - path: programming/python
+    title: Python
+    children:
+    - path: programming/python/oop
+      title: ООП

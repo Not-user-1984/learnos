@@ -1,0 +1,28 @@
+# LearnOS: ядро (FastAPI+MCP) + веб (Next.js). Данные — в ./data и ./kb хоста.
+services:
+  server:
+    build: ./server
+    container_name: learnos-server
+    restart: unless-stopped
+    environment:
+      LEARNOS_DATA_DIR: /data
+      LEARNOS_KB_DIR: /kb
+      LEARNOS_SKILLS_DIR: /app/skills
+      # ключ модели пробрасывается из окружения: export ZAI_API_KEY=… (sec exec)
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
+    volumes:
+      - ./data:/data
+      - ./kb:/kb
+    ports:
+      - "8765:8765"
+
+  web:
+    build: ./web
+    container_name: learnos-web
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      LEARNOS_API_URL: http://server:8765
+    ports:
+      - "3000:3000"

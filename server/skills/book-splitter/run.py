@@ -55,7 +55,14 @@ def main(source_id: int) -> dict:
                 "INSERT INTO chapters(source_id, idx, title, path, tokens_est, summary) VALUES (?,?,?,?,?,?)",
                 (source_id, idx, title, str(chapter_path), max(1, len(text) // 4), summary),
             )
-            chapters.append({"idx": idx, "title": title, "pages": f"{start_page}-{end_page - 1}", "tokens_est": len(text) // 4})
+            chapters.append(
+                {
+                    "idx": idx,
+                    "title": title,
+                    "pages": f"{start_page}-{end_page - 1}",
+                    "tokens_est": len(text) // 4,
+                }
+            )
 
         conn.execute("UPDATE sources SET status = 'processed' WHERE id = ?", (source_id,))
         conn.commit()

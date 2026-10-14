@@ -40,10 +40,23 @@ def main(url: str) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     tmpl = str(out_dir / "%(id)s.%(ext)s")
 
-    cmd = ["yt-dlp", "--skip-download", "--write-subs", "--write-auto-subs",
-           "--sub-langs", "ru,en", "--sub-format", "vtt/srt/best",
-           "--print", "%(id)s|%(title)s", "--no-simulate", "--no-playlist",
-           "-o", tmpl, url]
+    cmd = [
+        "yt-dlp",
+        "--skip-download",
+        "--write-subs",
+        "--write-auto-subs",
+        "--sub-langs",
+        "ru,en",
+        "--sub-format",
+        "vtt/srt/best",
+        "--print",
+        "%(id)s|%(title)s",
+        "--no-simulate",
+        "--no-playlist",
+        "-o",
+        tmpl,
+        url,
+    ]
     if _proxy_up():
         cmd += ["--proxy", f"socks5://{PROXY_HOST}:{PROXY_PORT}"]
 
@@ -57,7 +70,11 @@ def main(url: str) -> dict:
 
     subs = sorted(out_dir.glob(f"{video_id}.*.vtt")) + sorted(out_dir.glob(f"{video_id}.*.srt"))
     if not subs:
-        return {"error": "субтитры не найдены (ru/en), Whisper-fallback не реализован", "video_id": video_id, "title": title}
+        return {
+            "error": "субтитры не найдены (ru/en), Whisper-fallback не реализован",
+            "video_id": video_id,
+            "title": title,
+        }
 
     raw = subs[0].read_text(encoding="utf-8", errors="replace")
     text = _parse_vtt(raw)

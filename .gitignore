@@ -8,3 +8,10 @@ web/node_modules/
 .env
 .env.*
 .DS_Store
+# артефакты проверок и локальные данные
+server/.coverage
+server/.pytest_cache/
+server/.ruff_cache/
+server/.mypy_cache/
+server/htmlcov/
+server/dist/

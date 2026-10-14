@@ -1,11 +1,15 @@
-import pathlib
+"""Совместимость путей для скиллов (server/skills/*/run.py)."""
 
-SERVER_DIR = pathlib.Path(__file__).resolve().parent.parent
+from .kernel.config import get_settings
+
+_settings = get_settings()
+
+SERVER_DIR = _settings.skills_dir.parent
 REPO_DIR = SERVER_DIR.parent
-DATA_DIR = REPO_DIR / "data"
-DB_PATH = DATA_DIR / "learnos.db"
-KB_DIR = REPO_DIR / "kb"
-SKILLS_DIR = SERVER_DIR / "skills"
+DATA_DIR = _settings.data_dir
+DB_PATH = _settings.db_path
+KB_DIR = _settings.kb_dir
+SKILLS_DIR = _settings.skills_dir
 
-DATA_DIR.mkdir(exist_ok=True)
-KB_DIR.mkdir(exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+KB_DIR.mkdir(parents=True, exist_ok=True)

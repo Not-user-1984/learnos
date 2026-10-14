@@ -15,7 +15,12 @@ def main(query: str, limit: int = 5) -> dict:
         follow_redirects=True,
     )
     if r.status_code != 200 or "result__a" not in r.text:
-        return {"query": query, "count": 0, "results": [], "error": f"ddg status {r.status_code}, возможно анти-бот"}
+        return {
+            "query": query,
+            "count": 0,
+            "results": [],
+            "error": f"ddg status {r.status_code}, возможно анти-бот",
+        }
 
     blocks = re.split(r'<div[^>]+class="[^"]*result[^"]*"', r.text)[1:]
     results = []

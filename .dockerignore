@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+*/node_modules
+*/.next
+*/__pycache__
+*/.venv
+data
+kb
