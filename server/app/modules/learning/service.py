@@ -192,8 +192,6 @@ class LearningService:
         explanation: str,
         expected: str | None = None,
         risk: str = "low",
-        verify: str | None = None,
-        cleanup: str | None = None,
     ) -> dict:
         """Шаг практики: лог + карточка команды. Машина проверяется по профилю."""
         if risk not in {"low", "medium", "high"}:

@@ -42,18 +42,6 @@ RU = {
     "я": "ya",
 }
 
-SECTION_ORDER = [
-    "Ключевые понятия",
-    "Тезисы",
-    "Как я это понял",
-    "Схема",
-    "Практика",
-    "Дозакрепить",
-    "Вопросы на потом",
-    "Связи",
-    "Источники",
-]
-
 
 def slugify(text: str) -> str:
     """Транслит + дефисы, ≤40 символов — для имени MD-файла."""
@@ -263,7 +251,7 @@ def draft_to_markdown(uid: str, draft: BlockDraft, meta_extra: dict) -> str:
     return "\n".join(parts)
 
 
-_WIKILINK = re.compile(r"\[\[(blk_[0-9a-f]+)\]\]")
+WIKILINK = re.compile(r"\[\[(blk_[0-9a-f]+)\]\]")
 
 
 def parse_markdown(content: str) -> tuple[dict, str]:
@@ -303,7 +291,7 @@ def count_weak_spots(body: str) -> int:
 
 def extract_links(body: str) -> tuple[str, ...]:
     """Все [[blk_…]] из тела."""
-    return tuple(_WIKILINK.findall(body))
+    return tuple(WIKILINK.findall(body))
 
 
 def plain_text(body: str) -> str:

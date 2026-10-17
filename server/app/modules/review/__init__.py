@@ -23,11 +23,6 @@ class ReviewModule(Module):
         )
         register_agents(c)
 
-    def routers(self, c):
-        from .api import make_router
-
-        return [make_router(c.review)]
-
     def tools(self, c):
         from .tools import review_tools
 

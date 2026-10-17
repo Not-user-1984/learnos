@@ -174,12 +174,9 @@ export interface Card {
   verdict?: string;
   comment?: string;
   weak_spot?: string;
-  // chapter_summary / block_saved / block_updated / job
-  source?: string;
-  chapter?: number;
+  // block_saved / block_updated
   title?: string;
   summary?: string;
-  key_points?: string[];
   block_uid?: string;
   kind?: string;
   category_suggested?: string | null;
@@ -188,10 +185,8 @@ export interface Card {
   from_version?: number;
   to_version?: number;
   reason?: string;
-  job_id?: number;
-  progress?: number;
-  status?: string;
   // prompt_change
+  status?: string;
   change_id?: number;
   agent?: string;
   diff?: { op: string; line: string }[];

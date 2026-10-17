@@ -1,6 +1,5 @@
 """Нейтральные типы диалога с моделью — не привязаны к API конкретного провайдера."""
 
-from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -87,6 +86,3 @@ class ProviderCapabilities:
     streaming: bool = True
     json_schema: bool = False
     vision: bool = False
-
-
-LLMStream = AsyncIterator[LLMEvent]

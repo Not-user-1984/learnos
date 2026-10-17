@@ -4,6 +4,7 @@ import json
 import logging
 from typing import Any
 
+from ...agent.spec import AgentContext
 from ...kernel.asyncio_bridge import run_coro_sync
 from ...kernel.clock import Clock, now_iso
 from ...kernel.errors import NotFound, ValidationFailed
@@ -389,34 +390,15 @@ class KnowledgeService:
         existing_brief = "\n".join(f"- {m.uid}: {m.title}" for m in existing) or "(пусто)"
         cats = "\n".join(f"- {c.path}" for c in self.list_categories()) or "(пусто)"
         profile_brief = self._profile_brief() if self._profile else ""
-        ctx = type(
-            "Ctx",
-            (),
-            {
-                "system_extra": (
-                    f"Существующие блоки (для links):\n{existing_brief}\n"
-                    f"Дерево категорий:\n{cats}\n{profile_brief}"
-                ),
-                "conversation_uid": None,
-                "parent_run_id": None,
-                "variables": {},
-                "cancellation": None,
-            },
-        )()
+        extra = (
+            f"Существующие блоки (links — только эти uid):\n{existing_brief}\n\nДерево категорий:\n{cats}"
+            + (f"\n\n{profile_brief}" if profile_brief else "")
+        )
+        ctx = AgentContext(system_extra=extra)
         out = run_coro_sync(self._runtime.run_structured(block_writer, ctx, f"Транскрипт сессии:\n{dialog}"))
         draft = _writer_out_to_draft(out, kind=session.get("block_kind", "lesson"))
         try:
-            cat_ctx = type(
-                "Ctx",
-                (),
-                {
-                    "system_extra": f"Дерево:\n{cats}",
-                    "conversation_uid": None,
-                    "parent_run_id": None,
-                    "variables": {},
-                    "cancellation": None,
-                },
-            )()
+            cat_ctx = AgentContext(system_extra=f"Дерево:\n{cats}")
             cat_out = run_coro_sync(
                 self._runtime.run_structured(categorizer, cat_ctx, f"Блок: {draft.title}\n{draft.summary}")
             )
@@ -444,18 +426,7 @@ class KnowledgeService:
             f"[{e['state']}/{e['event']}] {json.dumps(e.get('payload') or {}, ensure_ascii=False)}"
             for e in transcript
         )
-        ctx = type(
-            "Ctx",
-            (),
-            {
-                "system_extra": f"Связанный урок: {lesson_uid}\nПрофиль:\n{self._profile_brief()}",
-                "conversation_uid": None,
-                "session_uid": None,
-                "parent_run_id": None,
-                "variables": {},
-                "cancellation": None,
-            },
-        )()
+        ctx = AgentContext(system_extra=f"Связанный урок: {lesson_uid}\nПрофиль:\n{self._profile_brief()}")
         out = run_coro_sync(
             self._runtime.run_structured(runbook_writer, ctx, f"Транскрипт сессии:\n{dialog}")
         )

@@ -9,7 +9,7 @@ from .bot_api import chunk_for_telegram
 
 def md_to_telegram_html(md: str) -> str:
     """Минимальный Markdown → HTML Telegram: заголовки жирным, **жирный**, `код`, кавычки."""
-    text = md.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    text = _esc(md)
     text = re.sub(r"^#{1,6}\s*(.+)$", r"<b>\1</b>", text, flags=re.M)
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
     text = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", text)

@@ -7,7 +7,6 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { CodeBlock } from "./CodeBlock";
-import { Mermaid } from "./Mermaid";
 
 type Props = {
   content: string;

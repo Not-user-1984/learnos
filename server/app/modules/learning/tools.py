@@ -45,8 +45,6 @@ class PracticeArgs(BaseModel):
     explanation: str
     expected: str | None = None
     risk: str = "low"
-    verify: str | None = None
-    cleanup: str | None = None
 
 
 class StartActivityArgs(BaseModel):

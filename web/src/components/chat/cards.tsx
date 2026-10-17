@@ -36,8 +36,6 @@ export function CardView({
     case "block_saved":
     case "block_updated":
       return <BlockCardView card={card} />;
-    case "job":
-      return <JobCardView card={card} />;
     case "prompt_change":
       return <PromptChangeCardView card={card} />;
     case "note_draft":
@@ -185,24 +183,6 @@ function BlockCardView({ card }: { card: Card }) {
           Откатить к v{card.from_version}
         </button>
       </div>
-    </div>
-  );
-}
-
-function JobCardView({ card }: { card: Card }) {
-  const total = card.total ?? 0;
-  const pct = total > 0 ? Math.round(((card.progress ?? 0) / total) * 100) : 0;
-  return (
-    <div className="rounded-xl border p-4">
-      <p className="mb-2 text-sm font-medium">
-        Задача {card.kind === "process_source" ? "обработки источника" : card.kind === "summarize_chapters" ? "summary глав" : card.kind}
-      </p>
-      <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${card.status === "done" ? 100 : pct}%` }} />
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {card.status === "done" ? "готово" : card.status === "failed" ? "ошибка" : `${card.progress ?? 0}/${total}`}
-      </p>
     </div>
   );
 }

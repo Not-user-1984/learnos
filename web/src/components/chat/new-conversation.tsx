@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { kindEmoji } from "@/lib/format";
 import type { SourceDetail } from "@/lib/types";
 import { api, apiPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -88,7 +89,7 @@ export function NewConversationButton() {
                 <SelectContent>
                   {sources.map((s) => (
                     <SelectItem key={s.uid} value={s.uid}>
-                      {s.kind === "book" ? "📕" : s.kind === "video" ? "🎬" : "🌐"} {s.title}
+                      {kindEmoji(s.kind)} {s.title}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -1,7 +1,7 @@
 """Базовый контракт модуля приложения."""
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter
 
@@ -31,7 +31,3 @@ class Module(ABC):
 
     def subscribe(self, bus: "EventBus", c: "Container") -> None:  # noqa: B027 — пустая подписка допустима
         """Подписки на доменные события других модулей."""
-
-
-class ServiceProtocol(Protocol):
-    """Маркер публичного сервиса модуля (для типизации контейнера)."""

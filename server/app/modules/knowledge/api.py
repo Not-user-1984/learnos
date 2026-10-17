@@ -6,10 +6,6 @@ from pydantic import BaseModel
 from .schemas import BlockCard, BlockDetail, CategoryIn, CategoryNode, TagCount, VersionInfo
 
 
-class RestoreIn(BaseModel):
-    """Откат без тела — параметры в пути."""
-
-
 class SetCategoryBody(BaseModel):
     """Подтверждение категории из UI."""
 

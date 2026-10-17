@@ -3,6 +3,7 @@
 import json
 import logging
 
+from ...agent.spec import AgentContext
 from ...kernel.asyncio_bridge import run_coro_sync
 from ...kernel.clock import Clock, now_iso
 from ...kernel.errors import NotFound, ValidationFailed
@@ -168,17 +169,7 @@ class CoursesService:
                 or "(нет)"
             )
         )
-        ctx = type(
-            "Ctx",
-            (),
-            {
-                "system_extra": "",
-                "conversation_uid": None,
-                "parent_run_id": None,
-                "variables": {},
-                "cancellation": None,
-            },
-        )()
+        ctx = AgentContext()
         out = run_coro_sync(self._runtime.run_structured(course_planner, ctx, brief))
         return out.model_dump()
 

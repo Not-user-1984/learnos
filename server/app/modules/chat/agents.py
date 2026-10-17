@@ -1,4 +1,4 @@
-"""Агенты-тьюторы чата: free_chat, quick_reviewer, session_tutor, title_maker."""
+"""Агенты-тьюторы чата: free_chat, quick_reviewer, session_tutor (заголовки делаются ролью fast)."""
 
 from pathlib import Path
 

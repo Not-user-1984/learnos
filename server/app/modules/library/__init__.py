@@ -38,7 +38,5 @@ class LibraryModule(Module):
 
         return library_tools(c)
 
-    def subscribe(self, bus, c) -> None:
-        from .events import SourceProcessed
-
-        bus.subscribe(SourceProcessed.name(), lambda _event: c.search.reindex_chapters())
+    # подписка на SourceProcessed → reindex_chapters живёт в search-модуле
+    # (одна подписка: раньше дублировалась здесь и там — переиндексация шла дважды)

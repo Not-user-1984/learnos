@@ -1,9 +1,11 @@
 """Сервис библиотеки: источники, главы, jobs, upload."""
 
+import json
 import logging
 import shutil
 from pathlib import Path
 
+from ...agent.spec import AgentContext
 from ...kernel.clock import Clock, now_iso
 from ...kernel.db import UnitOfWorkFactory
 from ...kernel.errors import Conflict, ValidationFailed
@@ -201,9 +203,7 @@ class LibraryService:
         result = self._skills.run("youtube-to-summary", {"url": url})
         if not result.get("ok"):
             return result
-        from pathlib import Path as P
-
-        path = P(result["path"])
+        path = Path(result["path"])
         text_len = path.stat().st_size
         now = now_iso(self._clock)
         video_title = (result.get("title") or "").strip()
@@ -217,8 +217,6 @@ class LibraryService:
                 tokens_est=max(1, text_len // 4),
                 summary=(result.get("preview") or "")[:280],
             )
-            import json
-
             self._sources.update(
                 uow.session,
                 src["id"],
@@ -252,17 +250,9 @@ class LibraryService:
                 out = run_coro_sync(
                     self._runtime.run_structured(
                         chapter_summarizer,
-                        type(
-                            "Ctx",
-                            (),
-                            {
-                                "system_extra": f"Источник: {src['title']}\nГлава {ch['idx']}: {ch['title']}",
-                                "conversation_uid": None,
-                                "parent_run_id": None,
-                                "variables": {},
-                                "cancellation": None,
-                            },
-                        )(),
+                        AgentContext(
+                            system_extra=f"Источник: {src['title']}\nГлава {ch['idx']}: {ch['title']}"
+                        ),
                         text,
                     )
                 )
@@ -273,8 +263,6 @@ class LibraryService:
             summaries.append(f"Глава {ch['idx']}. {ch['title']}: {summary}")
             done += 1
             with self._uow() as uow:
-                import json
-
                 self._chapters.update(
                     uow.session,
                     ch["id"],
@@ -299,18 +287,7 @@ class LibraryService:
                 from ...kernel.asyncio_bridge import run_coro_sync
                 from .agents import source_overviewer
 
-                ctx = type(
-                    "Ctx",
-                    (),
-                    {
-                        "system_extra": "",
-                        "conversation_uid": None,
-                        "session_uid": None,
-                        "parent_run_id": None,
-                        "variables": {},
-                        "cancellation": None,
-                    },
-                )()
+                ctx = AgentContext()
                 out = run_coro_sync(
                     self._runtime.run_structured(
                         source_overviewer, ctx, f"Книга: {title}\n\nКонспекты глав:\n{joined}"

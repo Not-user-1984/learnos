@@ -58,7 +58,6 @@ class JobWorker:
     def _take_next(self) -> dict | None:
         from sqlalchemy import select, update
 
-        from ...kernel.db import UnitOfWork  # noqa: F401
         from .infra.tables import jobs
 
         # берём следующий queued job атомарно (status → running)

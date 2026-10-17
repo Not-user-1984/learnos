@@ -19,6 +19,7 @@ import {
   Settings,
   X,
 } from "lucide-react";
+import { modeEmoji } from "@/lib/format";
 import { api } from "@/lib/api";
 import type { BlockCard, ConversationItem } from "@/lib/types";
 import { CommandPalette } from "@/components/command-palette";
@@ -44,7 +45,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     api<ConversationItem[]>("/conversations").then((c) => setRecent(c.slice(0, 5))).catch(() => setRecent([]));
     api<BlockCard[]>("/kb/inbox").then((b) => setInbox(b.length)).catch(() => setInbox(null));
-    setMobileOpen(false);
   }, [pathname]);
 
   const nav = (
@@ -56,6 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             key={href}
             href={href}
             title={label}
+            onClick={() => setMobileOpen(false)}
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
               active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "hover:bg-sidebar-accent/50",
@@ -83,11 +84,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link
             key={c.uid}
             href={`/chat/${c.uid}`}
+            onClick={() => setMobileOpen(false)}
             className="block truncate rounded-md px-2 py-1.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent/50"
             title={c.title}
           >
-            {c.mode === "session" ? "🎓 " : c.mode === "quick" ? "⚡ " : "💬 "}
-            {c.title}
+            {modeEmoji(c.mode)} {c.title}
           </Link>
         ))}
       </div>

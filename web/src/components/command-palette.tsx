@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { kindEmoji } from "@/lib/format";
 import { api } from "@/lib/api";
 import type { BlockCard, SourceCard } from "@/lib/types";
 
@@ -61,7 +62,7 @@ export function CommandPalette() {
           <CommandGroup heading="Источники">
             {sources.map((s) => (
               <CommandItem key={s.uid} onSelect={() => go(`/library/${s.uid}`)}>
-                {s.kind === "book" ? "📕" : s.kind === "video" ? "🎬" : "🌐"} {s.title}
+                {kindEmoji(s.kind)} {s.title}
               </CommandItem>
             ))}
           </CommandGroup>

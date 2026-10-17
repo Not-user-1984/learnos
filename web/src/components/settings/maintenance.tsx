@@ -37,14 +37,17 @@ export function MaintenanceActions() {
         <p className="text-xs text-muted-foreground">после ручной правки MD-файлов в kb/</p>
       </div>
       <div className="flex flex-wrap gap-3">
+        {/* API-роут скачивания (не Next-страница) — Link тут не подходит */}
         <a
           href="/api/export?scope=all&format=zip"
+          download
           className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent"
         >
           <Download className="h-3.5 w-3.5" /> Экспорт всего (ZIP)
         </a>
         <a
           href="/api/export?scope=all&format=md"
+          download
           className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent"
         >
           <Download className="h-3.5 w-3.5" /> Экспорт всего (MD)

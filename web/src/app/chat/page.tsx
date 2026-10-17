@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { MODE_LABEL, modeEmoji } from "@/lib/format";
 import type { ConversationItem } from "@/lib/types";
 import { StudyButtons, StudyEmptyState } from "@/components/chat/study-buttons";
 
 export const dynamic = "force-dynamic";
 
-const MODE_LABEL: Record<string, string> = { free: "свободный", quick: "разбор", session: "сессия", tuning: "настройка" };
+
 
 export default async function ChatListPage() {
   const conversations = await api<ConversationItem[]>("/conversations").catch(() => [] as ConversationItem[]);
@@ -29,7 +30,7 @@ export default async function ChatListPage() {
               href={`/chat/${c.uid}`}
               className="flex items-center gap-3 rounded-xl border bg-card p-4 transition hover:border-violet-500/50"
             >
-              <span className="text-lg">{c.mode === "session" ? "🎓" : c.mode === "quick" ? "⚡" : c.mode === "tuning" ? "⚙️" : "💬"}</span>
+              <span className="text-lg">{modeEmoji(c.mode)}</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{c.title}</p>
                 <p className="text-xs text-muted-foreground">{MODE_LABEL[c.mode] ?? c.mode}</p>

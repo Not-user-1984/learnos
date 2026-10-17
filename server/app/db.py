@@ -11,8 +11,3 @@ def get_db() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
-
-
-def init_db() -> None:
-    """Схема создаётся миграциями; здесь только проверка файла."""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)

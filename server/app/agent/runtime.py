@@ -47,6 +47,14 @@ def resolve_prompt_path(path: Path) -> Path:
     return path
 
 
+def _system_prompt(spec: AgentSpec, ctx: AgentContext) -> str:
+    """Промпт агента + системный блок «Контекст», если он задан."""
+    prompt = render_prompt(spec.prompt_path, ctx.variables)
+    if ctx.system_extra:
+        prompt = f"{prompt}\n\n# Контекст\n\n{ctx.system_extra}"
+    return prompt
+
+
 @dataclass(frozen=True, slots=True)
 class AgentEvent:
     """Событие шага агента: text | tool_start | tool_end | card | final | error | usage."""
@@ -110,10 +118,7 @@ class AgentRuntime:
         steps = tool_calls = input_tokens = output_tokens = 0
         status, error_text = "ok", None
         try:
-            system_prompt = render_prompt(spec.prompt_path, ctx.variables)
-            if ctx.system_extra:
-                system_prompt = f"{system_prompt}\n\n# Контекст\n\n{ctx.system_extra}"
-            messages: list[Message] = [Message(role="system", content=system_prompt), *history]
+            messages: list[Message] = [Message(role="system", content=_system_prompt(spec, ctx)), *history]
             schemas = self._schemas_for(spec)
 
             for _step in range(spec.max_steps):
@@ -233,13 +238,13 @@ class AgentRuntime:
         started = time.monotonic()
         status, error_text = "ok", None
         try:
-            system_prompt = render_prompt(spec.prompt_path, ctx.variables)
-            if ctx.system_extra:
-                system_prompt = f"{system_prompt}\n\n# Контекст\n\n{ctx.system_extra}"
             return await structured_output(
                 provider,
                 model,
-                [Message(role="system", content=system_prompt), Message(role="user", content=user_prompt)],
+                [
+                    Message(role="system", content=_system_prompt(spec, ctx)),
+                    Message(role="user", content=user_prompt),
+                ],
                 spec.output_model,
                 temperature=spec.temperature,
             )

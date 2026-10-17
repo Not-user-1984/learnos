@@ -2,23 +2,17 @@
 
 /** Читалка главы: полная глава как e-book, выбор фрагмента → обсуждение с агентом. */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AArrowDown, AArrowUp, ChevronLeft, ChevronRight, History, Loader2, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { ConversationItem } from "@/lib/types";
 import { api, apiPost } from "@/lib/api";
+import { MODE_LABEL } from "@/lib/format";
 import { Markdown } from "@/components/markdown/Markdown";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-
-const MODE_LABEL: Record<string, string> = {
-  session: "сессия-урок",
-  quick: "быстрый разбор",
-  free: "свободный",
-  tuning: "настройка",
-};
 
 type Props = {
   sourceUid: string;
@@ -29,9 +23,33 @@ type Props = {
   nextIdx: number | null;
 };
 
+const FONT_KEY = "learnos-reader-font";
+const FONT_EVENT = "learnos-reader-font-change";
+
+function clampFont(v: number): number {
+  return Math.min(1.4, Math.max(0.85, Math.round(v * 100) / 100));
+}
+
+/** Размер шрифта из localStorage без setState-в-эффекте: подписка на событие изменения. */
+function useReaderFont(): [number, (delta: number) => void] {
+  const scale = useSyncExternalStore(
+    (cb) => {
+      window.addEventListener(FONT_EVENT, cb);
+      return () => window.removeEventListener(FONT_EVENT, cb);
+    },
+    () => Number(localStorage.getItem(FONT_KEY) ?? "1") || 1,
+    () => 1,
+  );
+  const change = (delta: number) => {
+    localStorage.setItem(FONT_KEY, String(clampFont(scale + delta)));
+    window.dispatchEvent(new Event(FONT_EVENT));
+  };
+  return [scale, change];
+}
+
 export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, nextIdx }: Props) {
   const router = useRouter();
-  const [fontScale, setFontScale] = useState(1);
+  const [fontScale, changeFont] = useReaderFont();
   const [selection, setSelection] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -50,18 +68,6 @@ export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, 
       setHistory([]);
       toast.error("не удалось загрузить историю");
     }
-  };
-
-  useEffect(() => {
-    setFontScale(Number(localStorage.getItem("learnos-reader-font") ?? "1") || 1);
-  }, []);
-
-  const changeFont = (delta: number) => {
-    setFontScale((s) => {
-      const next = Math.min(1.4, Math.max(0.85, Math.round((s + delta) * 100) / 100));
-      localStorage.setItem("learnos-reader-font", String(next));
-      return next;
-    });
   };
 
   useEffect(() => {

@@ -401,7 +401,7 @@ class ChatService:
                     self._convs.update(uow.session, conv["id"], title=title, updated_at=now_iso(self._clock))
                 return title
         except Exception:  # noqa: BLE001 — заголовок не критичен
-            log.info("title_maker не сработал")
+            log.info("авто-заголовок не сработал")
         return None
 
     # --- генерация блока из разговора (save_note без draft) ---

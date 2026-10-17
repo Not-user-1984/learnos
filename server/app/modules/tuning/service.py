@@ -10,7 +10,7 @@ from ...kernel.db import UnitOfWorkFactory
 from ...kernel.errors import NotFound, ValidationFailed
 from .infra.tables import prompt_changes
 
-AGENTS_ROOT = Path(__file__).resolve().parent.parent.parent  # app/modules
+SERVER_ROOT = Path(__file__).resolve().parents[3]  # server/
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +42,7 @@ class TuningService:
         for spec in self._registry.all():
             default_path = spec.prompt_path
             actual = resolve_prompt_path(default_path)
-            rel = str(default_path.relative_to(AGENTS_ROOT.parent.parent))
+            rel = str(default_path.relative_to(SERVER_ROOT))
             out.append(
                 AgentPrompt(
                     agent=spec.name,
@@ -67,7 +67,7 @@ class TuningService:
         return {
             "agent": spec.name,
             "description": spec.description,
-            "path": str(spec.prompt_path.relative_to(AGENTS_ROOT.parent.parent)),
+            "path": str(spec.prompt_path.relative_to(SERVER_ROOT)),
             "content": actual.read_text(encoding="utf-8"),
             "has_override": actual != spec.prompt_path,
         }

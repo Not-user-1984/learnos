@@ -2,33 +2,26 @@
 
 /** Приём «Поделиться → LearnOS»: ссылка становится источником в Библиотеке. */
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { apiPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 function ShareForm() {
   const sp = useSearchParams();
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
+  const router = useRouter();
+  // Android часто кладёт ссылку в text; достаём первый URL из text или url
+  const sharedUrl = (sp.get("url") ?? "") || (sp.get("text") ?? "").match(/https?:\/\/\S+/)?.[0] || "";
+  const sharedTitle =
+    sp.get("title") || (sharedUrl.includes("youtu") ? "YouTube-видео" : sharedUrl ? "Ссылка" : "");
+  // state — только пользовательская правка поля; изначальное значение производное от URL
+  const [urlDraft, setUrlDraft] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [result, setResult] = useState<{ uid: string; kind: string; processed: boolean } | null>(null);
 
-  useEffect(() => {
-    // Android часто кладёт ссылку в text; достаём первый URL из text или url
-    const rawUrl = sp.get("url") ?? "";
-    const text = sp.get("text") ?? "";
-    const fromText = text.match(/https?:\/\/\S+/)?.[0] ?? "";
-    const found = rawUrl || fromText;
-    setUrl(found);
-    if (!sp.get("title") && found) {
-      setTitle(sp.get("title") ?? (found.includes("youtu") ? "YouTube-видео" : "Ссылка"));
-    } else {
-      setTitle(sp.get("title") ?? "");
-    }
-  }, [sp]);
-
+  const url = urlDraft ?? sharedUrl;
+  const title = sharedTitle;
   const isYoutube = /youtu\.?be/i.test(url);
   const kind = isYoutube ? "video" : "web";
 
@@ -61,14 +54,14 @@ function ShareForm() {
         className="rounded-md border bg-background px-3 py-2 text-sm"
         placeholder={url ? url : "https://…"}
         value={url}
-        onChange={(e) => setUrl(e.target.value)}
+        onChange={(e) => setUrlDraft(e.target.value)}
         aria-label="Ссылка"
       />
       {status === "done" && result ? (
         <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm">
           Источник добавлен{result.processed ? " и обрабатывается" : ""} ({result.kind === "video" ? "видео" : "веб"}).
           <div className="mt-2 flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => (window.location.href = `/library/${result.uid}`)}>
+            <Button size="sm" variant="outline" onClick={() => router.push(`/library/${result.uid}`)}>
               Открыть в Библиотеке
             </Button>
             <Link href="/chat" className="inline-flex items-center rounded-md border px-3 py-1.5 text-sm hover:bg-accent">

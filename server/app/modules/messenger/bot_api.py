@@ -4,7 +4,7 @@
 LEARNOS_TELEGRAM_PROXY (например socks5://host.docker.internal:7890).
 """
 
-import asyncio
+import re
 from pathlib import Path
 
 import httpx
@@ -104,10 +104,5 @@ def chunk_for_telegram(text: str, limit: int = MAX_MESSAGE) -> list[str]:
 
 
 def _split_sentences(paragraph: str) -> list[str]:
-    import re
-
     parts = re.split(r"(?<=[.!?…])\s+", paragraph)
     return parts or [paragraph]
-
-
-_ = asyncio  # asyncio используется транзитивно через httpx.AsyncClient

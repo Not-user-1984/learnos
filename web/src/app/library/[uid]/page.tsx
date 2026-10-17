@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookMarked } from "lucide-react";
+import { kindEmoji } from "@/lib/format";
 import { api } from "@/lib/api";
 import type { ChapterCard, SourceDetail } from "@/lib/types";
 import { SourceActions } from "@/components/library/source-actions";
@@ -24,7 +25,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
     <div className="h-full overflow-y-auto p-6">
       <header className="mb-6 flex flex-wrap items-start gap-3">
         <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/20 to-violet-500/20 text-3xl">
-          {source.kind === "book" ? "📕" : source.kind === "video" ? "🎬" : "🌐"}
+          {kindEmoji(source.kind)}
         </div>
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold">{source.title}</h1>

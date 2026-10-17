@@ -6,8 +6,7 @@ import zipfile
 from datetime import UTC, datetime
 
 from ...kernel.errors import NotFound, ValidationFailed
-
-WIKILINK = re.compile(r"\[\[(blk_[0-9a-f]+)\]\]")
+from ..knowledge.domain import WIKILINK
 
 
 class ExportService:

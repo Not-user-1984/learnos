@@ -3,7 +3,6 @@
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
 
 log = logging.getLogger("learnos.events")
 
@@ -61,8 +60,3 @@ class PendingEvents:
         """Забрать все события и очистить накопитель."""
         out, self.events = self.events, []
         return out
-
-
-def make_event(event_type: type, **kwargs: Any) -> DomainEvent:
-    """Фабрика события с проверкой полей на месте вызова."""
-    return event_type(**kwargs)

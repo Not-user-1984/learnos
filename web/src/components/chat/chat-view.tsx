@@ -15,6 +15,7 @@ import { TuningEmptyState } from "@/components/chat/tuning-panel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { MODE_LABEL } from "@/lib/format";
 
 type ToolChip = {
   call_id: string;
@@ -162,7 +163,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
         <header className="flex items-center gap-2 border-b px-4 py-3">
           <h1 className="truncate font-semibold">{title}</h1>
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            {conversation.mode === "session" ? "сессия" : conversation.mode === "quick" ? "быстрый разбор" : conversation.mode === "tuning" ? "настройка агентов" : "свободный"}
+            {MODE_LABEL[conversation.mode] ?? conversation.mode}
           </span>
         </header>
 

@@ -9,7 +9,7 @@ from typing import Any
 import openai
 
 from ...kernel.errors import LLMError
-from ..types import LLMEvent, LLMRequest, LLMResponse, Message, ProviderCapabilities, ToolCall, Usage
+from ..types import LLMEvent, LLMRequest, LLMResponse, ProviderCapabilities, ToolCall, Usage
 
 log = logging.getLogger("learnos.llm.openai_compat")
 
@@ -218,12 +218,6 @@ class OpenAICompatProvider:
             usage=usage,
             finish_reason=choice.finish_reason or "stop",
         )
-
-
-def wire_messages_to_openai(messages: tuple[Message, ...]) -> list[dict[str, Any]]:
-    """Экспорт нейтральных сообщений в wire-формат (для тестов и отладки)."""
-    provider = OpenAICompatProvider.__new__(OpenAICompatProvider)
-    return provider._to_wire(LLMRequest(messages=messages))["messages"]  # noqa: SLF001
 
 
 def _dump_1214(model: str, payload: dict[str, Any], error: str) -> None:

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BookOpen, Loader2, Search, Trash2, Video } from "lucide-react";
 import { toast } from "sonner";
+import { kindEmoji } from "@/lib/format";
 import type { SourceCard } from "@/lib/types";
 import { apiDelete } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -115,7 +116,7 @@ export function LibraryBrowser({ sources }: { sources: SourceCard[] }) {
                       s.kind === "web" && "bg-gradient-to-br from-emerald-500/15 to-sky-500/20",
                     )}
                   >
-                    {s.kind === "book" ? "📕" : s.kind === "video" ? "🎬" : "🌐"}
+                    {kindEmoji(s.kind)}
                   </div>
                   <div className="flex flex-1 flex-col gap-1.5 p-4">
                     <p className="line-clamp-2 font-medium leading-snug">{s.title}</p>

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.orm import Session
 
@@ -275,11 +273,6 @@ def _meta_dict(meta: BlockMeta) -> dict:
     }
 
 
-def category_ancestors_prefix(category: str) -> list[str]:
-    """Сам путь (подкатегории ловятся like 'path%')."""
-    return [category]
-
-
 class CategoryRepository:
     """Индекс категорий: синхронизирован с kb/categories.yaml."""
 
@@ -386,7 +379,3 @@ class CategoryRepository:
                     for c in cats
                 ],
             )
-
-
-def load_review_json(raw: str) -> dict:
-    return json.loads(raw or "{}")

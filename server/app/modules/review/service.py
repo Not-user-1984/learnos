@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Protocol
 
+from ...agent.spec import AgentContext
 from ...kernel.clock import Clock, now_iso
 from ...kernel.db import UnitOfWorkFactory
 from ...kernel.errors import NotFound
@@ -69,8 +70,6 @@ class ReviewService:
 
     def ensure_items(self) -> None:
         """Создать элементы повторения для блоков со «Дозакрепить», которых ещё нет."""
-        from ...kernel.asyncio_bridge import run_coro_sync  # noqa: F401 — совместимость импортов
-
         for meta in self._kb.list_blocks(limit=500):
             if meta.weak_spots_count < 1:
                 continue
@@ -97,14 +96,12 @@ class ReviewService:
             if it["due_at"] > now and it.get("reps", 0) > 0:
                 continue
             try:
-                meta = self._kb.list_blocks(q=it["block_uid"], limit=1)
                 block = self._kb.get_block(it["block_uid"])
             except NotFound:
                 continue
             enriched.append(
                 {**it, "title": block.meta.title, "weak_spots_count": block.meta.weak_spots_count}
             )
-            del meta
         enriched.sort(key=queue_priority)
         return enriched[:limit]
 
@@ -131,18 +128,9 @@ class ReviewService:
         from .agents import review_examiner
 
         block = self._kb.get_block(block_uid)
-        ctx = type(
-            "Ctx",
-            (),
-            {
-                "system_extra": f"Блок: {block.meta.title}\nСлабые места: {block.meta.weak_spots_count}",
-                "conversation_uid": None,
-                "session_uid": None,
-                "parent_run_id": None,
-                "variables": {},
-                "cancellation": None,
-            },
-        )()
+        ctx = AgentContext(
+            system_extra=f"Блок: {block.meta.title}\nСлабые места: {block.meta.weak_spots_count}"
+        )
         verdict = run_coro_sync(
             self._runtime.run_structured(
                 review_examiner,
@@ -190,18 +178,7 @@ class ReviewService:
         from ...kernel.asyncio_bridge import run_coro_sync
         from .agents import review_examiner
 
-        ctx = type(
-            "Ctx",
-            (),
-            {
-                "system_extra": f"Блок: {block.meta.title}",
-                "conversation_uid": None,
-                "session_uid": None,
-                "parent_run_id": None,
-                "variables": {},
-                "cancellation": None,
-            },
-        )()
+        ctx = AgentContext(system_extra=f"Блок: {block.meta.title}")
         verdict = run_coro_sync(
             self._runtime.run_structured(
                 review_examiner,

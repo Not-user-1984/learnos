@@ -27,16 +27,6 @@ class MessageIn(BaseModel):
     content: str = Field(min_length=1)
 
 
-class MessageOut(BaseModel):
-    """Сообщение в ленте."""
-
-    id: int
-    role: str
-    content: str
-    cards: list[dict] = []
-    created_at: str
-
-
 class ConversationItem(BaseModel):
     """Разговор в списке."""
 

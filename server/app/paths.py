@@ -4,12 +4,9 @@ from .kernel.config import get_settings
 
 _settings = get_settings()
 
-SERVER_DIR = _settings.skills_dir.parent
-REPO_DIR = SERVER_DIR.parent
 DATA_DIR = _settings.data_dir
 DB_PATH = _settings.db_path
 KB_DIR = _settings.kb_dir
-SKILLS_DIR = _settings.skills_dir
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 KB_DIR.mkdir(parents=True, exist_ok=True)
