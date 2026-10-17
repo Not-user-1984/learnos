@@ -206,12 +206,13 @@ class LibraryService:
         path = P(result["path"])
         text_len = path.stat().st_size
         now = now_iso(self._clock)
+        video_title = (result.get("title") or "").strip()
         with self._uow() as uow:
             self._chapters.insert(
                 uow.session,
                 source_id=src["id"],
                 idx=1,
-                title=result.get("title") or url,
+                title=video_title or url,
                 path=str(path),
                 tokens_est=max(1, text_len // 4),
                 summary=(result.get("preview") or "")[:280],
@@ -222,6 +223,8 @@ class LibraryService:
                 uow.session,
                 src["id"],
                 status="processed",
+                # настоящий тайтл из YouTube: с фронта мог прийти URL (oembed не ответил)
+                title=video_title or src["title"],
                 updated_at=now,
                 meta_json=json.dumps({"video_id": result.get("video_id"), "lang": result.get("lang")}),
             )
@@ -282,10 +285,42 @@ class LibraryService:
                 self._jobs.update(uow.session, job["id"], progress=done, updated_at=now_iso(self._clock))
 
         now = now_iso(self._clock)
+        overview = self._generate_overview(src["title"], summaries)
         with self._uow() as uow:
-            self._sources.update(uow.session, src["id"], summary=" ".join(summaries)[:2000], updated_at=now)
+            self._sources.update(uow.session, src["id"], summary=overview, updated_at=now)
             self._jobs.update(uow.session, job["id"], status="done", progress=done, updated_at=now)
         return {"ok": True, "chapters": done}
+
+    def _generate_overview(self, title: str, chapter_summaries: list[str]) -> str:
+        """Цельный обзор книги из конспектов глав (source_overviewer); фолбэк — склейка."""
+        joined = "\n".join(chapter_summaries)
+        if self._runtime is not None:
+            try:
+                from ...kernel.asyncio_bridge import run_coro_sync
+                from .agents import source_overviewer
+
+                ctx = type(
+                    "Ctx",
+                    (),
+                    {
+                        "system_extra": "",
+                        "conversation_uid": None,
+                        "session_uid": None,
+                        "parent_run_id": None,
+                        "variables": {},
+                        "cancellation": None,
+                    },
+                )()
+                out = run_coro_sync(
+                    self._runtime.run_structured(
+                        source_overviewer, ctx, f"Книга: {title}\n\nКонспекты глав:\n{joined}"
+                    )
+                )
+                if out.summary.strip():
+                    return out.summary.strip()
+            except Exception:  # noqa: BLE001 — обзор не должен ронять summarize
+                log.warning("обзор источника не сгенерировался, фолбэк на склейку", exc_info=True)
+        return joined[:2000]
 
     # --- главы ---
 
@@ -308,11 +343,13 @@ class LibraryService:
         return {
             "source": src["uid"],
             "source_title": src["title"],
+            "kind": src["kind"],
             "idx": ch["idx"],
             "title": ch["title"],
             "total_chars": len(text),
             "offset": offset,
             "next_offset": offset + limit if offset + limit < len(text) else None,
+            "message": f"символы {offset + 1}–{min(offset + limit, len(text))} из {len(text)}",
             "text": chunk,
         }
 

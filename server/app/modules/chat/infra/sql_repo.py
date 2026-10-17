@@ -24,8 +24,16 @@ class ConversationRepository:
         return _conv_dict(row)
 
     def list(
-        self, session: Session, *, mode: str | None = None, q: str | None = None, limit: int = 50
+        self,
+        session: Session,
+        *,
+        mode: str | None = None,
+        q: str | None = None,
+        activity_ids: list[int] | None = None,
+        chapter: int | None = None,
+        limit: int = 50,
     ) -> list[dict]:
+        """Разговоры; activity_ids/chapter — фильтр «история по главе источника»."""
         from sqlalchemy import func
 
         stmt = select(conversations)
@@ -33,8 +41,24 @@ class ConversationRepository:
             stmt = stmt.where(conversations.c.mode == mode)
         if q:
             stmt = stmt.where(func.lower(conversations.c.title).like(f"%{q.lower()}%"))
+        if activity_ids is not None:
+            stmt = stmt.where(conversations.c.activity_id.in_(activity_ids or [-1]))
+        if chapter is not None:
+            stmt = stmt.where(conversations.c.chapter_idx == chapter)
         rows = session.execute(stmt.order_by(conversations.c.updated_at.desc()).limit(limit)).all()
-        return [_conv_dict(r) for r in rows]
+        convs = [_conv_dict(r) for r in rows]
+        ids = [c["id"] for c in convs]
+        if ids:
+            counts = dict(
+                session.execute(
+                    select(messages.c.conversation_id, func.count(messages.c.id))
+                    .where(messages.c.conversation_id.in_(ids))
+                    .group_by(messages.c.conversation_id)
+                ).all()
+            )
+            for c in convs:
+                c["messages_count"] = int(counts.get(c["id"], 0))
+        return convs
 
     def update(self, session: Session, conv_id: int, **values) -> None:
         session.execute(update(conversations).where(conversations.c.id == conv_id).values(**values))

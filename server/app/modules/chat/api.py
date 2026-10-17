@@ -22,10 +22,21 @@ def make_router(svc) -> APIRouter:
     r = APIRouter(prefix="/conversations", tags=["chat"])
 
     @r.get("", response_model=list[ConversationItem])
-    def list_conversations(mode: str | None = None, q: str | None = None):
+    def list_conversations(
+        mode: str | None = None,
+        q: str | None = None,
+        source: str | None = None,
+        chapter: int | None = None,
+    ):
         return [
-            {"uid": c["uid"], "title": c["title"], "mode": c["mode"], "updated_at": c["updated_at"]}
-            for c in svc.list_conversations(mode, q)
+            {
+                "uid": c["uid"],
+                "title": c["title"],
+                "mode": c["mode"],
+                "updated_at": c["updated_at"],
+                "messages_count": c.get("messages_count", 0),
+            }
+            for c in svc.list_conversations(mode, q, source=source, chapter=chapter)
         ]
 
     @r.post("")

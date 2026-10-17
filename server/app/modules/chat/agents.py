@@ -24,6 +24,9 @@ free_chat = AgentSpec(
             "get_profile",
             "research_sources",
             "list_chapters",
+            "send_telegram_text",
+            "send_block_to_telegram",
+            "send_chapter_to_telegram",
         }
     ),
 )
@@ -40,12 +43,18 @@ quick_reviewer = AgentSpec(
             "list_chapters",
             "read_chapter",
             "search",
+            "preview_note",
             "save_note",
             "update_block",
             "get_profile",
             "get_block",
+            "send_telegram_text",
+            "send_block_to_telegram",
+            "send_chapter_to_telegram",
         }
     ),
+    # длинные видео: транскрипт листается десятками порций read_chapter
+    max_steps=40,
 )
 
 session_tutor = AgentSpec(
@@ -66,6 +75,9 @@ session_tutor = AgentSpec(
             "get_block",
             "get_profile",
             "start_session",
+            "send_telegram_text",
+            "send_block_to_telegram",
+            "send_chapter_to_telegram",
         }
     ),
     max_steps=40,

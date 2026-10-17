@@ -7,13 +7,21 @@ from .schemas import BlockDraftIn
 
 
 class SaveNoteArgs(BaseModel):
-    """save_note: блок-конспект; без draft_json — генерация из разговора."""
+    """save_note: блок-конспект; draft_json/preview_id — готовый драфт, иначе генерация из разговора."""
 
     title: str | None = None
     draft_json: BlockDraftIn | None = None
+    preview_id: int | None = None
     source: str | None = None
     chapter: int | None = None
     conversation: str | None = None
+
+
+class PreviewNoteArgs(BaseModel):
+    """preview_note: превью блока-конспекта из разговора, без записи в базу."""
+
+    instructions: str = ""
+    kind: str = "note"
 
 
 class ListBlocksArgs(BaseModel):
@@ -81,10 +89,18 @@ def knowledge_tools(c) -> list[ToolSpec]:
     svc = c.knowledge
 
     def save_note(args: SaveNoteArgs, ctx: ToolContext):
-        draft_in = args.draft_json or _draft_from_conversation(c, ctx, args)
+        conv = args.conversation or ctx.conversation_uid
+        if args.draft_json is not None:
+            draft_in = args.draft_json
+        elif args.preview_id is not None:
+            cached = c.chat.get_draft_preview(conv, args.preview_id)
+            if cached is None:
+                return {"error": "validation_failed", "message": f"превью #{args.preview_id} не найдено"}
+            draft_in = BlockDraftIn(**cached)
+        else:
+            draft_in = _draft_from_conversation(c, ctx, args)
         if draft_in is None:
             return {"error": "validation_failed", "message": "не удалось собрать драфт: передай draft_json"}
-        conv = args.conversation or ctx.conversation_uid
         from .schemas import SourceIn
 
         sources = list(draft_in.sources)
@@ -111,6 +127,38 @@ def knowledge_tools(c) -> list[ToolSpec]:
                 "category_status": "suggested",
                 "version": 1,
             },
+        }
+
+    def preview_note(args: PreviewNoteArgs, ctx: ToolContext):
+        """Превью конспекта из диалога: драфт сохраняется на сервере, запись — save_note(preview_id)."""
+        conv = ctx.conversation_uid
+        if not conv:
+            return {"error": "validation_failed", "message": "preview_note доступен только внутри разговора"}
+        try:
+            draft = c.chat.generate_block_draft(
+                conversation_uid=conv,
+                kind=args.kind,
+                instructions=args.instructions or None,
+            )
+        except Exception:  # noqa: BLE001 — агент расскажет, что превью не собралось
+            draft = None
+        if draft is None:
+            return {
+                "error": "generation_failed",
+                "message": "не удалось собрать превью: диалог пуст или LLM недоступна",
+            }
+        preview_id = c.chat.store_draft_preview(conv, draft)
+        draft_dict = c.chat.get_draft_preview(conv, preview_id)
+        card = {"type": "note_draft", "preview_id": preview_id, "draft": draft_dict}
+        return {
+            "ok": True,
+            "preview_id": preview_id,
+            "draft": card["draft"],
+            "message": (
+                f"превью #{preview_id} «{draft.title}»: "
+                f"{len(draft.concepts)} понятий, {len(draft.theses)} тезисов"
+            ),
+            "_card": card,
         }
 
     def list_blocks(args: ListBlocksArgs, ctx: ToolContext):
@@ -179,10 +227,25 @@ def knowledge_tools(c) -> list[ToolSpec]:
         ToolSpec(
             name="save_note",
             module="knowledge",
-            description="Сохранить блок-конспект (kind: note). Без draft_json — генерация из разговора.",
+            description=(
+                "Сохранить блок-конспект (kind: note). Апрув превью — preview_id из preview_note; "
+                "иначе draft_json или генерация из разговора."
+            ),
             args_model=SaveNoteArgs,
             handler=save_note,
             label="Сохраняю конспект",
+        ),
+        ToolSpec(
+            name="preview_note",
+            module="knowledge",
+            description=(
+                "Превью блока-конспекта из разговора (без записи): карточка с понятиями/тезисами. "
+                "instructions — обязательные правки пользователя. Запись — только save_note(preview_id) "
+                "после явного апрува."
+            ),
+            args_model=PreviewNoteArgs,
+            handler=preview_note,
+            label="Собираю превью конспекта",
         ),
         ToolSpec(
             name="list_blocks",

@@ -22,7 +22,11 @@ export function SourceActions({ sourceUid, chapterIdx, chapterTitle }: { sourceU
         chapter: chapterIdx ?? null,
         title: chapterTitle ? `${mode === "quick" ? "Разбор" : "Сессия"}: ${chapterTitle}` : undefined,
       });
-      router.push(`/chat/${conv.uid}`);
+      const first =
+        mode === "session"
+          ? `Начни сессию${chapterIdx ? ` по главе ${chapterIdx}` : ""}: теория по первым понятиям, коротко.`
+          : `Начнём быстрый разбор${chapterIdx ? ` главы ${chapterIdx}` : ""}: главное и ключевые понятия.`;
+      router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(first)}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ошибка");
     } finally {

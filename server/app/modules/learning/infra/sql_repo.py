@@ -82,6 +82,11 @@ class ActivityRepository:
         rows = session.execute(stmt.order_by(activities.c.updated_at.desc())).all()
         return [_activity_dict(r) for r in rows]
 
+    def ids_for_source(self, session: Session, source_id: int) -> list[int]:
+        """id активностей источника (фильтр разговоров по главе)."""
+        rows = session.execute(select(activities.c.id).where(activities.c.source_id == source_id)).all()
+        return [r[0] for r in rows]
+
     def update(self, session: Session, activity_id: int, **values) -> None:
         session.execute(update(activities).where(activities.c.id == activity_id).values(**values))
 

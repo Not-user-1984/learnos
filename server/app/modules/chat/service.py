@@ -28,7 +28,12 @@ class SseEvent:
     data: dict[str, Any]
 
 
-AGENT_BY_MODE = {"free": "free_chat", "quick": "quick_reviewer", "session": "session_tutor"}
+AGENT_BY_MODE = {
+    "free": "free_chat",
+    "quick": "quick_reviewer",
+    "session": "session_tutor",
+    "tuning": "prompt_tuner",
+}
 SESSION_TOOLS = {"advance", "practice_step", "finish_session", "start_session"}
 
 
@@ -67,6 +72,7 @@ class ChatService:
         self._clock = clock
         self._settings = settings
         self._running: dict[str, CancellationToken] = {}
+        self._previews: dict[str, list[dict]] = {}  # превью конспектов: conv → список драфтов
 
     # --- разговоры ---
 
@@ -112,10 +118,19 @@ class ChatService:
             conv["session"] = session
             return conv
 
-    def list_conversations(self, mode: str | None = None, q: str | None = None) -> list[dict]:
-        """Список разговоров."""
+    def list_conversations(
+        self,
+        mode: str | None = None,
+        q: str | None = None,
+        source: str | int | None = None,
+        chapter: int | None = None,
+    ) -> list[dict]:
+        """Список разговоров; source+chapter — история разговоров по главе источника."""
+        activity_ids = None
+        if source is not None:
+            activity_ids = self._learning.activity_ids_for_source(source)
         with self._uow() as uow:
-            return self._convs.list(uow.session, mode=mode, q=q)
+            return self._convs.list(uow.session, mode=mode, q=q, activity_ids=activity_ids, chapter=chapter)
 
     def patch_conversation(self, uid: str, title: str | None = None) -> dict:
         """Переименовать разговор."""
@@ -165,7 +180,9 @@ class ChatService:
 
         agent_name = AGENT_BY_MODE.get(conv["mode"], "free_chat")
         spec: AgentSpec = self._agents.get(agent_name)
-        history = await self._build_history(conv)
+        # conv прочитан до вставки user-сообщения: добавляем его сами, иначе первый
+        # запрос разговора уйдёт без единого user-сообщения (z.ai отвечает 1214)
+        history = await self._build_history(conv) + [Message(role="user", content=content)]
         ctx = AgentContext(
             conversation_uid=uid,
             session_uid=session["session_uid"] if session else None,
@@ -181,17 +198,18 @@ class ChatService:
         text_parts: list[str] = []
         cards: list[dict] = []
         assistant_id: int | None = None
+        after_tools = False  # после tool-шага новый текст начинаем с абзаца
         try:
             async for ev in self._runtime.run(spec, ctx, history):
                 if ev.type == "text":
-                    text_parts.append(ev.text)
-                    yield SseEvent("delta", {"text": ev.text})
-                elif ev.type == "tool_start":
-                    yield SseEvent(
-                        "tool_start",
-                        {"call_id": ev.call_id, "name": ev.name, "args": ev.args, "label": ev.label},
-                    )
+                    piece = ev.text
+                    if after_tools and text_parts and not text_parts[-1].endswith("\n"):
+                        piece = "\n\n" + piece
+                    after_tools = False
+                    text_parts.append(piece)
+                    yield SseEvent("delta", {"text": piece})
                 elif ev.type == "tool_end":
+                    after_tools = True
                     yield SseEvent(
                         "tool_end",
                         {"call_id": ev.call_id, "name": ev.name, "ok": ev.ok, "summary": ev.summary},
@@ -200,6 +218,11 @@ class ChatService:
                         fresh = self._learning.session_for_conversation(conv["id"])
                         if fresh:
                             yield _session_event(fresh)
+                elif ev.type == "tool_start":
+                    yield SseEvent(
+                        "tool_start",
+                        {"call_id": ev.call_id, "name": ev.name, "args": ev.args, "label": ev.label},
+                    )
                 elif ev.type == "card":
                     cards.append(ev.card or {})
                     yield SseEvent("card", {"call_id": ev.call_id, "card": ev.card})
@@ -261,15 +284,28 @@ class ChatService:
         if conv.get("activity_id"):
             try:
                 act = self._learning.get_activity(conv["activity_id"])
-                parts.append(
-                    f"Активность: {act['title']} "
-                    f"(курсор на главе {act['cursor_chapter']}/{act['total_chapters']})"
-                )
                 src = self._library.get_source(act["source_id"])
+                if src["kind"] == "video":
+                    parts.append(
+                        f"Активность: {act['title']} "
+                        f"(видео, запись {act['cursor_chapter']}/{act['total_chapters']})"
+                    )
+                else:
+                    parts.append(
+                        f"Активность: {act['title']} "
+                        f"(курсор на главе {act['cursor_chapter']}/{act['total_chapters']})"
+                    )
                 parts.append(self._source_brief(src))
                 chapter_idx = conv.get("chapter_idx") or act["cursor_chapter"]
                 chapters = [ch for ch in src.get("chapters", []) if ch["idx"] == chapter_idx]
-                if chapters:
+                if src["kind"] == "video":
+                    parts.append(
+                        "Режим видео: весь транскрипт — одна запись (chapter=1). Прочитай его ЦЕЛИКОМ: "
+                        "read_chapter(chapter=1, limit=24000, offset=…), листай offset, пока next_offset "
+                        "не станет null. Разбирай видео как единое целое; не говори «глава» — только "
+                        "«видео»/«транскрипт»."
+                    )
+                elif chapters:
                     ch = chapters[0]
                     kp = "; ".join(ch.get("key_points") or [])
                     parts.append(
@@ -300,6 +336,13 @@ class ChatService:
 
     @staticmethod
     def _source_brief(src: dict) -> str:
+        if src["kind"] == "video":
+            head = (src.get("chapters") or [{}])[0]
+            return (
+                f"Источник: {src['title']} (видео, YouTube; uid={src['uid']}) — используй только его\n"
+                f"Транскрипт — одна запись (chapter=1). Обзор: {src.get('summary') or '—'}\n"
+                f"Начало транскрипта: {(head.get('summary') or '')[:200] or '—'}"
+            )
         toc = "\n".join(
             f"{ch['idx']}. {ch['title']} — {(ch.get('summary') or '')[:120]}"
             for ch in src.get("chapters", [])[:30]
@@ -363,8 +406,14 @@ class ChatService:
 
     # --- генерация блока из разговора (save_note без draft) ---
 
-    def generate_block_draft(self, conversation_uid: str | None, kind: str, title_hint: str | None = None):
-        """Драфт блока из переписки (block_writer) — для save_note без draft_json."""
+    def generate_block_draft(
+        self,
+        conversation_uid: str | None,
+        kind: str,
+        title_hint: str | None = None,
+        instructions: str | None = None,
+    ):
+        """Драфт блока из переписки (block_writer); instructions — правки пользователя к драфту."""
 
         from ..knowledge.agents import block_writer
         from ..knowledge.service import _writer_out_to_draft
@@ -372,19 +421,51 @@ class ChatService:
         if not conversation_uid:
             return None
         conv = self.get_conversation(conversation_uid)
+        # разбор ассистента — главный материал конспекта: берём щедро, реплики пользователя — короче
         dialog = "\n".join(
-            f"{m['role']}: {m['content'][:800]}"
+            f"{m['role']}: {m['content'][:6000] if m['role'] == 'assistant' else m['content'][:1500]}"
             for m in conv.get("messages", [])
             if m["role"] in {"user", "assistant"}
         )
         if not dialog.strip():
             return None
-        ctx = AgentContext(
-            conversation_uid=conversation_uid,
-            system_extra=f"kind={kind}" + (f"\nПодсказка заголовка: {title_hint}" if title_hint else ""),
-        )
+        extra = [f"kind={kind}"]
+        if title_hint:
+            extra.append(f"Подсказка заголовка: {title_hint}")
+        if instructions:
+            extra.append(f"Правки пользователя к драфту (обязательны): {instructions}")
+        source_line = self._draft_source_line(conv)
+        if source_line:
+            extra.append(source_line)
+        ctx = AgentContext(conversation_uid=conversation_uid, system_extra="\n".join(extra))
         out = run_coro_sync(self._runtime.run_structured(block_writer, ctx, dialog))
         return _writer_out_to_draft(out, kind=kind)
+
+    def _draft_source_line(self, conv: dict) -> str:
+        """Строка «Источник: … (глава N)» для block_writer — привязка драфта к пройденному."""
+        try:
+            act = self._learning.get_activity(conv["activity_id"])
+            src = self._library.get_source(act["source_id"])
+            chapter = conv.get("chapter_idx") or act["cursor_chapter"]
+            return f"Источник: {src['title']} ({src['kind']}, uid={src['uid']}), глава {chapter}"
+        except (KeyError, NotFound):
+            return ""
+
+    # --- превью конспекта: драфт живёт на сервере, апрув идёт по preview_id ---
+
+    def store_draft_preview(self, conversation_uid: str, draft) -> int:
+        """Положить превью драфта, вернуть preview_id для save_note."""
+        d = draft if isinstance(draft, dict) else _draft_to_plain(draft)
+        history = self._previews.setdefault(conversation_uid, [])
+        history.append(d)
+        return len(history)
+
+    def get_draft_preview(self, conversation_uid: str | None, preview_id: int) -> dict | None:
+        """Превью по id (None — не найдено/протухло)."""
+        if not conversation_uid:
+            return None
+        history = self._previews.get(conversation_uid) or []
+        return history[preview_id - 1] if 0 < preview_id <= len(history) else None
 
 
 def _session_event(session: dict) -> SseEvent:
@@ -398,3 +479,31 @@ def _session_event(session: dict) -> SseEvent:
         "session",
         {"state": session["state"], "allowed_events": session["allowed_events"], "progress": progress},
     )
+
+
+def _draft_to_plain(draft) -> dict:
+    """BlockDraft (domain) → plain dict: совместим с BlockDraftIn и карточкой превью."""
+    return {
+        "title": draft.title,
+        "summary": draft.summary,
+        "kind": draft.kind,
+        "concepts": [{"term": c.term, "definition": c.definition} for c in draft.concepts],
+        "theses": list(draft.theses),
+        "my_examples": list(draft.my_examples),
+        "mermaid": draft.mermaid,
+        "practice": [
+            {
+                "machine": p.machine,
+                "command": p.command,
+                "explanation": p.explanation,
+                "result": p.result,
+            }
+            for p in draft.practice
+        ],
+        "weak_spots": list(draft.weak_spots),
+        "open_questions": list(draft.open_questions),
+        "links": list(draft.links),
+        "tags": list(draft.tags),
+        "category_suggestion": draft.category_suggestion,
+        "sources": [{"source": s.source, "chapter": s.chapter, "title": s.title} for s in draft.sources],
+    }

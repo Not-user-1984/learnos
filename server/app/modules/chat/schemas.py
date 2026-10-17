@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-MODES = {"free", "quick", "session"}
+MODES = {"free", "quick", "session", "tuning"}
 
 
 class ConversationCreate(BaseModel):
@@ -44,3 +44,4 @@ class ConversationItem(BaseModel):
     title: str
     mode: str
     updated_at: str
+    messages_count: int = 0

@@ -2,19 +2,29 @@
 
 /** Лента чата: сообщения, SSE-стриминг, чипы инструментов, карточки, композер. */
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CircleStop, Loader2, Paperclip, SendHorizontal, Terminal } from "lucide-react";
+import { CircleStop, Loader2, NotebookPen, Paperclip, SendHorizontal, Target, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import type { ChatMessage, ConversationDetail, SseEvent } from "@/lib/types";
+import { useSearchParams } from "next/navigation";
 import { streamChat } from "@/lib/chat/stream";
 import { Markdown } from "@/components/markdown/Markdown";
 import { CardView } from "@/components/chat/cards";
+import { TuningEmptyState } from "@/components/chat/tuning-panel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-type ToolChip = { call_id: string; name: string; label: string; ok?: boolean; summary?: string; open?: boolean };
+type ToolChip = {
+  call_id: string;
+  name: string;
+  label: string;
+  ok?: boolean;
+  summary?: string;
+  open?: boolean;
+  count?: number;
+};
 
 const SESSION_STEPS = ["theory", "check", "practice", "debrief", "done"];
 const STEP_LABELS: Record<string, string> = { theory: "Теория", check: "Вопросы", practice: "Практика", debrief: "Разбор", done: "Готово" };
@@ -25,10 +35,14 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   const [streamText, setStreamText] = useState("");
   const [chips, setChips] = useState<ToolChip[]>([]);
   const [liveCards, setLiveCards] = useState<ChatMessage["cards"]>([]);
+  const [streamError, setStreamError] = useState<string | null>(null);
   const [session, setSession] = useState(conversation.session);
   const [input, setInput] = useState("");
   const [title, setTitle] = useState(conversation.title);
   const abortRef = useRef<AbortController | null>(null);
+  const lastSentRef = useRef("");
+  const searchParams = useSearchParams();
+  const initialSentRef = useRef(false);
   const feedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,12 +51,14 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
 
   const send = async (content: string) => {
     if (!content.trim() || streaming) return;
+    lastSentRef.current = content;
     setInput("");
     setMessages((m) => [...m, { id: -Date.now(), role: "user", content, cards: [], created_at: new Date().toISOString() }]);
     setStreaming(true);
     setStreamText("");
     setChips([]);
     setLiveCards([]);
+    setStreamError(null);
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -55,7 +71,25 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           setStreamText(assistantText);
           break;
         case "tool_start":
-          setChips((c) => [...c, { call_id: ev.data.call_id, name: ev.data.name, label: ev.data.label }]);
+          setChips((c) => {
+            // серия однотипных вызовов (листание глав/транскрипта) — один чип со счётчиком
+            const last = c[c.length - 1];
+            if (last && last.name === ev.data.name) {
+              return [
+                ...c.slice(0, -1),
+                {
+                  ...last,
+                  call_id: ev.data.call_id,
+                  label: ev.data.label || last.label,
+                  ok: undefined,
+                  summary: undefined,
+                  count: (last.count ?? 1) + 1,
+                },
+              ];
+            }
+            return [...c, { call_id: ev.data.call_id, name: ev.data.name, label: ev.data.label, count: 1 }];
+          });
+          setStreamText((t) => (t && !t.endsWith("\n") ? t + "\n\n" : t));
           break;
         case "tool_end":
           setChips((c) => c.map((chip) => (chip.call_id === ev.data.call_id ? { ...chip, ok: ev.data.ok, summary: ev.data.summary } : chip)));
@@ -71,6 +105,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           setTitle(ev.data.title);
           break;
         case "error":
+          setStreamError(ev.data.message);
           toast.error(ev.data.message);
           break;
         case "done":
@@ -98,8 +133,19 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
       // сеть пропала — оставляем локальное состояние
     }
     setStreaming(false);
+    setStreamError(null);
     abortRef.current = null;
   };
+
+  // цитата из читалки: ?initial=… — отправляем автоматически один раз
+  useEffect(() => {
+    const initial = searchParams.get("initial");
+    if (initial && !initialSentRef.current && conversation.messages.length === 0) {
+      initialSentRef.current = true;
+      void send(initial);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const stop = async () => {
     abortRef.current?.abort();
@@ -116,17 +162,16 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
         <header className="flex items-center gap-2 border-b px-4 py-3">
           <h1 className="truncate font-semibold">{title}</h1>
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            {conversation.mode === "session" ? "сессия" : conversation.mode === "quick" ? "быстрый разбор" : "свободный"}
+            {conversation.mode === "session" ? "сессия" : conversation.mode === "quick" ? "быстрый разбор" : conversation.mode === "tuning" ? "настройка агентов" : "свободный"}
           </span>
         </header>
 
         <div ref={feedRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto flex max-w-3xl flex-col gap-7 py-2">
-            {messages.length === 0 && conversation.mode === "free" && (
-              <EmptyHint mode={conversation.mode} />
-            )}
+            {messages.length === 0 && conversation.mode === "free" && <EmptyHint mode={conversation.mode} />}
+            {messages.length === 0 && conversation.mode === "tuning" && <TuningEmptyState />}
             {messages.map((m) => (
-              <Message key={m.id} message={m} onInsert={streaming ? undefined : setInput} />
+              <Message key={m.id} message={m} onInsert={streaming ? undefined : setInput} onSend={streaming ? undefined : send} />
             ))}
             {streaming && (
               <div>
@@ -135,7 +180,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
                 ))}
                 {liveCards.map((c, i) => (
                   <div key={i} className="mb-3">
-                    <CardView card={c} onInsert={streaming ? undefined : setInput} />
+                    <CardView card={c} onInsert={streaming ? undefined : setInput} onSend={streaming ? undefined : send} />
                   </div>
                 ))}
                 {streamText ? (
@@ -152,6 +197,42 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           </div>
         </div>
 
+        {streamError && (
+          <div className="mx-auto mb-2 max-w-3xl px-4">
+            <div className="flex items-center gap-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm">
+              <span className="text-rose-500">⚠</span>
+              <span className="flex-1">Ошибка агента: {streamError}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setStreamError(null);
+                  void send(input || lastSentRef.current);
+                }}
+              >
+                Повторить
+              </Button>
+            </div>
+          </div>
+        )}
+        {conversation.mode === "quick" && !streaming && (
+          <div className="mx-auto mb-1 flex max-w-3xl flex-wrap gap-2 px-4">
+            <button
+              onClick={() => void send("Закрепим пройденное: задай вопросы по ключевым понятиям, по одному за раз.")}
+              className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-500 transition hover:bg-sky-500/20"
+            >
+              <Target className="h-4 w-4" /> Закрепить пройденное
+            </button>
+            <button
+              onClick={() =>
+                void send("Собери превью конспекта в базу знаний по пройденному: покажи, что запишем, без сохранения.")
+              }
+              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-500 transition hover:bg-emerald-500/20"
+            >
+              <NotebookPen className="h-4 w-4" /> Конспект в базу знаний
+            </button>
+          </div>
+        )}
         <div className="border-t p-3">
           <div className="mx-auto flex max-w-3xl items-end gap-2">
             <Button variant="ghost" size="icon" aria-label="Прикрепить" onClick={() => toast.info("Загрузка PDF — на странице Библиотеки")}>
@@ -208,7 +289,15 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
 
 const CHAT_PROSE = "prose-headings:mt-5 prose-headings:mb-2 prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-p:my-3";
 
-function Message({ message, onInsert }: { message: ChatMessage; onInsert?: (t: string) => void }) {
+function Message({
+  message,
+  onInsert,
+  onSend,
+}: {
+  message: ChatMessage;
+  onInsert?: (t: string) => void;
+  onSend?: (t: string) => void;
+}) {
   const time = new Date(message.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
   if (message.role === "user") {
     return (
@@ -229,7 +318,7 @@ function Message({ message, onInsert }: { message: ChatMessage; onInsert?: (t: s
         <Markdown content={message.content} className={CHAT_PROSE} />
       </div>
       {message.cards?.map((c, i) => (
-        <CardView key={i} card={c} onInsert={onInsert} />
+        <CardView key={i} card={c} onInsert={onInsert} onSend={onSend} />
       ))}
     </div>
   );
@@ -243,15 +332,35 @@ function ToolChipView({ chip }: { chip: ToolChip }) {
         onClick={() => setOpen((v) => !v)}
         className={cn(
           "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
-          chip.ok === false ? "border-rose-500/40 text-rose-500" : chip.ok ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+          chip.ok === false
+            ? "border-rose-500/40 text-rose-500"
+            : chip.ok
+              ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+              : "text-muted-foreground",
         )}
       >
         <Terminal className="h-3 w-3" />
         {chip.label || chip.name}
+        {(chip.count ?? 1) > 1 && (
+          <span
+            key={chip.count}
+            className="rounded-full bg-muted px-1.5 py-px text-[10px] font-medium tabular-nums animate-in fade-in zoom-in duration-300"
+          >
+            ×{chip.count}
+          </span>
+        )}
         {chip.ok === undefined && <Loader2 className="h-3 w-3 animate-spin" />}
       </button>
       {open && chip.summary && <p className="mt-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{chip.summary}</p>}
     </div>
+  );
+}
+
+export function ChatViewWithInitial(props: { conversation: ConversationDetail }) {
+  return (
+    <Suspense fallback={null}>
+      <ChatView {...props} />
+    </Suspense>
   );
 }
 

@@ -82,6 +82,14 @@ def library_tools(c) -> list[ToolSpec]:
         del ctx
         return svc.read_chapter(args.source_id, args.chapter, args.offset, args.limit)
 
+    def read_chapter_label(args: dict) -> str:
+        """Видео → транскрипт, книга → глава."""
+        try:
+            kind = svc.get_source(args.get("source_id"))["kind"]
+        except Exception:  # noqa: BLE001 — подпись чипа не критична
+            return "Читаю главу"
+        return "Читаю транскрипт" if kind == "video" else "Читаю главу"
+
     def research_sources(args: ResearchArgs, ctx: ToolContext):
         del ctx
         return svc.research_sources(args.topic, args.limit)
@@ -144,7 +152,7 @@ def library_tools(c) -> list[ToolSpec]:
             description="Текст главы порционно: offset/next_offset. Не грузи весь источник.",
             args_model=ReadChapterArgs,
             handler=read_chapter,
-            label="Читаю главу",
+            label=read_chapter_label,
         ),
         ToolSpec(
             name="research_sources",

@@ -62,6 +62,7 @@ export type ConversationItem = {
   title: string;
   mode: string;
   updated_at: string;
+  messages_count?: number;
 };
 
 export type ChatMessage = {
@@ -140,6 +141,21 @@ export type Health = {
 };
 
 /** Карточки UI из SSE (см. ТЗ 04): один интерфейс с опциональными полями по типу. */
+/** Драфт блока для карточки-превью конспекта (preview_note). */
+export type NoteDraft = {
+  title: string;
+  summary?: string;
+  kind?: string;
+  concepts?: { term: string; definition: string }[];
+  theses?: string[];
+  my_examples?: string[];
+  mermaid?: string | null;
+  weak_spots?: string[];
+  open_questions?: string[];
+  tags?: string[];
+  category_suggestion?: string | null;
+};
+
 export interface Card {
   type: string;
   // command
@@ -175,6 +191,13 @@ export interface Card {
   job_id?: number;
   progress?: number;
   status?: string;
+  // prompt_change
+  change_id?: number;
+  agent?: string;
+  diff?: { op: string; line: string }[];
+  // note_draft (превью конспекта)
+  preview_id?: number;
+  draft?: NoteDraft;
 }
 
 /** SSE-события чата. */

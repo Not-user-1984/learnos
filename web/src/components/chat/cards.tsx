@@ -1,14 +1,15 @@
 "use client";
 
-/** Карточки UI в чате: команда, вопрос, оценка, блок, job. */
+/** Карточки UI в чате: команда, вопрос, оценка, блок, job, превью конспекта. */
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, ClipboardCopy, Loader2, Terminal } from "lucide-react";
+import { Check, ClipboardCopy, Loader2, NotebookPen, Pencil, Settings2, Terminal, X } from "lucide-react";
 import { toast } from "sonner";
-import type { Card } from "@/lib/types";
+import type { Card, NoteDraft } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Mermaid } from "@/components/markdown/Mermaid";
 
 const RISK_COLORS: Record<string, string> = {
   low: "bg-emerald-500/15 text-emerald-500",
@@ -16,7 +17,15 @@ const RISK_COLORS: Record<string, string> = {
   high: "bg-rose-500/15 text-rose-500",
 };
 
-export function CardView({ card, onInsert }: { card: Card; onInsert?: (text: string) => void }) {
+export function CardView({
+  card,
+  onInsert,
+  onSend,
+}: {
+  card: Card;
+  onInsert?: (text: string) => void;
+  onSend?: (text: string) => void;
+}) {
   switch (card.type) {
     case "command":
       return <CommandCardView card={card} onInsert={onInsert} />;
@@ -29,6 +38,10 @@ export function CardView({ card, onInsert }: { card: Card; onInsert?: (text: str
       return <BlockCardView card={card} />;
     case "job":
       return <JobCardView card={card} />;
+    case "prompt_change":
+      return <PromptChangeCardView card={card} />;
+    case "note_draft":
+      return <NoteDraftCardView card={card} onInsert={onInsert} onSend={onSend} />;
     default:
       return null;
   }
@@ -190,6 +203,188 @@ function JobCardView({ card }: { card: Card }) {
       <p className="mt-1 text-xs text-muted-foreground">
         {card.status === "done" ? "готово" : card.status === "failed" ? "ошибка" : `${card.progress ?? 0}/${total}`}
       </p>
+    </div>
+  );
+}
+
+
+function NoteDraftCardView({
+  card,
+  onInsert,
+  onSend,
+}: {
+  card: Card;
+  onInsert?: (t: string) => void;
+  onSend?: (t: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const d: NoteDraft | undefined = card.draft;
+  if (!d) return null;
+
+  const approve = () => {
+    if (!onSend || busy) return;
+    setBusy(true);
+    onSend(`Апрув: записывай этот блок в базу как есть (превью #${card.preview_id}).`);
+  };
+
+  return (
+    <div className="rounded-xl border border-sky-500/40 bg-sky-500/5 p-4">
+      <p className="mb-1 flex items-center gap-2 text-sm font-medium">
+        <NotebookPen className="h-4 w-4 text-sky-500" /> Превью конспекта
+        {card.preview_id ? ` #${card.preview_id}` : ""} · ничего не записано
+      </p>
+      <p className="font-medium">{d.title}</p>
+      {d.summary && <p className="mt-1 text-sm text-muted-foreground">{d.summary}</p>}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {d.category_suggestion && (
+          <Badge className="bg-violet-500/15 text-violet-500">категория: {d.category_suggestion}</Badge>
+        )}
+        {(d.tags ?? []).map((t) => (
+          <Badge key={t} variant="outline">
+            {t}
+          </Badge>
+        ))}
+      </div>
+
+      {(d.concepts?.length ?? 0) > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Ключевые понятия</p>
+          <ul className="mt-1 space-y-1 text-sm">
+            {(d.concepts ?? []).map((c, i) => (
+              <li key={i}>
+                <b>{c.term}</b> — {c.definition}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(d.theses?.length ?? 0) > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Тезисы</p>
+          <ul className="mt-1 list-inside list-disc space-y-1 text-sm">
+            {(d.theses ?? []).map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(d.my_examples?.length ?? 0) > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Мои примеры</p>
+          <ul className="mt-1 list-inside list-disc space-y-1 text-sm">
+            {(d.my_examples ?? []).map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(d.weak_spots?.length ?? 0) > 0 && (
+        <div className="mt-3 rounded-md bg-amber-500/10 px-3 py-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400">
+            Дозакрепить
+          </p>
+          <ul className="mt-1 list-inside list-disc space-y-1 text-sm">
+            {(d.weak_spots ?? []).map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(d.open_questions?.length ?? 0) > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Вопросы на потом</p>
+          <ul className="mt-1 list-inside list-disc space-y-1 text-sm">
+            {(d.open_questions ?? []).map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {d.mermaid && (
+        <div className="mt-3">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Схема</p>
+          <Mermaid code={d.mermaid} />
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {onSend ? (
+          <Button size="sm" disabled={busy} onClick={approve}>
+            {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
+            Записать в базу
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">агент записывает…</span>
+        )}
+        {onInsert && !busy && (
+          <Button size="sm" variant="outline" onClick={() => onInsert(`Поправим конспект (превью #${card.preview_id}): `)}>
+            <Pencil className="mr-1 h-4 w-4" /> Поправить
+          </Button>
+        )}
+        <span className="text-xs text-muted-foreground">
+          правки можно писать словами — «это уберём», «это дополним», соберу новое превью
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function PromptChangeCardView({ card }: { card: Card }) {
+  const [status, setStatus] = useState<string>(card.status ?? "pending");
+  const [busy, setBusy] = useState(false);
+
+  const act = async (action: "approve" | "reject") => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/tuning/changes/${card.change_id}/${action}`, { method: "POST" });
+      if (!res.ok) throw new Error(String(res.status));
+      setStatus(action === "approve" ? "applied" : "rejected");
+      toast.success(action === "approve" ? "Промпт обновлён — применится к новым ответам" : "Правка отклонена");
+    } catch {
+      toast.error("Не удалось — попробуй ещё раз");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-sky-500/40 bg-sky-500/5 p-4">
+      <p className="mb-1 flex items-center gap-2 text-sm font-medium">
+        <Settings2 className="h-4 w-4 text-sky-500" />
+        Правка промпта: <b>{card.agent}</b>
+      </p>
+      <p className="mb-2 text-sm text-muted-foreground">{card.summary}</p>
+      <div className="max-h-64 overflow-auto rounded-lg border bg-zinc-950 font-mono text-xs leading-5">
+        {(card.diff ?? []).slice(0, 60).map((d, i) => (
+          <div
+            key={i}
+            className={
+              d.op === "+"
+                ? "bg-emerald-500/15 px-2 text-emerald-300"
+                : d.op === "-"
+                  ? "bg-rose-500/15 px-2 text-rose-300"
+                  : "px-2 text-zinc-500"
+            }
+          >
+            {d.op === "@" ? d.line : `${d.op} ${d.line}`}
+          </div>
+        ))}
+      </div>
+      {status === "pending" ? (
+        <div className="mt-3 flex gap-2">
+          <Button size="sm" disabled={busy} onClick={() => void act("approve")}>
+            {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
+            Применить
+          </Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void act("reject")}>
+            <X className="mr-1 h-4 w-4" /> Отклонить
+          </Button>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">
+          {status === "applied" ? "✅ применено — поведение агента обновлено" : "отклонено"}
+        </p>
+      )}
     </div>
   );
 }

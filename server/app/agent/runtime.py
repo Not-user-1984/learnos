@@ -25,8 +25,26 @@ _jinja = Environment(undefined=StrictUndefined, autoescape=False, keep_trailing_
 
 
 def render_prompt(path: Path, variables: dict[str, Any]) -> str:
-    """Промпт агента с Jinja-подстановками; StrictUndefined ловит опечатки."""
-    return _jinja.from_string(path.read_text(encoding="utf-8")).render(**variables)
+    """Промпт агента с Jinja-подстановками; StrictUndefined ловит опечатки.
+
+    Override: если в data/prompts/ лежит отредактированная копия — читаем её
+    (правки из чата применяются сразу и переживают пересборку контейнера).
+    """
+    actual = resolve_prompt_path(path)
+    return _jinja.from_string(actual.read_text(encoding="utf-8")).render(**variables)
+
+
+def resolve_prompt_path(path: Path) -> Path:
+    """Путь промпта с учётом override из data/prompts/ (если задан LEARNOS_DATA_DIR)."""
+    import os
+
+    marker = os.sep + "modules" + os.sep
+    if marker in str(path):
+        override_root = Path(os.environ.get("LEARNOS_DATA_DIR", Path.cwd() / "data")) / "prompts"
+        override = override_root / str(path).split(marker, 1)[1]
+        if override.is_file():
+            return override
+    return path
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,7 +146,8 @@ class AgentRuntime:
                 for call in calls:
                     tool_calls += 1
                     known = call.name in self._names(spec)
-                    label = self._tools.get(call.name).label if known else call.name
+                    base_label = self._tools.get(call.name).label if known else call.name
+                    label = base_label(call.arguments) if callable(base_label) else base_label
                     yield AgentEvent(
                         type="tool_start", call_id=call.id, name=call.name, args=call.arguments, label=label
                     )

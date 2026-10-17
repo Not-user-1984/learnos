@@ -28,7 +28,7 @@ class ToolSpec:
     handler: Callable[[BaseModel, ToolContext], Any]
     channels: frozenset[str] = field(default=frozenset({"mcp", "agent"}))
     modes: frozenset[str] = field(default=frozenset({"free", "quick", "session"}))
-    label: str = ""  # человекочитаемая подпись для чипа в чате
+    label: str | Callable[[dict[str, Any]], str] = ""  # подпись чипа; может зависеть от args
 
     def json_schema(self) -> dict[str, Any]:
         """JSON Schema аргументов для MCP и LLM."""

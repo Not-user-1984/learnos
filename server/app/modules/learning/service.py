@@ -94,6 +94,22 @@ class LearningService:
             raise NotFound(f"активность '{ref}' не найдена")
         return acts[0]
 
+    def activity_ids_for_source(self, source_ref: str | int) -> list[int]:
+        """id активностей источника — для фильтра «история разговоров по главе»."""
+        with self._uow() as uow:
+            from sqlalchemy import select as sa_select
+
+            from ..library.infra.tables import sources as sources_t
+
+            src_id = uow.session.execute(
+                sa_select(sources_t.c.id).where(sources_t.c.uid == str(source_ref))
+            ).scalar()
+            if src_id is None and str(source_ref).isdigit():
+                src_id = int(source_ref)
+            if src_id is None:
+                raise NotFound(f"источник '{source_ref}' не найден")
+            return self._acts.ids_for_source(uow.session, int(src_id))
+
     # --- сессии ---
 
     def start_session(
