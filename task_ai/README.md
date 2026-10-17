@@ -26,17 +26,12 @@
    - [04-api-and-mcp.md](04-api-and-mcp.md) — реестр инструментов, MCP по модулям, REST, SSE-протокол чата, карточки
    - [05-llm-and-agents.md](05-llm-and-agents.md) — LLM-слой (любой провайдер), агентный рантайм, агенты LearnOS, режимы, генерация блока
    - [06-ui.md](06-ui.md) — экраны, дизайн-система, бесплатные библиотеки, рендер Markdown
-6. Этапы — один за раз, в порядке из раздела «Приоритеты» (ниже — список файлов):
-   - [stages/01-foundation.md](stages/01-foundation.md) — модульный бэкенд, схема v2, LLM-слой и агентный рантайм, оболочка UI
-   - [stages/02-chat-agent.md](stages/02-chat-agent.md) — веб-чат, агент, быстрый разбор, сессия, практика
-   - [stages/03-knowledge-base.md](stages/03-knowledge-base.md) — категории, теги, фильтры, страница блока, правки
-   - [stages/04-library.md](stages/04-library.md) — библиотека источников, страница книги, активности
-   - [stages/05-courses.md](stages/05-courses.md) — курсы как подборки, генератор курса
-   - [stages/06-export.md](stages/06-export.md) — экспорт в MD/ZIP, MCP-экспорт
-   - [stages/08-upgrades.md](stages/08-upgrades.md) — **делать после этапа 6**: понятия как сущности, цитаты на источник, повторение в Telegram, PWA + «Поделиться», инструкции (runbook) из практики, повторы знаний («это ты уже знаешь»)
-   - [stages/09-visuals.md](stages/09-visuals.md) — **делать после этапа 8**: визуалы блока — инфографика (AntV Infographic), графики (AntV GPT-Vis), схемы Mermaid с иконками, mind-map (Markmap), агент-иллюстратор, сервис рендера
-   - [stages/10-settings-and-cloud.md](stages/10-settings-and-cloud.md) — **делать после этапа 9**: страница настроек (ключи нейронок, Telegram-токен, сеть, доступы), шифрованные секреты, свой Telegram-бот, скиллы внутри проекта, Docker и режим prod для облака
-   - [stages/11-agent-pack-and-courier.md](stages/11-agent-pack-and-courier.md) — **делать после этапа 10**: готовый агент-пакет LearnOS для любых систем (Hermes, opencode, Claude Code, Cursor…) и скилл-«курьер», который сам ставит его туда
+6. Оперативный бэклог — [tasks/](tasks/README.md): открытые задачи агента (active/idea/on-request) и [archive/](archive/README.md) — история выполненного. Этапы 01–06 и часть 08 (C, D) **сделаны** — их ТЗ лежит в `archive/`.
+7. Оставшиеся этапы-ТЗ — по одному, в порядке из раздела «Приоритеты»:
+   - [stages/08-upgrades.md](stages/08-upgrades.md) — остатки: понятия как сущности (A), цитаты на источник (B), инструкции (runbook) из практики (E), повторы знаний (F); C (повторение в Telegram) и D (PWA + «Поделиться») — сделаны
+   - [stages/09-visuals.md](stages/09-visuals.md) — **по требованию**: визуалы блока — инфографика (AntV Infographic), графики (AntV GPT-Vis), схемы Mermaid с иконками, mind-map (Markmap), агент-иллюстратор, сервис рендера
+   - [stages/10-settings-and-cloud.md](stages/10-settings-and-cloud.md) — частично сделано (настройки, скиллы внутри проекта, Docker); осталось: секреты/модели из UI, свой Telegram-бот, облако
+   - [stages/11-agent-pack-and-courier.md](stages/11-agent-pack-and-courier.md) — **по требованию**: готовый агент-пакет LearnOS для любых систем (Hermes, opencode, Claude Code, Cursor…) и скилл-«курьер», который сам ставит его туда
    - [stages/07-backlog.md](stages/07-backlog.md) — после MVP и только по согласованию: семантический поиск, граф, песочницы, деплой
 
 ## Изменения ТЗ
