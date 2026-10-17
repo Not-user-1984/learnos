@@ -9,7 +9,7 @@ import { AArrowDown, AArrowUp, ChevronLeft, ChevronRight, History, Loader2, Mess
 import { toast } from "sonner";
 import type { ConversationItem } from "@/lib/types";
 import { api, apiPost } from "@/lib/api";
-import { MODE_LABEL } from "@/lib/format";
+import { modeLabel } from "@/lib/format";
 import { Markdown } from "@/components/markdown/Markdown";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -200,7 +200,7 @@ export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{c.title}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    {MODE_LABEL[c.mode] ?? c.mode} · {new Date(c.updated_at).toLocaleString("ru-RU", {
+                    {modeLabel(c.mode)} · {new Date(c.updated_at).toLocaleString("ru-RU", {
                       day: "numeric",
                       month: "short",
                       hour: "2-digit",

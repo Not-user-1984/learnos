@@ -9,16 +9,17 @@ from pydantic import BaseModel
 
 @dataclass(frozen=True, slots=True)
 class AgentSpec:
-    """Описание агента: роль модели, системный промпт, доступные инструменты и лимиты."""
+    """Описание агента и контекст запуска: роль модели, системный промпт, доступные инструменты и лимиты."""
 
     name: str
     description: str
-    prompt_path: Path
+    prompt_path: Path | None = None  # промпт из файла (дефолтные агенты)
     tools: frozenset[str] = frozenset()
     model_role: str = "chat"
     max_steps: int = 12
     temperature: float | None = None
     output_model: type[BaseModel] | None = None
+    prompt_text: str | None = None  # промпт из строки (кастомные агенты из UI)
 
 
 @dataclass(slots=True)

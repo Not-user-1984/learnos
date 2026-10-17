@@ -11,6 +11,12 @@ export const MODE_LABEL: Record<string, string> = {
   tuning: "настройка агентов",
 };
 
+export function modeLabel(mode: string): string {
+  if (mode.startsWith("agent:")) return `агент ${mode.slice(6)}`;
+  return MODE_LABEL[mode] ?? mode;
+}
+
 export function modeEmoji(mode: string): string {
+  if (mode.startsWith("agent:")) return "🤖";
   return mode === "quick" ? "⚡" : mode === "session" ? "🎓" : mode === "tuning" ? "⚙️" : "💬";
 }

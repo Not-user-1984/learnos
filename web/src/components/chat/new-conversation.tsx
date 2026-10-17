@@ -19,6 +19,7 @@ export function NewConversationButton() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState("quick");
   const [sources, setSources] = useState<SourceDetail[]>([]);
+  const [customAgents, setCustomAgents] = useState<{ name: string; description: string }[]>([]);
   const [source, setSource] = useState<string>("");
   const [chapter, setChapter] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -26,6 +27,9 @@ export function NewConversationButton() {
   useEffect(() => {
     if (!open) return;
     api<SourceDetail[]>("/sources").then(setSources).catch(() => setSources([]));
+    api<{ name: string; description: string }[]>("/tuning/agents")
+      .then(setCustomAgents)
+      .catch(() => setCustomAgents([]));
   }, [open]);
 
   const chosen = sources.find((s) => s.uid === source);
@@ -78,9 +82,14 @@ export function NewConversationButton() {
             <ToggleGroupItem value="session">🎓 Сессия</ToggleGroupItem>
             <ToggleGroupItem value="free">💬 Свободный</ToggleGroupItem>
             <ToggleGroupItem value="tuning">⚙️ Настроить агента</ToggleGroupItem>
+            {customAgents.map((a) => (
+              <ToggleGroupItem key={a.name} value={`agent:${a.name}`} title={a.description}>
+                🤖 {a.name}
+              </ToggleGroupItem>
+            ))}
           </ToggleGroup>
 
-          {mode !== "free" && mode !== "tuning" && (
+          {mode !== "free" && mode !== "tuning" && !mode.startsWith("agent:") && (
             <>
               <Select onValueChange={(v: unknown) => { const val = Array.isArray(v) ? String(v[0]) : (v as string | null); if (val) { setSource(val); setChapter(""); } }}>
                 <SelectTrigger aria-label="Источник">

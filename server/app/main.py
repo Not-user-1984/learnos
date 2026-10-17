@@ -47,7 +47,7 @@ def migrate_db(container) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Старт: миграции, FTS, категории по умолчанию, воркер jobs, MCP-сессии."""
+    """Старт: миграции, FTS, категории по умолчанию, кастомные агенты, воркер jobs, MCP-сессии."""
     container = app.state.container
     migrate_db(container)
 
@@ -57,6 +57,10 @@ async def lifespan(app: FastAPI):
         uow.session.execute(text("SELECT 1"))
         ensure_fts(uow.session)
     container.knowledge.ensure_categories_default()
+    if container.tuning is not None:
+        loaded = container.tuning.load_custom_agents()
+        if loaded:
+            log.info("кастомных агентов загружено: %d", loaded)
 
     worker = container.job_worker
     if worker is not None:

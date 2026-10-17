@@ -34,6 +34,32 @@ AGENT_BY_MODE = {
     "session": "session_tutor",
     "tuning": "prompt_tuner",
 }
+
+
+def _agent_for_mode(registry, mode: str) -> str:
+    """Имя агента по режиму разговора: дефолтные режимы — из таблицы, agent:<name> — кастомный."""
+    if mode.startswith("agent:"):
+        name = mode.split(":", 1)[1]
+        try:
+            registry.get(name)
+            return name
+        except KeyError:
+            return "free_chat"  # кастомного агента удалили — разговор не теряем
+    return AGENT_BY_MODE.get(mode, "free_chat")
+
+
+def _valid_mode(registry, mode: str) -> bool:
+    if mode in MODES:
+        return True
+    if mode.startswith("agent:"):
+        try:
+            registry.get(mode.split(":", 1)[1])
+            return True
+        except KeyError:
+            return False
+    return False
+
+
 SESSION_TOOLS = {"advance", "practice_step", "finish_session", "start_session"}
 
 
@@ -84,9 +110,9 @@ class ChatService:
         focus_block: str | None = None,
         title: str | None = None,
     ) -> dict:
-        """Новый разговор в одном из режимов."""
-        if mode not in MODES:
-            raise ValidationFailed(f"режим должен быть одним из {sorted(MODES)}")
+        """Новый разговор в одном из режимов (кастомные агенты — mode='agent:<имя>')."""
+        if not _valid_mode(self._agents, mode):
+            raise ValidationFailed(f"режим должен быть одним из {sorted(MODES)} или agent:<имя кастомного>")
         uid = self._ids.new("cnv")
         now = now_iso(self._clock)
         with self._uow() as uow:
@@ -185,7 +211,7 @@ class ChatService:
                 session = self._create_session_for(conv)
             yield _session_event(session)
 
-        agent_name = AGENT_BY_MODE.get(conv["mode"], "free_chat")
+        agent_name = _agent_for_mode(self._agents, conv["mode"])
         spec: AgentSpec = self._agents.get(agent_name)
         # conv прочитан до вставки user-сообщения: добавляем его сами, иначе первый
         # запрос разговора уйдёт без единого user-сообщения (z.ai отвечает 1214)

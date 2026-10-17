@@ -35,6 +35,11 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return api<T>(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 }
 
+/** PATCH с JSON-телом. */
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  return api<T>(path, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
 /** DELETE. */
 export async function apiDelete<T>(path: string): Promise<T> {
   return api<T>(path, { method: "DELETE" });

@@ -131,7 +131,8 @@ def test_v1_to_head_moves_data_and_kb(v1_layout):
         with engine.connect() as conn:
             # ревизия дошла до головы
             assert (
-                conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0004_tuning"
+                conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                == "0005_custom_agents"
             )  # head (обновляется с новыми ревизиями)
 
             # sources получил uid, строки сохранены

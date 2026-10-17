@@ -48,8 +48,11 @@ def resolve_prompt_path(path: Path) -> Path:
 
 
 def _system_prompt(spec: AgentSpec, ctx: AgentContext) -> str:
-    """Промпт агента + системный блок «Контекст», если он задан."""
-    prompt = render_prompt(spec.prompt_path, ctx.variables)
+    """Промпт агента (файл или строка кастомного агента) + блок «Контекст», если задан."""
+    if spec.prompt_text is not None:
+        prompt = _jinja.from_string(spec.prompt_text).render(**ctx.variables)
+    else:
+        prompt = render_prompt(spec.prompt_path, ctx.variables)
     if ctx.system_extra:
         prompt = f"{prompt}\n\n# Контекст\n\n{ctx.system_extra}"
     return prompt

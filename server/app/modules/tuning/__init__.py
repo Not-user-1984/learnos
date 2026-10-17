@@ -12,8 +12,10 @@ class TuningModule(Module):
         from .agents import register_agents
         from .service import TuningService
 
-        c.tuning = TuningService(c.uow, c.settings, c.agent_registry)
+        c.tuning = TuningService(c.uow, c.settings, c.agent_registry, c.agent_runtime, c.tools)
         register_agents(c)
+        # кастомные агенты из БД — в реестр сразу (созданные через конструктор в UI)
+        c.tuning.load_custom_agents()
 
     def routers(self, c):
         from .api import make_router

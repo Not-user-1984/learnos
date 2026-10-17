@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { MODE_LABEL, modeEmoji } from "@/lib/format";
+import { modeEmoji, modeLabel } from "@/lib/format";
 import type { ConversationItem } from "@/lib/types";
 import { StudyButtons, StudyEmptyState } from "@/components/chat/study-buttons";
 
@@ -33,7 +33,7 @@ export default async function ChatListPage() {
               <span className="text-lg">{modeEmoji(c.mode)}</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{c.title}</p>
-                <p className="text-xs text-muted-foreground">{MODE_LABEL[c.mode] ?? c.mode}</p>
+                <p className="text-xs text-muted-foreground">{modeLabel(c.mode)}</p>
               </div>
               <span className="text-xs text-muted-foreground">{new Date(c.updated_at).toLocaleString("ru-RU")}</span>
             </Link>

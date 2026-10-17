@@ -1,40 +1,12 @@
 "use client";
 
-/** Кнопки интеграций: настройка агентов словами и тест Telegram-моста. */
+/** Кнопки интеграций: тест Telegram-моста. */
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2, MessageCircle, Send, Settings2 } from "lucide-react";
+import { Loader2, MessageCircle, Send } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-
-export function TuneAgentButton() {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-
-  const open = async () => {
-    setBusy(true);
-    try {
-      const conv = await apiPost<{ uid: string }>("/conversations", {
-        mode: "tuning",
-        title: "Настройка агентов",
-      });
-      router.push(`/chat/${conv.uid}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "не удалось");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Button onClick={open} disabled={busy}>
-      {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Settings2 className="mr-1.5 h-4 w-4" />}
-      Настроить агента словами
-    </Button>
-  );
-}
 
 export function TelegramTestButton() {
   const [busy, setBusy] = useState(false);

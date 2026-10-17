@@ -3,8 +3,9 @@
 import { api } from "@/lib/api";
 import type { Health, Profile } from "@/lib/types";
 import { ProfileForm } from "@/components/settings/profile-form";
+import { AgentsSettings } from "@/components/settings/agents-settings";
 import { MaintenanceActions } from "@/components/settings/maintenance";
-import { TelegramTestButton, TuneAgentButton } from "@/components/settings/integrations";
+import { TelegramTestButton } from "@/components/settings/integrations";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
@@ -57,9 +58,9 @@ export default async function SettingsPage() {
         <section className="rounded-2xl border bg-card p-6">
           <h2 className="font-medium">Поведение агентов</h2>
           <p className="mb-4 mt-1 text-sm text-muted-foreground">
-            Скажи словами, как должен вести себя учитель или разборщик — настройщик перепишет промпты и покажет дифф на подтверждение
+            Раскрой агента — увидишь его промпт и инструменты. Правки — словами через настройщик, новых помощников — конструктором
           </p>
-          <TuneAgentButton />
+          <AgentsSettings />
         </section>
 
         <section className="rounded-2xl border bg-card p-6">
