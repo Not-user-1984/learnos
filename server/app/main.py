@@ -61,6 +61,10 @@ async def lifespan(app: FastAPI):
         loaded = container.tuning.load_custom_agents()
         if loaded:
             log.info("кастомных агентов загружено: %d", loaded)
+    if container.mcpext is not None:
+        loaded = container.mcpext.load_on_start()
+        if loaded:
+            log.info("внешних MCP с инструментами: %d", loaded)
 
     worker = container.job_worker
     if worker is not None:

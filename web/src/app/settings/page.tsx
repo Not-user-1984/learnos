@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import type { Health, Profile } from "@/lib/types";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { AgentsSettings } from "@/components/settings/agents-settings";
+import { McpConnections } from "@/components/settings/mcp-connections";
 import { MaintenanceActions } from "@/components/settings/maintenance";
 import { TelegramTestButton } from "@/components/settings/integrations";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +62,14 @@ export default async function SettingsPage() {
             Раскрой агента — увидишь его промпт и инструменты. Правки — словами через настройщик, новых помощников — конструктором
           </p>
           <AgentsSettings />
+        </section>
+
+        <section className="rounded-2xl border bg-card p-6">
+          <h2 className="font-medium">Сторонние MCP</h2>
+          <p className="mb-4 mt-1 text-sm text-muted-foreground">
+            Подключай внешние MCP-серверы — их инструменты сразу доступны агентам
+          </p>
+          <McpConnections />
         </section>
 
         <section className="rounded-2xl border bg-card p-6">

@@ -21,6 +21,7 @@ from .modules.export import ExportModule
 from .modules.knowledge import KnowledgeModule
 from .modules.learning import LearningModule
 from .modules.library import LibraryModule
+from .modules.mcpext import McpExtModule
 from .modules.messenger import MessengerModule
 from .modules.profile import ProfileModule
 from .modules.review import ReviewModule
@@ -44,6 +45,7 @@ MODULES = [
     ReviewModule(),
     MessengerModule(),
     TuningModule(),
+    McpExtModule(),
 ]
 
 
@@ -74,6 +76,7 @@ class Container:
     review: object | None = None
     messenger: object | None = None
     tuning: object | None = None
+    mcpext: object | None = None
 
 
 def build_container(settings: Settings | None = None, *, fake_llm=None) -> Container:

@@ -38,6 +38,7 @@ MCP_MODULES = {
     "review",
     "messenger",
     "tuning",
+    "mcpext",
 }
 
 

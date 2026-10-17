@@ -37,6 +37,13 @@ class ToolRegistry:
             raise DuplicateTool(f"инструмент '{spec.name}' уже зарегистрирован")
         self._tools[spec.name] = spec
 
+    def has(self, name: str) -> bool:
+        return name in self._tools
+
+    def unregister(self, name: str) -> None:
+        """Снять инструмент (динамические обёртки внешних MCP)."""
+        self._tools.pop(name, None)
+
     def get(self, name: str) -> ToolSpec:
         spec = self._tools.get(name)
         if spec is None:
