@@ -110,6 +110,14 @@ class LearningService:
                 raise NotFound(f"источник '{source_ref}' не найден")
             return self._acts.ids_for_source(uow.session, int(src_id))
 
+    def release_activities(self, activity_ids: list[int]) -> None:
+        """Отвязать сессии от активностей и удалить активности (каскад удаления источника)."""
+        if not activity_ids:
+            return
+        with self._uow() as uow:
+            self._sessions.detach_activities(uow.session, activity_ids)
+            self._acts.delete_ids(uow.session, activity_ids)
+
     # --- сессии ---
 
     def start_session(

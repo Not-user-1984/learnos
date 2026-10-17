@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { kindEmoji } from "@/lib/format";
 import type { SourceCard } from "@/lib/types";
 import { apiDelete } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -35,8 +37,8 @@ export function LibraryBrowser({ sources }: { sources: SourceCard[] }) {
   const router = useRouter();
   const [kind, setKind] = useState<(typeof KIND_TABS)[number]["value"]>("all");
   const [q, setQ] = useState("");
-  const [confirming, setConfirming] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<SourceCard | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: sources.length };
@@ -52,22 +54,17 @@ export function LibraryBrowser({ sources }: { sources: SourceCard[] }) {
       .sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || b.id - a.id);
   }, [sources, kind, q]);
 
-  const remove = async (uid: string) => {
-    if (confirming !== uid) {
-      setConfirming(uid);
-      setTimeout(() => setConfirming((c) => (c === uid ? null : c)), 3000);
-      return;
-    }
-    setDeleting(uid);
+  const remove = async (s: SourceCard) => {
+    setDeleting(true);
     try {
-      await apiDelete(`/sources/${uid}`);
+      await apiDelete(`/sources/${s.uid}`);
       toast.success("Источник удалён");
-      setConfirming(null);
+      setRemoving(null);
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "не удалось удалить");
     } finally {
-      setDeleting(null);
+      setDeleting(false);
     }
   };
 
@@ -134,30 +131,46 @@ export function LibraryBrowser({ sources }: { sources: SourceCard[] }) {
                   </div>
                 </Link>
                 <button
-                  onClick={() => void remove(s.uid)}
-                  disabled={deleting === s.uid}
+                  onClick={() => setRemoving(s)}
                   aria-label="Удалить источник"
-                  className={cn(
-                    "absolute right-2 top-2 rounded-lg p-1.5 text-muted-foreground backdrop-blur transition",
-                    confirming === s.uid
-                      ? "bg-rose-500/15 text-rose-500 opacity-100"
-                      : "bg-background/60 opacity-0 hover:text-rose-500 group-hover:opacity-100",
-                  )}
-                  title={confirming === s.uid ? "точно удалить?" : "удалить"}
+                  className="absolute right-2 top-2 rounded-lg bg-background/60 p-1.5 text-muted-foreground opacity-0 backdrop-blur transition hover:text-rose-500 group-hover:opacity-100"
+                  title="удалить"
                 >
-                  {deleting === s.uid ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : confirming === s.uid ? (
-                    <span className="px-1 text-xs font-medium">точно?</span>
-                  ) : (
-                    <Trash2 className="h-3.5 w-3.5" />
-                  )}
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             );
           })}
         </div>
       )}
+
+      <Dialog open={removing !== null} onOpenChange={(v) => !v && setRemoving(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Удалить источник?</DialogTitle>
+          </DialogHeader>
+          {removing && (
+            <>
+              <p className="text-sm font-medium">
+                {kindEmoji(removing.kind)} {removing.title}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Уйдут главы и файлы источника из библиотеки. Разговоры и блоки базы знаний останутся —
+                если по источнику есть блоки, удаление будет запрещено.
+              </p>
+              <DialogFooter>
+                <Button variant="outline" disabled={deleting} onClick={() => setRemoving(null)}>
+                  Отмена
+                </Button>
+                <Button variant="destructive" disabled={deleting} onClick={() => void remove(removing)}>
+                  {deleting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1 h-4 w-4" />}
+                  Удалить
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -132,6 +132,13 @@ class ChatService:
         with self._uow() as uow:
             return self._convs.list(uow.session, mode=mode, q=q, activity_ids=activity_ids, chapter=chapter)
 
+    def detach_activities(self, activity_ids: list[int]) -> None:
+        """Отвязать разговоры от активностей источника (при удалении источника история остаётся)."""
+        if not activity_ids:
+            return
+        with self._uow() as uow:
+            self._convs.detach_activities(uow.session, activity_ids)
+
     def patch_conversation(self, uid: str, title: str | None = None) -> dict:
         """Переименовать разговор."""
         with self._uow() as uow:

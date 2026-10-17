@@ -11,7 +11,7 @@ from ...kernel.db import UnitOfWorkFactory
 from ...kernel.errors import Conflict, ValidationFailed
 from ...kernel.ids import IdGenerator
 from .domain import SourceRules
-from .events import SourceProcessed
+from .events import SourceDeleted, SourceProcessed
 from .infra.sql_repo import ChapterRepository, JobRepository, SourceRepository
 
 log = logging.getLogger("learnos.library")
@@ -42,10 +42,17 @@ class LibraryService:
         self._settings = settings
         self._runtime = runtime
         self._knowledge = None  # ставится в bootstrap (публичный сервис knowledge)
+        self._learning = None  # ставится в bootstrap (каскад удаления)
+        self._chat = None
 
     def bind(self, knowledge) -> None:
         """Связь с публичным сервисом базы знаний (для проверки удаления)."""
         self._knowledge = knowledge
+
+    def bind_runtime(self, learning, chat) -> None:
+        """Сервисы обучения/чата — для каскада при удалении источника."""
+        self._learning = learning
+        self._chat = chat
 
     # --- источники ---
 
@@ -104,12 +111,24 @@ class LibraryService:
             return items
 
     def delete_source(self, ref: str | int) -> dict:
-        """Удалить источник; запрещено, если по нему есть блоки. Файлы удаляются тоже."""
+        """Удалить источник; запрещено, если по нему есть блоки. Файлы удаляются тоже.
+
+        Каскад: разговоры и сессии отвязываются от активностей (история остаётся),
+        активности удаляются — иначе FK sources←activities роняет удаление.
+        """
         with self._uow() as uow:
             src = self._sources.get(uow.session, ref)
             if self._knowledge is not None and self._knowledge.count_for_source(src["uid"]) > 0:
                 raise Conflict(f"по источнику «{src['title']}» есть блоки — сначала удалите их")
+        if self._learning is not None:
+            act_ids = self._learning.activity_ids_for_source(src["uid"])
+            if act_ids:
+                if self._chat is not None:
+                    self._chat.detach_activities(act_ids)
+                self._learning.release_activities(act_ids)
+        with self._uow() as uow:
             self._sources.delete(uow.session, src["id"])
+            uow.emit(SourceDeleted(source_uid=src["uid"]))
         data_dir = Path(self._settings.data_dir)
         for sub in ("sources",):
             candidate = data_dir / sub / str(src["id"])

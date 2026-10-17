@@ -26,8 +26,9 @@ class SearchModule(Module):
 
     def subscribe(self, bus, c) -> None:
         from ..knowledge.events import BlockSaved, BlockUpdated
-        from ..library.events import SourceProcessed
+        from ..library.events import SourceDeleted, SourceProcessed
 
         bus.subscribe(BlockSaved.name(), lambda e: c.search.on_block_saved(e.block_uid))
         bus.subscribe(BlockUpdated.name(), lambda e: c.search.on_block_saved(e.block_uid))
         bus.subscribe(SourceProcessed.name(), lambda e: c.search.reindex_chapters())
+        bus.subscribe(SourceDeleted.name(), lambda e: c.search.reindex_chapters())

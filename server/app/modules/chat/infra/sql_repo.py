@@ -63,6 +63,16 @@ class ConversationRepository:
     def update(self, session: Session, conv_id: int, **values) -> None:
         session.execute(update(conversations).where(conversations.c.id == conv_id).values(**values))
 
+    def detach_activities(self, session: Session, activity_ids: list[int]) -> None:
+        """Отвязать разговоры от активностей (история остаётся при удалении источника)."""
+        if not activity_ids:
+            return
+        session.execute(
+            update(conversations)
+            .where(conversations.c.activity_id.in_(activity_ids))
+            .values(activity_id=None)
+        )
+
     def delete(self, session: Session, conv_id: int) -> None:
         session.execute(delete(messages).where(messages.c.conversation_id == conv_id))
         session.execute(delete(conversations).where(conversations.c.id == conv_id))

@@ -41,3 +41,22 @@ def test_delete_source_with_blocks_conflict(rest_app, client, container):
     r = client.delete(f"/api/sources/{src['uid']}")
     assert r.status_code == 409
     assert "блоки" in r.json()["message"]
+
+
+def test_delete_source_with_activity_and_conversation(rest_app, client):
+    """Источник с активностью и разговором: источник и активности уходят, история чата остаётся."""
+    src = client.post("/api/sources", json={"kind": "book", "title": "Книга с разбором"}).json()
+    act = client.post("/api/activities", json={"source": src["uid"]}).json()
+    conv = client.post(
+        "/api/conversations",
+        json={"mode": "quick", "activity": act["uid"], "chapter": 1, "title": "Разбор книги"},
+    ).json()
+
+    r = client.delete(f"/api/sources/{src['uid']}")
+    assert r.status_code == 200, r.text
+
+    # источник исчез
+    assert client.get(f"/api/sources/{src['uid']}").status_code == 404
+    # разговор остался (отвязан от активности) и открывается
+    fresh = client.get(f"/api/conversations/{conv['uid']}").json()
+    assert fresh["uid"] == conv["uid"]

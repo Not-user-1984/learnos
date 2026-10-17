@@ -51,6 +51,14 @@ class SessionRepository:
     def update(self, session: Session, session_id: int, **values) -> None:
         session.execute(update(sessions).where(sessions.c.id == session_id).values(**values))
 
+    def detach_activities(self, session: Session, activity_ids: list[int]) -> None:
+        """Отвязать сессии от активностей (при удалении источника история сессий остаётся)."""
+        if not activity_ids:
+            return
+        session.execute(
+            update(sessions).where(sessions.c.activity_id.in_(activity_ids)).values(activity_id=None)
+        )
+
 
 class ActivityRepository:
     """Активности «идём по источнику»."""
@@ -89,6 +97,12 @@ class ActivityRepository:
 
     def update(self, session: Session, activity_id: int, **values) -> None:
         session.execute(update(activities).where(activities.c.id == activity_id).values(**values))
+
+    def delete_ids(self, session: Session, activity_ids: list[int]) -> None:
+        """Удалить активности (сессии и разговоры должны быть отвязаны/удалены ранее)."""
+        if not activity_ids:
+            return
+        session.execute(activities.delete().where(activities.c.id.in_(activity_ids)))
 
 
 def _session_dict(r) -> dict:

@@ -12,3 +12,10 @@ class SourceProcessed(DomainEvent):
     source_uid: str
     source_id: int
     chapters: int
+
+
+@dataclass(frozen=True, slots=True)
+class SourceDeleted(DomainEvent):
+    """Источник удалён: главы и FTS-записи нужно убрать."""
+
+    source_uid: str

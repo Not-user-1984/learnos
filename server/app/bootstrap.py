@@ -115,6 +115,8 @@ def build_container(settings: Settings | None = None, *, fake_llm=None) -> Conta
     # связки, которые нельзя сделать в wire (циклические зависимости сервисов)
     if container.library is not None and container.knowledge is not None:
         container.library.bind(container.knowledge)
+    if container.library is not None:
+        container.library.bind_runtime(container.learning, container.chat)
     log.info("container готов: модулей=%d, инструментов=%d", len(MODULES), len(container.tools.all()))
     return container
 
