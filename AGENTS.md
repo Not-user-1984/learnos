@@ -57,6 +57,14 @@ cd web && npm install && npm run dev                              # LEARNOS_API_
 
 ## Хомлаб (для фазы 2 и песочниц)
 
+**Прод-стенд LearnOS (с 2026-10-17): CT 132 `learnos` — web http://192.168.0.132:3000, API http://192.168.0.132:8765 (LAN).**
+
+- Развёрнут `~/my_dev/my_servak/proxmox/scripts/deploy/deploy-learnos-container.sh` (4c/6G/30G SSD256, docker compose внутри CT; ZAI_API_KEY и GitHub-токен проброшены на CT файлами через `sec exec`, не печатаются)
+- **Разработка = git push**: на CT таймер `learnos-deploy.timer` каждые 2 мин делает fetch; есть новые коммиты в main → reset/build/up + health. Логи: `journalctl -u learnos-deploy.service`, `/var/log/learnos-deploy.log`
+- Данные (`/opt/learnos/{data,kb}` на CT) в git не попадают
+- YouTube-скилл ходит через хомлаб-прокси `LEARNOS_YT_PROXY=socks5://192.168.0.10:1080` (vpn-gw, CT 103)
+- В services.json хомлаба: `route:false` (только Dashy/health), публичного домена нет; с мобилки — после Tailscale-роутинга
+
 Репо автоматизации: `~/my_dev/my_servak/proxmox` (читать его AGENTS.md перед работой с сервером).
 
 - Proxmox host: `192.168.0.105`, сеть `192.168.0.0/24`, CT со статическими IP
