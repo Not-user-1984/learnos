@@ -9,11 +9,18 @@ ENV PYTHONUNBUFFERED=1 \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# yt-dlp нужен скиллу youtube-to-summary
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg curl \
-    && curl -fsSL https://yt-dlp.org/downloads/latest/yt-dlp -o /usr/local/bin/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp \
+# ffmpeg + deno: yt-dlp требует JS-runtime для YouTube (PO-токены), иначе субтитры падают на 429
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl unzip \
     && rm -rf /var/lib/apt/lists/*
+ARG TARGETARCH
+RUN case "$TARGETARCH" in \
+      arm64) DENO_TRIPLE=aarch64-unknown-linux-gnu ;; \
+      *) DENO_TRIPLE=x86_64-unknown-linux-gnu ;; \
+    esac \
+    && curl -fsSL "https://github.com/denoland/deno/releases/download/v2.9.7/deno-${DENO_TRIPLE}.zip" -o /tmp/deno.zip \
+    && unzip -j /tmp/deno.zip deno -d /usr/local/bin \
+    && rm /tmp/deno.zip \
+    && deno --version | head -1
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./

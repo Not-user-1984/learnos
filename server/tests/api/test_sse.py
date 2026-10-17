@@ -99,3 +99,19 @@ def test_cancellation_token_unit():
         raise AssertionError("ожидали AgentCancelled")
     except AgentCancelled:
         pass
+
+
+def test_first_message_contains_user_role(client, fake_llm):
+    """Первое сообщение нового разговора должно уходить в LLM с user-ролью.
+
+    Раньше history была пуста и запрос состоял из одного system — z.ai отвечал 1214.
+    """
+    conv = client.post("/api/conversations", json={"mode": "free", "title": "первое"}).json()
+    with client.stream(
+        "POST", f"/api/conversations/{conv['uid']}/messages", json={"content": "привет"}
+    ) as resp:
+        for _ in resp.iter_lines():
+            pass
+    assert fake_llm.requests, "запрос к LLM должен был случиться"
+    roles = [m.role for m in fake_llm.requests[-1][1].messages]
+    assert "user" in roles

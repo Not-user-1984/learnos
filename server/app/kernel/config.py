@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     tool_result_max_chars: int = 8000
     context_budget_tokens: int = 24000
     db_echo: bool = False
+    # Telegram-мост (модуль messenger): токен бота и чат назначения; прокси — при необходимости
+    telegram_token: str = ""  # LEARNOS_TELEGRAM_TOKEN
+    telegram_chat_id: str = "490168997"  # личный чат Дмитрия
+    telegram_proxy: str = ""  # например socks5://host.docker.internal:7890
 
     @property
     def db_path(self) -> Path:

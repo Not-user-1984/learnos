@@ -239,7 +239,7 @@ def draft_to_markdown(uid: str, draft: BlockDraft, meta_extra: dict) -> str:
     section("Тезисы", [f"- {t}" for t in draft.theses])
     section("Как я это понял", [f"- «{e}»" for e in draft.my_examples])
     if draft.mermaid:
-        parts.append(f"\n## Схема\n\n```mermaid\n{draft.mermaid.strip()}\n```\n")
+        parts.append(f"\n## Схема\n\n```mermaid\n{sanitize_mermaid(draft.mermaid.strip())}\n```\n")
     section(
         "Практика",
         [
@@ -279,6 +279,16 @@ def parse_markdown(content: str) -> tuple[dict, str]:
     _, fm_raw, body = content.split("---", 2)
     meta = yaml.safe_load(fm_raw) or {}
     return meta, body.lstrip("\n")
+
+
+MERMAID_UNSAFE = re.compile(
+    "[\U0001f000-\U0001faff\u2600-\u27bf\ufe0f\u2b00-\u2bff\u2190-\u21ff\u2700-\u27bf]"
+)
+
+
+def sanitize_mermaid(code: str) -> str:
+    """Убрать символы, ломающие парсер mermaid (эмодзи, пиктограммы, текстовые стрелки)."""
+    return MERMAID_UNSAFE.sub("", code)
 
 
 def count_weak_spots(body: str) -> int:

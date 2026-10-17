@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import type { Health, Profile } from "@/lib/types";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { MaintenanceActions } from "@/components/settings/maintenance";
+import { TelegramTestButton, TuneAgentButton } from "@/components/settings/integrations";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,20 @@ export default async function SettingsPage() {
           <p className="mt-4 text-xs text-muted-foreground">
             Ключ — через <code>sec exec ZAI_API_KEY</code>; смена ролей/моделей — правка <code>server/config/llm.yaml</code>.
           </p>
+        </section>
+
+        <section className="rounded-2xl border bg-card p-6">
+          <h2 className="font-medium">Поведение агентов</h2>
+          <p className="mb-4 mt-1 text-sm text-muted-foreground">
+            Скажи словами, как должен вести себя учитель или разборщик — настройщик перепишет промпты и покажет дифф на подтверждение
+          </p>
+          <TuneAgentButton />
+        </section>
+
+        <section className="rounded-2xl border bg-card p-6">
+          <h2 className="font-medium">Telegram</h2>
+          <p className="mb-4 mt-1 text-sm text-muted-foreground">Мост для отправки блоков и глав книги; токен — LEARNOS_TELEGRAM_TOKEN</p>
+          <TelegramTestButton />
         </section>
 
         <section className="rounded-2xl border bg-card p-6">

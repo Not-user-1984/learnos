@@ -8,13 +8,18 @@ services:
       LEARNOS_DATA_DIR: /data
       LEARNOS_KB_DIR: /kb
       LEARNOS_SKILLS_DIR: /app/skills
-      # ключ модели пробрасывается из окружения: export ZAI_API_KEY=… (sec exec)
+      # ключи пробрасываются из окружения (sec exec); Telegram-мост — при наличии токена
       ZAI_API_KEY: ${ZAI_API_KEY:-}
+      LEARNOS_TELEGRAM_TOKEN: ${LEARNOS_TELEGRAM_TOKEN:-}
+      LEARNOS_TELEGRAM_PROXY: ${LEARNOS_TELEGRAM_PROXY:-socks5://host.docker.internal:7890}
+      LEARNOS_YT_PROXY: ${LEARNOS_YT_PROXY:-socks5://host.docker.internal:7890}
     volumes:
       - ./data:/data
       - ./kb:/kb
     ports:
       - "8765:8765"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   web:
     build: ./web

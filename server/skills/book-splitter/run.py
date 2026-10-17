@@ -9,12 +9,33 @@ import fitz
 from app.db import get_db
 from app.paths import DATA_DIR
 
+# колонтитулы и служебные строки, которые не несут текста главы
+_NOISE = re.compile(
+    r"^(глава\s+\d+|chapter\s+\d+|предисловие|preface|оглавление|содержание|contents|\d+)$", re.I
+)
+
 
 def _clean(text: str) -> str:
     text = text.replace("\u00ad", "-").replace("\xa0", " ")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+def _page_paragraphs(page: fitz.Page) -> list[str]:
+    """Абзацы страницы: каждый блок PDF — абзац, строки блока склеиваются пробелом."""
+    paragraphs = []
+    for block in page.get_text("blocks"):
+        block_text = block[4] if len(block) > 4 else ""
+        if not block_text:
+            continue
+        lines = [ln.strip() for ln in block_text.splitlines() if ln.strip()]
+        if not lines:
+            continue
+        if all(_NOISE.match(ln) for ln in lines):
+            continue
+        paragraphs.append(" ".join(lines))
+    return paragraphs
 
 
 def main(source_id: int) -> dict:
@@ -46,7 +67,22 @@ def main(source_id: int) -> dict:
         for idx, (title, start_page) in enumerate(top, start=1):
             end_page = top[idx][1] if idx < len(top) else doc.page_count + 1
             pages = range(start_page - 1, min(end_page - 1, doc.page_count))
-            text = _clean("\n\n".join(doc.load_page(p).get_text("text") for p in pages))
+            paragraphs: list[str] = []
+            for p in pages:
+                page_paras = _page_paragraphs(doc.load_page(p))
+                if not paragraphs or not page_paras:
+                    paragraphs.extend(page_paras)
+                    continue
+                # абзац, продолжающийся через страницу: без точки в конце — приклеиваем
+                if not paragraphs[-1].endswith((".", "!", "?", ":", "»", '"')):
+                    paragraphs[-1] = f"{paragraphs[-1]} {page_paras[0]}"
+                    paragraphs.extend(page_paras[1:])
+                else:
+                    paragraphs.extend(page_paras)
+            # дублированный заголовок главы в начале текста (из TOC и из тела страницы)
+            if paragraphs and paragraphs[0].strip().lower().strip(". :") == title.strip().lower():
+                paragraphs = paragraphs[1:]
+            text = _clean("\n\n".join(paragraphs))
             chapter_path = out_dir / f"ch_{idx:02d}.md"
             chapter_path.write_text(f"# {title}\n\n{text}\n", encoding="utf-8")
 

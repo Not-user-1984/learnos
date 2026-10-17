@@ -36,6 +36,8 @@ MCP_MODULES = {
     "export",
     "skills",
     "review",
+    "messenger",
+    "tuning",
 }
 
 

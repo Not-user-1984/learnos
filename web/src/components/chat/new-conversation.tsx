@@ -39,7 +39,15 @@ export function NewConversationButton() {
         chapter: chapter ? Number(chapter) : null,
       });
       setOpen(false);
-      router.push(`/chat/${conv.uid}`);
+      if (source) {
+        const first =
+          mode === "session"
+            ? `Начни сессию${chapter ? ` по главе ${chapter}` : ""}: теория по первым понятиям, коротко.`
+            : `Начнём быстрый разбор${chapter ? ` главы ${chapter}` : ""}: главное и ключевые понятия.`;
+        router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(first)}`);
+      } else {
+        router.push(`/chat/${conv.uid}`);
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "не удалось создать разговор");
     } finally {
@@ -68,9 +76,10 @@ export function NewConversationButton() {
             <ToggleGroupItem value="quick">⚡ Быстрый разбор</ToggleGroupItem>
             <ToggleGroupItem value="session">🎓 Сессия</ToggleGroupItem>
             <ToggleGroupItem value="free">💬 Свободный</ToggleGroupItem>
+            <ToggleGroupItem value="tuning">⚙️ Настроить агента</ToggleGroupItem>
           </ToggleGroup>
 
-          {mode !== "free" && (
+          {mode !== "free" && mode !== "tuning" && (
             <>
               <Select onValueChange={(v: unknown) => { const val = Array.isArray(v) ? String(v[0]) : (v as string | null); if (val) { setSource(val); setChapter(""); } }}>
                 <SelectTrigger aria-label="Источник">

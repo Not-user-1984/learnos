@@ -3,7 +3,7 @@
 import { notFound } from "next/navigation";
 import { api } from "@/lib/api";
 import type { ConversationDetail } from "@/lib/types";
-import { ChatView } from "@/components/chat/chat-view";
+import { ChatViewWithInitial as ChatView } from "@/components/chat/chat-view";
 
 export const dynamic = "force-dynamic";
 

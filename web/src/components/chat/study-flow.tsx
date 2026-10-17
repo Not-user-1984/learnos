@@ -24,9 +24,13 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 type Step = "pick" | "processing" | "ready";
 type Job = { id: number; status: string; progress: number; total: number; error?: string | null };
 
-const JOB_LABEL: Record<string, string> = {
+const JOB_LABEL_BOOK: Record<string, string> = {
   process_source: "Разбираю источник на главы",
   summarize_chapters: "Нейронка читает главы и пишет конспекты",
+};
+const JOB_LABEL_VIDEO: Record<string, string> = {
+  process_source: "Скачиваю субтитры и собираю транскрипт",
+  summarize_chapters: "Нейронка смотрит видео и пишет конспект",
 };
 
 export function StudyFlowDialog({
@@ -45,10 +49,10 @@ export function StudyFlowDialog({
   const [job, setJob] = useState<Job | null>(null);
   const [chapters, setChapters] = useState<ChapterCard[]>([]);
   const [sourceTitle, setSourceTitle] = useState("");
+  const [sourceKind, setSourceKind] = useState<"book" | "video">("book");
   const [mode, setMode] = useState<"quick" | "session">("quick");
   const [videoUrl, setVideoUrl] = useState("");
   const [library, setLibrary] = useState<SourceCard[]>([]);
-  const [pickedLib, setPickedLib] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const summariesRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -67,8 +71,9 @@ export function StudyFlowDialog({
   }, []);
 
   const loadSource = useCallback(async (uid: string) => {
-    const src = await api<{ uid: string; title: string; chapters: ChapterCard[] }>(`/sources/${uid}`);
+    const src = await api<{ uid: string; title: string; kind: string; chapters: ChapterCard[] }>(`/sources/${uid}`);
     setSourceTitle(src.title);
+    setSourceKind(src.kind === "video" ? "video" : "book");
     setChapters(src.chapters ?? []);
     return src;
   }, []);
@@ -107,16 +112,21 @@ export function StudyFlowDialog({
   );
 
   useEffect(() => stopPolling, [stopPolling]);
-  useEffect(() => {
-    if (open) return;
-    stopPolling();
-    setStep("pick");
-    setJob(null);
-    setChapters([]);
-    setSourceUid(null);
-    setVideoUrl("");
-    setPickedLib("");
-  }, [open, stopPolling]);
+
+  // сброс при закрытии (esc/оверлей/крестик тоже идут через onOpenChange)
+  const handleOpenChange = (v: boolean) => {
+    if (!v) {
+      stopPolling();
+      setStep("pick");
+      setJob(null);
+      setChapters([]);
+      setSourceUid(null);
+      setSourceTitle("");
+      setSourceKind("book");
+      setVideoUrl("");
+    }
+    onOpenChange(v);
+  };
 
   const uploadPdf = async (file: File) => {
     setBusy(true);
@@ -163,7 +173,6 @@ export function StudyFlowDialog({
   };
 
   const pickLibrary = async (uid: string) => {
-    setPickedLib(uid);
     const src = await api<{ uid: string; title: string; status: string; chapters: ChapterCard[] }>(`/sources/${uid}`);
     if (src.status === "processed" && (src.chapters?.length ?? 0) > 0) {
       setSourceUid(uid);
@@ -181,15 +190,24 @@ export function StudyFlowDialog({
     if (!sourceUid) return;
     setBusy(true);
     try {
+      const isVideo = sourceKind === "video";
       const act = await apiPost<{ uid: string }>("/activities", { source: sourceUid });
       const conv = await apiPost<{ uid: string }>("/conversations", {
         mode,
         activity: act.uid,
         chapter: 1,
-        title: `${tab === "book" ? "Изучение" : "Видео"}: ${sourceTitle}`,
+        title: `${isVideo ? "Видео" : "Изучение"}: ${sourceTitle}`,
       });
+      const first =
+        mode === "session"
+          ? isVideo
+            ? "Начни сессию по видео: теория по ключевым понятиям, коротко."
+            : "Начни сессию по главе 1: теория по первым понятиям, коротко."
+          : isVideo
+            ? "Разбери видео целиком: главное за 30 секунд, ключевые понятия, что применимо мне, 1–2 вопроса на подумать."
+            : "Начнём изучение с главы 1.";
       onOpenChange(false);
-      router.push(`/chat/${conv.uid}`);
+      router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(first)}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "не удалось начать");
     } finally {
@@ -201,7 +219,7 @@ export function StudyFlowDialog({
   const pct = job && job.total > 0 ? Math.round((job.progress / job.total) * 100) : null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{tab === "book" ? "Изучить книгу" : "Обсудить видео"}</DialogTitle>
@@ -276,11 +294,17 @@ export function StudyFlowDialog({
             <div className="flex flex-col gap-3 py-4">
               <p className="flex items-center gap-2 text-sm font-medium">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {JOB_LABEL[job.status === "done" ? "summarize_chapters" : "process_source"] ?? "Обрабатываю источник"}
+                {(sourceKind === "video" ? JOB_LABEL_VIDEO : JOB_LABEL_BOOK)[
+                  job.status === "done" ? "summarize_chapters" : "process_source"
+                ] ?? "Обрабатываю источник"}
               </p>
               <Progress value={pct ?? 8} />
               <p className="text-xs text-muted-foreground">
-                {job.total > 0 ? `${job.progress}/${job.total} глав` : "это займёт до минуты — нейронка читает книгу"}
+                {sourceKind === "video"
+                  ? "транскрипт и конспект — до пары минут"
+                  : job.total > 0
+                    ? `${job.progress}/${job.total} глав`
+                    : "это займёт до минуты — нейронка читает книгу"}
               </p>
             </div>
           )}
@@ -290,17 +314,20 @@ export function StudyFlowDialog({
               <div>
                 <p className="flex items-center gap-1.5 text-sm font-medium">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  Карта изучения: {sourceTitle}
+                  {sourceKind === "video" ? "Видео готово к разбору" : "Карта изучения"}: {sourceTitle}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {chapters.length} {chapters.length === 1 ? "часть" : "глав"} — идём по порядку, после каждой решаем: дальше, подробнее или сессия
+                  {sourceKind === "video"
+                    ? "транскрипт собран — разберём видео целиком: конспект, понятия, вопросы"
+                    : `${chapters.length} ${chapters.length === 1 ? "часть" : "глав"} — идём по порядку, после каждой решаем: дальше, подробнее или сессия`}
                 </p>
               </div>
               <div className="max-h-64 overflow-y-auto rounded-xl border">
                 {chapters.map((ch) => (
                   <div key={ch.idx} className="border-b px-4 py-2.5 last:border-b-0">
                     <p className="text-sm font-medium">
-                      {ch.idx}. {ch.title}
+                      {sourceKind === "video" ? "" : `${ch.idx}. `}
+                      {ch.title}
                     </p>
                     {ch.summary && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{ch.summary}</p>}
                   </div>
@@ -319,8 +346,14 @@ export function StudyFlowDialog({
                   <ToggleGroupItem value="session">🎓 Сессия-урок</ToggleGroupItem>
                 </ToggleGroup>
                 <Button className="ml-auto" disabled={busy} onClick={startStudying}>
-                  {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <BookOpen className="mr-1 h-4 w-4" />}
-                  Начать{chapters.length > 1 ? " с главы 1" : ""}
+                  {busy ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : sourceKind === "video" ? (
+                    <Video className="mr-1 h-4 w-4" />
+                  ) : (
+                    <BookOpen className="mr-1 h-4 w-4" />
+                  )}
+                  Начать{sourceKind === "book" && chapters.length > 1 ? " с главы 1" : ""}
                 </Button>
               </div>
             </div>

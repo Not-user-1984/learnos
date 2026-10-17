@@ -122,7 +122,8 @@ class OpenAICompatProvider:
                 return self._parse_response(resp)
             except Exception as e:  # noqa: BLE001 — граница к внешнему сервису
                 err = _map_error(e)
-                if err.code in _RETRYABLE and attempt < _ATTEMPTS - 1:
+                # bad_request тоже ретраим: z.ai иногда отвечает плавающим 1214 на валидный запрос
+                if (err.code in _RETRYABLE or err.code == "bad_request") and attempt < _ATTEMPTS - 1:
                     await asyncio.sleep(2**attempt)
                     continue
                 last_error = err
@@ -137,10 +138,21 @@ class OpenAICompatProvider:
         payload = self._to_wire(request)
         payload["stream"] = True
         payload["stream_options"] = {"include_usage": True}
-        try:
-            stream = await self._ensure_client().chat.completions.create(model=model, **payload)
-        except Exception as e:  # noqa: BLE001
-            raise _map_error(e) from e
+        stream = None
+        for attempt in range(_ATTEMPTS):
+            try:
+                stream = await self._ensure_client().chat.completions.create(model=model, **payload)
+                break
+            except Exception as e:  # noqa: BLE001
+                err = _map_error(e)
+                if err.code == "bad_request":
+                    _dump_1214(model, payload, str(e))
+                if (err.code in _RETRYABLE or err.code == "bad_request") and attempt < _ATTEMPTS - 1:
+                    await asyncio.sleep(2**attempt)
+                    continue
+                raise err from e
+        if stream is None:
+            raise LLMError("нет ответа провайдера")
 
         collected: dict[str, dict[str, Any]] = {}
         usage: Usage | None = None
@@ -212,3 +224,19 @@ def wire_messages_to_openai(messages: tuple[Message, ...]) -> list[dict[str, Any
     """Экспорт нейтральных сообщений в wire-формат (для тестов и отладки)."""
     provider = OpenAICompatProvider.__new__(OpenAICompatProvider)
     return provider._to_wire(LLMRequest(messages=messages))["messages"]  # noqa: SLF001
+
+
+def _dump_1214(model: str, payload: dict[str, Any], error: str) -> None:
+    """Сохранить провалившийся запрос для диагностики плавающих 1214 (без ключа, ключа тут и нет)."""
+    import os
+    import time
+
+    try:
+        path = os.environ.get("LEARNOS_DATA_DIR", "/data")
+        name = f"{path}/err_1214_{int(time.time())}.json"
+        with open(name, "w", encoding="utf-8") as f:
+            json.dump(
+                {"model": model, "error": error[:300], "payload": payload}, f, ensure_ascii=False, indent=1
+            )
+    except OSError:
+        pass

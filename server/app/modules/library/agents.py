@@ -18,6 +18,21 @@ class _ChapterOut(BaseModel):
     has_exercises: bool = False
 
 
+class _OverviewOut(BaseModel):
+    """Выход source_overviewer: цельный обзор книги."""
+
+    summary: str = Field(max_length=1600)
+
+
+source_overviewer = AgentSpec(
+    name="source_overviewer",
+    description="Пишет обзор источника (5–8 предложений) из конспектов глав.",
+    prompt_path=AGENTS_DIR / "source_overviewer" / "prompt.md",
+    model_role="fast",
+    output_model=_OverviewOut,
+)
+
+
 chapter_summarizer = AgentSpec(
     name="chapter_summarizer",
     description="Сжимает главу источника: 3–5 предложений summary, 3–7 ключевых пунктов, флаг упражнений.",
@@ -31,3 +46,4 @@ def register_agents(c) -> None:
     """Зарегистрировать агента библиотеки."""
     registry: AgentRegistry = c.agent_registry
     registry.register(chapter_summarizer)
+    registry.register(source_overviewer)

@@ -158,3 +158,15 @@ def test_category_ancestors_includes_path_itself():
 
 def test_normalize_category_path():
     assert normalize_category_path(" / Infra / Kubernetes ") == "infra/kubernetes"
+
+
+def test_sanitize_mermaid_strips_emoji():
+    from app.modules.knowledge.domain import sanitize_mermaid
+
+    bad = "A[Безопасно ✅\nМедленно 🐢] -->|доверять| B[Быстро ⚡]"
+    cleaned = sanitize_mermaid(bad)
+    assert "✅" not in cleaned and "🐢" not in cleaned and "⚡" not in cleaned
+    assert "Безопасно" in cleaned and "доверять" in cleaned
+
+    ok_code = 'flowchart LR\n    A["Команда"] -->|"нужен компонент"| B["Готова"]'
+    assert sanitize_mermaid(ok_code) == ok_code

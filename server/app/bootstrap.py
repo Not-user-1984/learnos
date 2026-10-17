@@ -21,10 +21,12 @@ from .modules.export import ExportModule
 from .modules.knowledge import KnowledgeModule
 from .modules.learning import LearningModule
 from .modules.library import LibraryModule
+from .modules.messenger import MessengerModule
 from .modules.profile import ProfileModule
 from .modules.review import ReviewModule
 from .modules.search import SearchModule
 from .modules.skills import SkillsModule
+from .modules.tuning import TuningModule
 
 log = logging.getLogger("learnos.bootstrap")
 
@@ -40,6 +42,8 @@ MODULES = [
     SearchModule(),
     ExportModule(),
     ReviewModule(),
+    MessengerModule(),
+    TuningModule(),
 ]
 
 
@@ -68,6 +72,8 @@ class Container:
     search: object | None = None
     export: object | None = None
     review: object | None = None
+    messenger: object | None = None
+    tuning: object | None = None
 
 
 def build_container(settings: Settings | None = None, *, fake_llm=None) -> Container:

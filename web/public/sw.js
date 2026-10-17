@@ -1,5 +1,5 @@
 /* Минимальный service worker: установка PWA + кэш оболочки (офлайн не требуется). */
-const CACHE = "learnos-shell-v1";
+const CACHE = "learnos-shell-v2";
 const SHELL = ["/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (e) => {

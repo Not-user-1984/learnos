@@ -14,7 +14,6 @@ def main() -> None:
     sub.add_parser("reindex", help="пересобрать индекс базы знаний из kb/")
     sub.add_parser("smoke-llm", help="живая проверка LLM: ответ, стрим, tool call")
     sub.add_parser("seed-demo", help="демо-данные в текущие LEARNOS_DATA_DIR/LEARNOS_KB_DIR")
-
     args = parser.parse_args()
     from .bootstrap import build_container
 
