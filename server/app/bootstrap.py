@@ -24,6 +24,7 @@ from .modules.library import LibraryModule
 from .modules.mcpext import McpExtModule
 from .modules.messenger import MessengerModule
 from .modules.profile import ProfileModule
+from .modules.research import ResearchModule
 from .modules.review import ReviewModule
 from .modules.search import SearchModule
 from .modules.skills import SkillsModule
@@ -31,9 +32,10 @@ from .modules.tuning import TuningModule
 
 log = logging.getLogger("learnos.bootstrap")
 
-# порядок = порядок зависимостей (profile → skills → knowledge → learning → chat → …)
+# порядок = порядок зависимостей (profile → research → skills → knowledge → learning → chat → …)
 MODULES = [
     ProfileModule(),
+    ResearchModule(),
     SkillsModule(),
     KnowledgeModule(),
     LibraryModule(),
@@ -64,6 +66,7 @@ class Container:
     clock: SystemClock = field(default_factory=SystemClock)
     # сервисы модулей (заполняются в wire):
     profile: object | None = None
+    research: object | None = None
     skills: object | None = None
     knowledge: object | None = None
     library: object | None = None

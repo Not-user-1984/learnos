@@ -13,6 +13,7 @@ services:
       LEARNOS_TELEGRAM_TOKEN: ${LEARNOS_TELEGRAM_TOKEN:-}
       LEARNOS_TELEGRAM_PROXY: ${LEARNOS_TELEGRAM_PROXY:-socks5://host.docker.internal:7890}
       LEARNOS_YT_PROXY: ${LEARNOS_YT_PROXY:-socks5://host.docker.internal:7890}
+      LEARNOS_WEB_PROXY: ${LEARNOS_WEB_PROXY:-}
     volumes:
       - ./data:/data
       - ./kb:/kb

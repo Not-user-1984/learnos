@@ -24,6 +24,7 @@ class LibraryModule(Module):
             clock=c.clock,
             settings=c.settings,
             runtime=c.agent_runtime,
+            research=c.research,
         )
         c.job_worker = JobWorker(c.library, c.agent_runtime)
         register_agents(c)

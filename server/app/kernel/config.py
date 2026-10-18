@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     telegram_token: str = ""  # LEARNOS_TELEGRAM_TOKEN
     telegram_chat_id: str = "490168997"  # личный чат Дмитрия
     telegram_proxy: str = ""  # например socks5://host.docker.internal:7890
+    # Ресёрч (модуль research): провайдер поиска и прокси для внешних запросов
+    search_provider: str = "ddg"  # ddg бесплатно; платные (tavily и пр.) — по ключам, см. T-014
+    web_proxy: str = ""  # например socks5://192.168.0.10:1080 (vpn-gw) — если регион блокирует
 
     @property
     def db_path(self) -> Path:

@@ -32,6 +32,7 @@ MCP_MODULES = {
     "learning",
     "courses",
     "profile",
+    "research",
     "search",
     "export",
     "skills",

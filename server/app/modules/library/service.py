@@ -31,6 +31,7 @@ class LibraryService:
         clock: Clock,
         settings,
         runtime=None,
+        research=None,
     ) -> None:
         self._uow = uow
         self._sources = sources
@@ -41,6 +42,7 @@ class LibraryService:
         self._clock = clock
         self._settings = settings
         self._runtime = runtime
+        self._research = research  # публичный сервис research (веб-статьи → главы)
         self._knowledge = None  # ставится в bootstrap (публичный сервис knowledge)
         self._learning = None  # ставится в bootstrap (каскад удаления)
         self._chat = None
@@ -186,10 +188,13 @@ class LibraryService:
             result = self._skills.run("book-splitter", {"source_id": source_id})
         elif kind == "video" and url:
             result = self._run_video(src, url)
+        elif kind == "web" and url:
+            result = self._run_web(src, url)
         else:
             result = {
                 "error": (
-                    f"не знаю, как обрабатывать kind='{kind}' (нужен url для video или local_path для book)"
+                    f"не знаю, как обрабатывать kind='{kind}' "
+                    "(нужен url для video/web или local_path для book)"
                 )
             }
 
@@ -246,6 +251,40 @@ class LibraryService:
                 meta_json=json.dumps({"video_id": result.get("video_id"), "lang": result.get("lang")}),
             )
         return result
+
+    def _run_web(self, src: dict, url: str) -> dict:
+        """Веб-статья → главы по заголовкам (research.extract_chapters), полный текст — в библиотеку."""
+        if self._research is None:
+            return {"error": "research-модуль недоступен"}
+        try:
+            page = self._research.extract_chapters(url)
+        except Exception as e:  # noqa: BLE001 — битая страница не роняет job
+            return {"error": f"не удалось извлечь статью: {str(e)[:300]}"}
+        out_dir = Path(self._settings.data_dir) / "sources" / str(src["id"]) / "chapters"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        now = now_iso(self._clock)
+        with self._uow() as uow:
+            for i, ch in enumerate(page["chapters"], start=1):
+                path = out_dir / f"ch_{i:02d}.md"
+                path.write_text(f"# {ch['title']}\n\n{ch['text']}\n", encoding="utf-8")
+                self._chapters.insert(
+                    uow.session,
+                    source_id=src["id"],
+                    idx=i,
+                    title=ch["title"],
+                    path=str(path),
+                    tokens_est=max(1, len(ch["text"]) // 4),
+                    summary=ch["text"][:280],
+                )
+            self._sources.update(
+                uow.session,
+                src["id"],
+                status="processed",
+                # настоящий заголовок статьи: с фронта мог прийти URL
+                title=(page["title"] or src["title"])[:300],
+                updated_at=now,
+            )
+        return {"ok": True, "title": page["title"], "chapters": len(page["chapters"]), "url": url}
 
     def _run_summarize(self, job: dict) -> dict:
         """Summary по каждой главе через chapter_summarizer + обзор источника."""
