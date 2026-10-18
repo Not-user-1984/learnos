@@ -9,7 +9,10 @@ AGENTS_DIR = Path(__file__).parent / "agents"
 
 free_chat = AgentSpec(
     name="free_chat",
-    description="Свободный чат: отвечает, ищет по базе знаний, правит блоки, сохраняет конспекты.",
+    description=(
+        "Свободный чат: отвечает, ищет по базе знаний, правит блоки, сохраняет конспекты, "
+        "анализирует GitHub-репозитории на идеи."
+    ),
     prompt_path=AGENTS_DIR / "free_chat" / "prompt.md",
     tools=frozenset(
         {
@@ -24,13 +27,18 @@ free_chat = AgentSpec(
             "get_profile",
             "research_sources",
             "web_search",
+            "academic_search",
             "web_read",
             "list_chapters",
+            "github_repo",
+            "github_file",
+            "save_idea_report",
             "send_telegram_text",
             "send_block_to_telegram",
             "send_chapter_to_telegram",
         }
     ),
+    max_steps=30,
 )
 
 quick_reviewer = AgentSpec(
@@ -46,6 +54,7 @@ quick_reviewer = AgentSpec(
             "read_chapter",
             "search",
             "web_search",
+            "academic_search",
             "web_read",
             "preview_note",
             "save_note",
@@ -74,6 +83,7 @@ session_tutor = AgentSpec(
             "read_chapter",
             "list_chapters",
             "web_search",
+            "academic_search",
             "web_read",
             "practice_step",
             "finish_session",
@@ -90,9 +100,31 @@ session_tutor = AgentSpec(
 )
 
 
+repo_scout = AgentSpec(
+    name="repo_scout",
+    description=(
+        "Idea-scout: реверс-инжиниринг GitHub-репозиториев — ищет приёмы, полезные LearnOS, "
+        "без переписывания архитектуры; отчёт в чат + data/ideas + короткое резюме в Telegram."
+    ),
+    prompt_path=AGENTS_DIR / "repo_scout" / "prompt.md",
+    tools=frozenset(
+        {
+            "github_repo",
+            "github_file",
+            "save_idea_report",
+            "send_telegram_text",
+            "web_search",
+            "web_read",
+        }
+    ),
+    max_steps=30,
+)
+
+
 def register_agents(c) -> None:
     """Зарегистрировать тьюторов чата."""
     registry: AgentRegistry = c.agent_registry
     registry.register(free_chat)
     registry.register(quick_reviewer)
     registry.register(session_tutor)
+    registry.register(repo_scout)

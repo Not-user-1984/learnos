@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import httpx
 from bs4 import BeautifulSoup
 
-from .providers import UA, build_provider
+from .providers import UA, AcademicProvider, build_provider
 
 log = logging.getLogger("learnos.research")
 
@@ -34,6 +34,7 @@ class ResearchService:
     def __init__(self, settings) -> None:
         self._settings = settings
         self._provider = build_provider(settings)
+        self._academic = AcademicProvider()
         self._cache: dict[str, _CacheEntry] = {}
         self._locks: dict[str, threading.Lock] = {}
         self._guard = threading.Lock()
@@ -42,9 +43,16 @@ class ResearchService:
 
     def search(self, query: str, limit: int = 6) -> dict:
         """Поиск с кэшем (TTL 20 мин) и single-flight: одинаковые запросы делят один вызов."""
+        return self._cached(f"{self._provider.name}", query, limit, self._provider.search)
+
+    def academic(self, query: str, limit: int = 6) -> dict:
+        """Научные статьи (arXiv) с тем же кэшем и single-flight."""
+        return self._cached("arxiv", query, limit, self._academic.search)
+
+    def _cached(self, provider_key: str, query: str, limit: int, fn) -> dict:
         limit = max(1, min(10, int(limit)))
         bucket = 5 if limit <= 5 else 10
-        key = f"{self._provider.name}:{bucket}:{query.strip().lower()}"
+        key = f"{provider_key}:{bucket}:{query.strip().lower()}"
         with self._guard:
             entry = self._cache.get(key)
             if entry and entry.expires > time.monotonic():
@@ -55,8 +63,8 @@ class ResearchService:
                 entry = self._cache.get(key)
                 if entry and entry.expires > time.monotonic():
                     return entry.value
-            result = self._provider.search(query, bucket)
-            result["provider"] = self._provider.name
+            result = fn(query, bucket)
+            result.setdefault("provider", provider_key)
             with self._guard:
                 self._cache[key] = _CacheEntry(result, time.monotonic() + _TTL)
                 self._locks.pop(key, None)

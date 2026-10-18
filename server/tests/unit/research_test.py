@@ -95,3 +95,95 @@ def test_extract(monkeypatch):
     page = svc.extract("https://x")
     assert page["title"] == "Гайд по observability"
     assert page["chars"] > 100
+
+
+class _Prov:
+    def __init__(self, name, results=None, error=None, raises=False):
+        self.name = name
+        self._results = results or []
+        self._error = error
+        self._raises = raises
+
+    def search(self, query, limit):
+        if self._raises:
+            raise RuntimeError(f"{self.name} упал")
+        out = {"query": query, "count": len(self._results), "results": self._results[:limit]}
+        if self._error:
+            out["error"] = self._error
+        return out
+
+
+def test_chain_falls_to_next_provider():
+    from app.modules.research.providers import ChainProvider
+
+    chain = ChainProvider(
+        [_Prov("ddg", error="анти-бот"), _Prov("wiki", [{"title": "K8s", "url": "https://x"}])]
+    )
+    out = chain.search("k8s", 5)
+    assert out["provider"] == "chain/wiki"
+    assert out["count"] == 1
+
+
+def test_chain_merges_when_all_empty():
+    from app.modules.research.providers import ChainProvider
+
+    chain = ChainProvider([_Prov("ddg", error="202"), _Prov("wiki")])
+    out = chain.search("q", 5)
+    assert out["count"] == 0
+    assert "ddg" in out.get("error", "")
+
+
+def test_chain_survives_provider_crash():
+    from app.modules.research.providers import ChainProvider
+
+    chain = ChainProvider([_Prov("boom", raises=True), _Prov("wiki", [{"title": "t", "url": "u"}])])
+    out = chain.search("q", 5)
+    assert out["count"] == 1 and out["provider"] == "chain/wiki"
+
+
+ARXIV_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Attention Is All You Need</title>
+    <id>http://arxiv.org/abs/1706.03762v7</id>
+    <summary>The dominant sequence transduction models are based on
+      complex recurrent networks. We propose a new simple architecture.</summary>
+    <published>2017-06-12T17:57:34-07:00</published>
+  </entry>
+  <entry>
+    <title>BERT: Pre-training</title>
+    <id>http://arxiv.org/abs/1810.04805v2</id>
+    <summary>We introduce BERT.</summary>
+    <published>2018-10-11T07:30:21-07:00</published>
+  </entry>
+</feed>
+"""
+
+
+def test_arxiv_parser(monkeypatch):
+    from app.modules.research import providers as P
+
+    class FakeResp:
+        status_code = 200
+        text = ARXIV_XML
+
+    monkeypatch.setattr(P.httpx, "get", lambda *a, **kw: FakeResp())
+    out = P.AcademicProvider().search("transformers", 5)
+    assert out["provider"] == "arxiv"
+    assert out["count"] == 2
+    first = out["results"][0]
+    assert first["title"] == "Attention Is All You Need"
+    assert first["url"].startswith("http://arxiv.org/abs/")
+    assert "2017-06-12" in first["snippet"]
+
+
+def test_parse_repo_ref():
+    import pytest
+
+    from app.modules.research.github import parse_repo_ref
+
+    assert parse_repo_ref("https://github.com/deepseek-ai/deepseek-harness") == "deepseek-ai/deepseek-harness"
+    assert parse_repo_ref("https://github.com/o/r/tree/main/src") == "o/r"
+    assert parse_repo_ref("o/r") == "o/r"
+    with pytest.raises(ValueError):
+        parse_repo_ref("https://gitlab.com/o/r")
