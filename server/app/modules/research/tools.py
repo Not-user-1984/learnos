@@ -43,6 +43,52 @@ class IdeaReportArgs(BaseModel):
     content: str = Field(max_length=20000)
 
 
+class VideoSearchArgs(BaseModel):
+    """youtube_search: видео по теме."""
+
+    query: str = Field(max_length=300)
+    limit: int = 5
+
+
+def _yt_search(query: str, limit: int) -> list[dict]:
+    """yt-dlp ytsearch — прямой YouTube-поиск (в РФ часто замедлен, поэтому короткий таймаут)."""
+    import subprocess
+
+    out = subprocess.run(
+        [
+            "yt-dlp",
+            f"ytsearch{max(1, min(10, limit))}:{query}",
+            "--flat-playlist",
+            "--no-warnings",
+            "--retries",
+            "1",
+            "--socket-timeout",
+            "8",
+            "--print",
+            "%(id)s\x1f%(title)s\x1f%(channel)s\x1f%(duration)s",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=35,
+    )
+    results = []
+    for line in (out.stdout or "").splitlines():
+        parts = line.split("\x1f")
+        if len(parts) >= 2 and parts[0]:
+            vid, title = parts[0], parts[1]
+            channel = parts[2] if len(parts) > 2 else ""
+            dur = parts[3] if len(parts) > 3 and parts[3] not in ("NA", "None") else ""
+            snippet = " · ".join(x for x in [channel, f"{dur} сек" if dur else ""] if x)
+            results.append(
+                {
+                    "title": title,
+                    "url": f"https://www.youtube.com/watch?v={vid}",
+                    "snippet": f"видео · {snippet}" if snippet else "видео",
+                }
+            )
+    return results
+
+
 def research_tools(c) -> list[ToolSpec]:
     """Инструменты ресёрча."""
     svc = c.research
@@ -54,6 +100,28 @@ def research_tools(c) -> list[ToolSpec]:
     def academic_search(args: SearchArgs, ctx: ToolContext):
         del ctx
         return svc.academic(args.query, args.limit)
+
+    def youtube_search(args: VideoSearchArgs, ctx: ToolContext):
+        del ctx
+        note = ""
+        try:
+            results = _yt_search(args.query, args.limit)
+        except Exception:  # noqa: BLE001 — YouTube из сети часто замедлен: фолбэк на веб-поиск
+            results = []
+        if not results:
+            web = svc.search(f"{args.query} site:youtube.com", args.limit)
+            results = web.get("results") or []
+            note = f"прямым поиском пусто, взял из веб-поиска ({web.get('provider', '?')})"
+            if not results:
+                web = svc.search(f"{args.query} видео youtube", args.limit)
+                results = web.get("results") or []
+                note = f"ютуб-поиск недоступен, показываю веб ({web.get('provider', '?')})"
+        return {
+            "query": args.query,
+            "count": len(results[: args.limit]),
+            "results": results[: args.limit],
+            **({"note": note} if note else {}),
+        }
 
     def web_read(args: ReadArgs, ctx: ToolContext):
         del ctx
@@ -117,6 +185,17 @@ def research_tools(c) -> list[ToolSpec]:
             args_model=SearchArgs,
             handler=academic_search,
             label="Ищу статьи",
+        ),
+        ToolSpec(
+            name="youtube_search",
+            module="research",
+            description=(
+                "Видео по теме (YouTube): качественное видео — отдельный пласт материала для изучения. "
+                "Найденное добавляй в Библиотеку: add_source(kind='video', url, title) + process_source."
+            ),
+            args_model=VideoSearchArgs,
+            handler=youtube_search,
+            label="Ищу видео",
         ),
         ToolSpec(
             name="web_read",

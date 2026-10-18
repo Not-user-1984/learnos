@@ -4,11 +4,13 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CircleStop, Loader2, NotebookPen, Paperclip, SendHorizontal, Target, Terminal } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CircleStop, GraduationCap, Loader2, NotebookPen, Paperclip, SendHorizontal, Target, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import type { ChatMessage, ConversationDetail, SseEvent } from "@/lib/types";
 import { useSearchParams } from "next/navigation";
 import { streamChat } from "@/lib/chat/stream";
+import { apiPost } from "@/lib/api";
 import { Markdown } from "@/components/markdown/Markdown";
 import { CardView } from "@/components/chat/cards";
 import { TuningEmptyState } from "@/components/chat/tuning-panel";
@@ -49,9 +51,11 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   const [input, setInput] = useState("");
   const [title, setTitle] = useState(conversation.title);
   const [reconnecting, setReconnecting] = useState(false);
+  const [courseBusy, setCourseBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const lastSentRef = useRef("");
   const aliveRef = useRef(true);
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialSentRef = useRef(false);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -213,6 +217,31 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     }
   };
 
+  // «Собрать курс»: план из источников разговора/библиотеки → курс с сессиями и прогрессом
+  const buildCourse = async () => {
+    if (courseBusy) return;
+    setCourseBusy(true);
+    const topic = title.replace(/^Ресёрч:\s*/i, "").trim() || "Курс по материалам разговора";
+    try {
+      const plan = await apiPost<Record<string, unknown>>("/courses/plan", {
+        topic,
+        constraints: "источники уже в библиотеке (добавлены ресёрчем) — строй курс по ним, сессиями по главам/видео",
+      });
+      const items = (plan.items as unknown[] | undefined) ?? [];
+      if (!items.length) {
+        toast.info("Планировщик не нашёл материала — добавь источники и попробуй снова");
+        return;
+      }
+      const course = await apiPost<{ uid: string }>("/courses/from-plan", { plan });
+      toast.success("Курс собран");
+      router.push(`/courses/${course.uid}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "не удалось собрать курс");
+    } finally {
+      setCourseBusy(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-w-0">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -277,10 +306,10 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
             </div>
           </div>
         )}
-        {conversation.mode === "quick" && !streaming && (
+        {(conversation.mode === "quick" || conversation.mode === "free") && !streaming && (
           <div className="mx-auto mb-1 flex max-w-3xl flex-wrap gap-2 px-4">
             <button
-              onClick={() => void send("Закрепим пройденное: задай вопросы по ключевым понятиям, по одному за раз.")}
+              onClick={() => void send("Закрепим материал нашего разговора: задай вопросы по ключевым понятиям, по одному за раз.")}
               className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-500 transition hover:bg-sky-500/20"
             >
               <Target className="h-4 w-4" /> Закрепить пройденное
@@ -292,6 +321,14 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
               className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-500 transition hover:bg-emerald-500/20"
             >
               <NotebookPen className="h-4 w-4" /> Конспект в базу знаний
+            </button>
+            <button
+              onClick={() => void buildCourse()}
+              disabled={courseBusy}
+              className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-sm text-violet-500 transition hover:bg-violet-500/20 disabled:opacity-60"
+            >
+              {courseBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <GraduationCap className="h-4 w-4" />}
+              Собрать курс
             </button>
           </div>
         )}
