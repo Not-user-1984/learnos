@@ -80,6 +80,9 @@ export function Mermaid({ code }: { code: string }) {
         startOnLoad: false,
         securityLevel: "strict",
         theme: resolvedTheme === "dark" ? "dark" : "default",
+        // битая схема (например, недописанная при стриминге) не должна оставлять
+        // красный error-блок в конце body — исключение и так уходит в catch
+        suppressErrorRendering: true,
       });
       const baseId = `mmd-${Math.random().toString(36).slice(2)}`;
       const variants = mermaidVariants(code);
@@ -92,6 +95,9 @@ export function Mermaid({ code }: { code: string }) {
           // пробуем следующий, более ремонтный вариант
         }
       }
+      // страховка: старые версии/браузеры могут оставить контейнер ошибки в body
+      // (id = "d" + renderId; все наши id начинаются с mmd-)
+      document.querySelectorAll('div[id^="dmmd-"]').forEach((el) => el.remove());
       if (!cancelled) setFailedFor(code);
     });
     return () => {

@@ -30,6 +30,14 @@ type ToolChip = {
 const SESSION_STEPS = ["theory", "check", "practice", "debrief", "done"];
 const STEP_LABELS: Record<string, string> = { theory: "Теория", check: "Вопросы", practice: "Практика", debrief: "Разбор", done: "Готово" };
 
+/** Во время стриминга незакрытый ```-блок (недописанная mermaid-схема или код)
+ *  не отдаём в рендер — обрубки ломают парсеры и мигают. */
+function trimOpenFence(text: string): string {
+  const fences = [...text.matchAll(/^```/gm)];
+  if (fences.length % 2 === 0) return text;
+  return text.slice(0, fences[fences.length - 1].index ?? 0);
+}
+
 export function ChatView({ conversation }: { conversation: ConversationDetail }) {
   const [messages, setMessages] = useState<ChatMessage[]>(conversation.messages);
   const [streaming, setStreaming] = useState(false);
@@ -40,11 +48,20 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   const [session, setSession] = useState(conversation.session);
   const [input, setInput] = useState("");
   const [title, setTitle] = useState(conversation.title);
+  const [reconnecting, setReconnecting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const lastSentRef = useRef("");
+  const aliveRef = useRef(true);
   const searchParams = useSearchParams();
   const initialSentRef = useRef(false);
   const feedRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
@@ -62,9 +79,13 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     setStreamError(null);
     const controller = new AbortController();
     abortRef.current = controller;
+    const baseCount = messages.length;
 
     let assistantText = "";
     let cards: ChatMessage["cards"] = [];
+    let gotDone = false;
+    let gotError = false;
+    let streamFail: unknown = null;
     await streamChat(conversation.uid, content, (ev: SseEvent) => {
       switch (ev.event) {
         case "delta":
@@ -106,10 +127,12 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           setTitle(ev.data.title);
           break;
         case "error":
+          gotError = true;
           setStreamError(ev.data.message);
           toast.error(ev.data.message);
           break;
         case "done":
+          gotDone = true;
           if (assistantText || cards.length) {
             setMessages((m) => [...m, { id: ev.data.message_id ?? -Date.now(), role: "assistant", content: assistantText, cards, created_at: new Date().toISOString() }]);
           }
@@ -120,21 +143,52 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           setChips([]);
           break;
       }
-    }, controller.signal).catch(() => undefined);
+    }, controller.signal).catch((e) => {
+      streamFail = e;
+    });
 
-    // при обрыве стрима всё равно перечитываем разговор из API (генерация могла доработать)
-    try {
-      const fresh = await fetch(`/api/conversations/${conversation.uid}`).then((r) => r.json() as Promise<ConversationDetail>);
-      if (fresh.messages?.length) {
-        setMessages(fresh.messages);
-        if (fresh.title) setTitle(fresh.title);
-        if (fresh.session) setSession(fresh.session);
+    const userStopped = streamFail instanceof DOMException && streamFail.name === "AbortError";
+    const refresh = async (): Promise<ConversationDetail | null> => {
+      try {
+        return await fetch(`/api/conversations/${conversation.uid}`).then((r) => r.json() as Promise<ConversationDetail>);
+      } catch {
+        return null; // сеть/прокси недоступны (например, веб перекатывается деплоем)
       }
-    } catch {
-      // сеть пропала — оставляем локальное состояние
+    };
+    const applyFresh = (fresh: ConversationDetail) => {
+      setMessages(fresh.messages ?? []);
+      if (fresh.title) setTitle(fresh.title);
+      if (fresh.session) setSession(fresh.session);
+    };
+
+    if (!gotDone && !gotError && !userStopped) {
+      // стрим оборвался без финала (деплой перезапустил веб, сеть моргнула):
+      // ядро продолжает писать ответ в БД — догоняем его опросом
+      setReconnecting(true);
+      const deadline = Date.now() + 180_000;
+      let caught = false;
+      while (Date.now() < deadline && aliveRef.current && !abortRef.current?.signal.aborted) {
+        const fresh = await refresh();
+        const list = fresh?.messages;
+        const last = list?.[list.length - 1];
+        if (list && list.length > baseCount + 1 && last?.role === "assistant") {
+          applyFresh(fresh);
+          caught = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      setReconnecting(false);
+      if (!caught && aliveRef.current) {
+        setStreamError("Связь прервалась и ответ не был дописан");
+      }
+    } else {
+      // штатное завершение: перечитываем разговор, чтобы подтянуть id и карточки
+      const fresh = await refresh();
+      if (fresh?.messages?.length) applyFresh(fresh);
     }
     setStreaming(false);
-    setStreamError(null);
+    setReconnecting(false);
     abortRef.current = null;
   };
 
@@ -186,11 +240,16 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
                 ))}
                 {streamText ? (
                   <div className="rounded-2xl bg-muted px-4 py-3">
-                    <Markdown content={streamText} />
+                    <Markdown content={trimOpenFence(streamText)} />
                   </div>
                 ) : (
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" /> агент думает…
+                  </p>
+                )}
+                {reconnecting && (
+                  <p className="mt-2 flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                    <Loader2 className="h-4 w-4 animate-spin" /> связь прервалась — догоняю ответ агента…
                   </p>
                 )}
               </div>
