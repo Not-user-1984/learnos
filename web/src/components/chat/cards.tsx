@@ -139,11 +139,11 @@ function BlockCardView({ card }: { card: Card }) {
         </p>
         <p className="font-medium">{card.title}</p>
         {card.summary && <p className="mt-1 text-sm text-muted-foreground">{card.summary}</p>}
-        {card.category_suggested && (
+        {(card.category || card.category_suggested) && (
           <p className="mt-2 text-sm">
-            Категория: <b>{card.category_suggested}</b> — подтвердите во{" "}
-            <Link className="text-violet-500 hover:underline" href="/kb?view=inbox">
-              Входящих
+            Категория: <b>{card.category ?? card.category_suggested}</b> — поменять можно на{" "}
+            <Link className="text-violet-500 hover:underline" href={`/kb/${card.block_uid}`}>
+              странице блока
             </Link>
           </p>
         )}

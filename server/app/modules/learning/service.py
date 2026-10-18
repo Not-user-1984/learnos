@@ -297,15 +297,18 @@ class LearningService:
 
         if draft:
             draft_in = BlockDraftIn.model_validate(draft)
+            domain_draft = draft_in.to_domain()
+            if not domain_draft.category_suggestion:
+                domain_draft = self._knowledge.categorize_draft(domain_draft)
             block = self._knowledge.save_block(
-                draft_in.to_domain(),
+                domain_draft,
                 session_uid=s["uid"],
                 activity_uid=None,
-                category_status="suggested",
+                category_status="confirmed",
             )
         else:
             generated = self._knowledge.generate_from_transcript(s)
-            block = self._knowledge.save_block(generated, session_uid=s["uid"], category_status="suggested")
+            block = self._knowledge.save_block(generated, session_uid=s["uid"], category_status="confirmed")
         return {
             "block_uid": block.meta.uid,
             "path": block.meta.path,
@@ -315,8 +318,8 @@ class LearningService:
                 "kind": block.meta.kind,
                 "title": block.meta.title,
                 "summary": block.meta.summary,
-                "category_suggested": block.meta.category_path,
-                "category_status": "suggested",
+                "category": block.meta.category_path,
+                "category_status": "confirmed",
                 "version": 1,
             },
         }

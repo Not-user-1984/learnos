@@ -1,22 +1,32 @@
 "use client";
 
-/** Страница блока: шапка, тело по секциям, правая колонка (версии, действия). */
+/** Страница блока: шапка, тело по секциям, правая колонка (категория, версии, действия). */
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import type { BlockDetail } from "@/lib/types";
+import type { BlockDetail, CategoryNode } from "@/lib/types";
 import { Markdown } from "@/components/markdown/Markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiPost } from "@/lib/api";
 
 type Version = { version: number; reason: string | null; conversation_uid: string | null; created_at: string; size: number };
 
-export function BlockPageClient({ block, versions }: { block: BlockDetail; versions: Version[] }) {
+export function BlockPageClient({
+  block,
+  versions,
+  categories = [],
+}: {
+  block: BlockDetail;
+  versions: Version[];
+  categories?: CategoryNode[];
+}) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
+  const [moving, setMoving] = useState(false);
   const [viewVersion, setViewVersion] = useState<number | null>(null);
   const [versionContent, setVersionContent] = useState<string | null>(null);
 
@@ -30,6 +40,20 @@ export function BlockPageClient({ block, versions }: { block: BlockDetail; versi
       toast.error(e instanceof Error ? e.message : "ошибка");
     } finally {
       setConfirming(false);
+    }
+  };
+
+  const moveCategory = async (value: string) => {
+    const path = value === "__none__" ? null : value;
+    setMoving(true);
+    try {
+      await apiPost(`/kb/blocks/${block.block_uid}/category`, { path, confirm: true });
+      toast.success(path ? `Категория: ${path}` : "Категория убрана");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "ошибка");
+    } finally {
+      setMoving(false);
     }
   };
 
@@ -137,7 +161,26 @@ export function BlockPageClient({ block, versions }: { block: BlockDetail; versi
       </article>
 
       <aside className="w-72 shrink-0 overflow-y-auto border-l p-4 text-sm">
-        <h2 className="mb-3 font-medium">Действия</h2>
+        <h2 className="mb-2 font-medium">Категория</h2>
+        <Select
+          disabled={moving}
+          onValueChange={(v: unknown) => { const val = Array.isArray(v) ? String(v[0]) : (v as string | null); if (val) void moveCategory(val); }}
+        >
+          <SelectTrigger className="h-9 w-full text-xs" aria-label="Категория блока">
+            <SelectValue placeholder={block.category_path ?? "Без категории"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">Без категории</SelectItem>
+            {flatten(categories).map((c) => (
+              <SelectItem key={c.path} value={c.path}>
+                {c.title} ({c.path})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mt-1.5 text-xs text-muted-foreground">меняется сразу, история — в версиях</p>
+
+        <h2 className="mb-3 mt-6 font-medium">Действия</h2>
         <div className="flex flex-col gap-2">
           <Button variant="outline" size="sm" onClick={discussInChat}>
             💬 Обсудить в чате
@@ -182,4 +225,8 @@ export function BlockPageClient({ block, versions }: { block: BlockDetail; versi
       </aside>
     </div>
   );
+}
+
+function flatten(nodes: CategoryNode[]): CategoryNode[] {
+  return nodes.flatMap((n) => [n, ...flatten(n.children)]);
 }

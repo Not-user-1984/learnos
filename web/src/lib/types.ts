@@ -179,6 +179,7 @@ export interface Card {
   summary?: string;
   block_uid?: string;
   kind?: string;
+  category?: string | null;
   category_suggested?: string | null;
   category_status?: string;
   version?: number;

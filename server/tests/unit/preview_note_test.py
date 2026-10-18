@@ -49,9 +49,15 @@ class FakeChat:
 class FakeKnowledge:
     def __init__(self) -> None:
         self.saved: list = []
+        self.categorized: list = []
+
+    def categorize_draft(self, draft):
+        self.categorized.append(draft)
+        return draft
 
     def save_block(self, draft, conversation_uid=None, category_status="suggested"):
         self.saved.append(draft)
+        self.category_status = category_status
         meta = SimpleNamespace(
             uid="blk_test01",
             kind=draft.kind,

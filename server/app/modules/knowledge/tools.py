@@ -107,15 +107,20 @@ def knowledge_tools(c) -> list[ToolSpec]:
         if args.source and not any(s.source == args.source for s in sources):
             sources.append(SourceIn(source=args.source, chapter=args.chapter))
         draft_in.sources = sources
-        block = svc.save_block(draft_in.to_domain(), conversation_uid=conv, category_status="suggested")
+        domain_draft = draft_in.to_domain()
+        if not domain_draft.category_suggestion:
+            # явный draft_json без категории — категоризуем тем же categorizer'ом
+            domain_draft = svc.categorize_draft(domain_draft)
+        # категория подтверждается сразу: юзер может сменить её позже на странице блока
+        block = svc.save_block(domain_draft, conversation_uid=conv, category_status="confirmed")
         return {
             "ok": True,
             "block_uid": block.meta.uid,
             "kind": block.meta.kind,
             "title": block.meta.title,
             "summary": block.meta.summary,
-            "category_suggested": block.meta.category_path,
-            "category_status": "suggested",
+            "category": block.meta.category_path,
+            "category_status": "confirmed",
             "version": 1,
             "_card": {
                 "type": "block_saved",
@@ -123,8 +128,8 @@ def knowledge_tools(c) -> list[ToolSpec]:
                 "kind": block.meta.kind,
                 "title": block.meta.title,
                 "summary": block.meta.summary,
-                "category_suggested": block.meta.category_path,
-                "category_status": "suggested",
+                "category": block.meta.category_path,
+                "category_status": "confirmed",
                 "version": 1,
             },
         }
@@ -147,6 +152,7 @@ def knowledge_tools(c) -> list[ToolSpec]:
                 "error": "generation_failed",
                 "message": "не удалось собрать превью: диалог пуст или LLM недоступна",
             }
+        draft = svc.categorize_draft(draft)
         preview_id = c.chat.store_draft_preview(conv, draft)
         draft_dict = c.chat.get_draft_preview(conv, preview_id)
         card = {"type": "note_draft", "preview_id": preview_id, "draft": draft_dict}

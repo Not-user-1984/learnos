@@ -79,15 +79,15 @@ def test_full_learning_cycle_creates_block(client, container):
     assert detail["tags"] == ["k8s"]
     assert detail["sources"][0]["source"] == src["uid"]
 
-    # 8. inbox: блок с неподтверждённой категорией
-    inbox = client.get("/api/kb/inbox").json()
-    assert [b["block_uid"] for b in inbox] == [uid]
+    # 8. категория подтверждается автоматически (categorizer при создании) — inbox пуст
+    assert detail["category_status"] == "confirmed"
+    assert client.get("/api/kb/inbox").json() == []
 
-    # 9. подтверждение категории — блок уходит из inbox
-    r = client.post(f"/api/kb/blocks/{uid}/category", json={"path": "infra/kubernetes", "confirm": True})
+    # 9. категорию можно сменить вручную — блок переезжает
+    r = client.post(f"/api/kb/blocks/{uid}/category", json={"path": "infra/networking", "confirm": True})
     assert r.status_code == 200
     assert r.json()["status"] == "confirmed"
-    assert client.get("/api/kb/inbox").json() == []
+    assert client.get(f"/api/kb/blocks/{uid}").json()["category_path"] == "infra/networking"
 
     # 10. версии: сервисная правка (update_block — MCP-инструмент) сохраняет v1
     updated = container.knowledge.update_block(

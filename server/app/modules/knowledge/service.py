@@ -379,7 +379,7 @@ class KnowledgeService:
         """Собрать BlockDraft из транскрипта сессии (block_writer + categorizer)."""
         if self._runtime is None:
             raise NotFound("агентный рантайм недоступен")
-        from .agents import block_writer, categorizer
+        from .agents import block_writer
 
         transcript = session.get("transcript") or []
         dialog = "\n".join(
@@ -397,6 +397,17 @@ class KnowledgeService:
         ctx = AgentContext(system_extra=extra)
         out = run_coro_sync(self._runtime.run_structured(block_writer, ctx, f"Транскрипт сессии:\n{dialog}"))
         draft = _writer_out_to_draft(out, kind=session.get("block_kind", "lesson"))
+        return self.categorize_draft(draft)
+
+    def categorize_draft(self, draft: BlockDraft) -> BlockDraft:
+        """Проставить драфту category_suggestion через categorizer (не критично при падении)."""
+        if self._runtime is None:
+            return draft
+        from dataclasses import replace
+
+        from .agents import categorizer
+
+        cats = "\n".join(f"- {c.path}" for c in self.list_categories()) or "(пусто)"
         try:
             cat_ctx = AgentContext(system_extra=f"Дерево:\n{cats}")
             cat_out = run_coro_sync(
@@ -405,12 +416,10 @@ class KnowledgeService:
             path = cat_out.path
             if getattr(cat_out, "new_category_title", None):
                 self.create_category(path, cat_out.new_category_title)
-            from dataclasses import replace
-
-            draft = replace(draft, category_suggestion=path)
+            return replace(draft, category_suggestion=path)
         except Exception:  # noqa: BLE001 — категория не критична
             log.info("categorizer не сработал, категория не проставлена")
-        return draft
+            return draft
 
     def generate_runbook(self, session: dict, lesson_uid: str) -> BlockDraft:
         """Собрать runbook-драфт из practice_log транскрипта (runbook_writer)."""
