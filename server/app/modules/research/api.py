@@ -16,7 +16,7 @@ class ConnectivityIn(BaseModel):
 
 def make_router(c) -> APIRouter:
     svc = c.research
-    r = APIRouter(prefix="/api/connectivity", tags=["connectivity"])
+    r = APIRouter(prefix="/connectivity", tags=["connectivity"])  # /api добавляет main.py
 
     def _keep_current(key: str) -> str:
         from .connectivity import load_connectivity
