@@ -7,6 +7,7 @@ import { AgentsSettings } from "@/components/settings/agents-settings";
 import { McpConnections } from "@/components/settings/mcp-connections";
 import { MaintenanceActions } from "@/components/settings/maintenance";
 import { TelegramTestButton } from "@/components/settings/integrations";
+import { ConnectivitySettings } from "@/components/settings/connectivity";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +71,14 @@ export default async function SettingsPage() {
             Подключай внешние MCP-серверы — их инструменты сразу доступны агентам
           </p>
           <McpConnections />
+        </section>
+
+        <section className="rounded-2xl border bg-card p-6">
+          <h2 className="font-medium">Прокси и поиск</h2>
+          <p className="mb-5 mt-1 text-sm text-muted-foreground">
+            Ключ поиска (Tavily/Serper), socks5-прокси или vless-ключ — YouTube, веб-серчинг и Telegram работают через них без рестартов
+          </p>
+          <ConnectivitySettings />
         </section>
 
         <section className="rounded-2xl border bg-card p-6">

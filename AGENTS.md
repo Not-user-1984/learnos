@@ -12,11 +12,11 @@
 
 **Агент-разработчик**: `.zcode/agents/learnos-dev.md` — субагент, знающий архитектуру и воркфлоу; запускать задачи разработки через него.
 
-## Текущий статус (2026-10-13, этапы 1–6 ТЗ выполнены)
+## Текущий статус (2026-10-18)
 
-Сервер переписан в модульный монолит (9 модулей, слои domain/service/infra, единый ToolRegistry → MCP `/mcp` + `/mcp/<module>` + агенты), схема v2 с миграциями Alembic, LLM-слой z.ai GLM (chat/structured/fast) и агентный рантайм (тьюторы чата, block_writer, categorizer, chapter_summarizer, course_planner; трейсы в `agent_runs`). Веб: чат с SSE и карточками, база знаний (категории/входящие/версии), библиотека (PDF/YouTube + читалка), курсы (прогресс + планировщик), настройки. Всё живёт в Docker Compose; живые сценарии (быстрый разбор → конспект, сессия → урок, планировщик курса, экспорт) прогнаны на GLM. Тесты: 87 (unit/integration/api/contract/agent), ruff 0, import-linter 3 контракта.
+Сервер — модульный монолит (14 модулей, слои domain/service/infra, единый ToolRegistry → REST + MCP `/mcp` + `/mcp/<module>`, ~57 инструментов), схема Alembic до 0007, LLM z.ai GLM, агентный рантайм с трейсами в `agent_runs` (падение инструмента не роняет агент). Веб: чат с SSE (обрыв стрима → авто-догон ответа), база знаний с автокатегоризацией, библиотека (PDF/YouTube/веб-статьи), курсы, настройка агентов/промптов, сторонние MCP. Ресёрч: цепочка поисковых провайдеров (keyless-rescue: платный по ключу → DDG → Википедия → HN), academic_search (arXiv), youtube_search (yt-dlp → веб-фолбэк), research-режим сообщений (директива в system_extra, в чате видна только тема). Idea-scout: агент repo_scout (GitHub API, отчёты в data/ideas + Telegram). Настройки связи в UI (`/api/connectivity`): ключи Tavily/Serper, socks5-прокси, vless-ключ → xray-sidecar (socks5://xray:1080 для всего стека). Прод: Proxmox CT 132, автодеплой по git push (2 мин), тесты 140, ruff/import-linter чистые.
 
-Из незакрытого — смотреть живой бэклог: [task_ai/tasks/](task_ai/tasks/) (полный mypy, sqlite-vec, доступ с мобилки, остатки этапов 8–11 и пр.).
+Из незакрытого — смотреть живой бэклог: [task_ai/tasks/](task_ai/tasks/) (полный mypy, sqlite-vec, ключ поиска Tavily/Serper от юзера, прокси в LAN для Telegram, скилл-система T-017, остатки ресёрча T-014 Э3–Э5).
 
 ## Зафиксированные решения
 
@@ -54,10 +54,11 @@ cd web && npm install && npm run dev                              # LEARNOS_API_
 
 ## Ключевые эндпоинты
 
-- REST: `/api/health`, `/api/conversations` (+`/{uid}/messages` SSE, `/stop`), `/api/kb/*` (блоки/категории/входящие/версии/reindex), `/api/sources` (+`/upload`, `/{id}/process`, главы), `/api/activities`, `/api/sessions` (+advance/finish), `/api/courses` (+`/plan`, `/from-plan`, items), `/api/search`, `/api/export`
-- MCP: `/mcp` (все ~40 инструментов) и `/mcp/<module>` (knowledge, library, learning, chat, courses, profile, search, export, skills)
-- Чат-режимы: free / quick / session; сессия-урок создается первым сообщением в разговоре session-режима
-- Скиллы: `server/skills/<name>/` (web-search, book-splitter, youtube-to-summary) — те же, что и раньше, видны в MCP и агентам
+- REST: `/api/health`, `/api/conversations` (+`/{uid}/messages` SSE с `research:true` для ресёрч-запуска, `/stop`), `/api/kb/*` (блоки/категории/входящие/версии/reindex), `/api/sources` (+`/upload`, `/{id}/process`, главы), `/api/activities`, `/api/sessions` (+advance/finish), `/api/courses` (+`/plan`, `/from-plan`, items), `/api/search`, `/api/export`, `/api/connectivity` (+`/check` — настройки поиска/прокси из UI)
+- MCP: `/mcp` (все ~57 инструментов) и `/mcp/<module>` (knowledge, library, learning, chat, courses, profile, search, export, skills, research)
+- Чат-режимы: free / quick / session / tuning / `agent:<name>` (кастомные и встроенные, например `agent:repo_scout`); сессия-урок создаётся первым сообщением в разговоре session-режима
+- Ресёрч-инструменты агентов: `web_search` (цепочка), `academic_search` (arXiv), `youtube_search` (yt-dlp → веб), `web_read`, `github_repo`/`github_file` (idea-scout)
+- Скиллы: `server/skills/<name>/` (web-search, book-splitter, youtube-to-summary) — drop-in, видны в MCP и агентам
 
 ## Хомлаб (для фазы 2 и песочниц)
 
@@ -65,8 +66,8 @@ cd web && npm install && npm run dev                              # LEARNOS_API_
 
 - Развёрнут `~/my_dev/my_servak/proxmox/scripts/deploy/deploy-learnos-container.sh` (4c/6G/30G SSD256, docker compose внутри CT; ZAI_API_KEY и GitHub-токен проброшены на CT файлами через `sec exec`, не печатаются)
 - **Разработка = git push**: на CT таймер `learnos-deploy.timer` каждые 2 мин делает fetch; есть новые коммиты в main → reset/build/up + health. Логи: `journalctl -u learnos-deploy.service`, `/var/log/learnos-deploy.log`
-- Данные (`/opt/learnos/{data,kb}` на CT) в git не попадают
-- YouTube-скилл ходит через хомлаб-прокси `LEARNOS_YT_PROXY=socks5://192.168.0.10:1080` (vpn-gw, CT 103)
+- Данные (`/opt/learnos/{data,kb}` на CT) в git не попадают; отчёты idea-scout — в `data/ideas/`
+- Прокси и ключи поиска — из UI (Настройки → «Прокси и поиск», таблица `app_settings`): vless-ключ → xray-sidecar (сервис `learnos-xray`, socks5://xray:1080), socks5/http → напрямую; применяются на лету без рестарта. env (`TAVILY_API_KEY`, `SERPER_API_KEY`, `LEARNOS_TELEGRAM_TOKEN` в `/opt/learnos/.env`) — fallback
 - В services.json хомлаба: `route:false` (только Dashy/health), публичного домена нет; с мобилки — после Tailscale-роутинга
 
 Репо автоматизации: `~/my_dev/my_servak/proxmox` (читать его AGENTS.md перед работой с сервером).

@@ -50,27 +50,25 @@ class VideoSearchArgs(BaseModel):
     limit: int = 5
 
 
-def _yt_search(query: str, limit: int) -> list[dict]:
+def _yt_search(query: str, limit: int, proxy: str = "") -> list[dict]:
     """yt-dlp ytsearch — прямой YouTube-поиск (в РФ часто замедлен, поэтому короткий таймаут)."""
     import subprocess
 
-    out = subprocess.run(
-        [
-            "yt-dlp",
-            f"ytsearch{max(1, min(10, limit))}:{query}",
-            "--flat-playlist",
-            "--no-warnings",
-            "--retries",
-            "1",
-            "--socket-timeout",
-            "8",
-            "--print",
-            "%(id)s\x1f%(title)s\x1f%(channel)s\x1f%(duration)s",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=35,
-    )
+    cmd = [
+        "yt-dlp",
+        f"ytsearch{max(1, min(10, limit))}:{query}",
+        "--flat-playlist",
+        "--no-warnings",
+        "--retries",
+        "1",
+        "--socket-timeout",
+        "8",
+        "--print",
+        "%(id)s\x1f%(title)s\x1f%(channel)s\x1f%(duration)s",
+    ]
+    if proxy:
+        cmd[1:1] = ["--proxy", proxy]
+    out = subprocess.run(cmd, capture_output=True, text=True, timeout=40)
     results = []
     for line in (out.stdout or "").splitlines():
         parts = line.split("\x1f")
@@ -105,7 +103,7 @@ def research_tools(c) -> list[ToolSpec]:
         del ctx
         note = ""
         try:
-            results = _yt_search(args.query, args.limit)
+            results = _yt_search(args.query, args.limit, proxy=getattr(c.settings, "yt_proxy", "") or "")
         except Exception:  # noqa: BLE001 — YouTube из сети часто замедлен: фолбэк на веб-поиск
             results = []
         if not results:

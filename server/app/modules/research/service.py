@@ -31,13 +31,73 @@ class _CacheEntry:
 class ResearchService:
     """Поиск и извлечение страниц для агентов и библиотеки."""
 
-    def __init__(self, settings) -> None:
+    def __init__(self, settings, uow=None) -> None:
         self._settings = settings
+        self._uow = uow
         self._provider = build_provider(settings)
         self._academic = AcademicProvider()
         self._cache: dict[str, _CacheEntry] = {}
         self._locks: dict[str, threading.Lock] = {}
         self._guard = threading.Lock()
+
+    # --- настройки связи (UI: поиск/прокси/vless) ---
+
+    def refresh_connectivity(self) -> dict:
+        """Загрузить настройки из БД, применить к Settings и пересобрать провайдера."""
+        from .connectivity import apply_to_settings, load_connectivity
+
+        if self._uow is None:
+            return {}
+        values = load_connectivity(self._uow)
+        applied = apply_to_settings(self._settings, values)
+        self._provider = build_provider(self._settings)
+        with self._guard:
+            self._cache.clear()  # сменился провайдер — кэш неактуален
+        return applied
+
+    def apply_connectivity(self, patch: dict) -> dict:
+        """Сохранить + применить настройки связи (PUT из UI)."""
+        from .connectivity import masked, save_connectivity, write_xray_config
+
+        clean = save_connectivity(self._uow, patch)
+        if clean.get("vless_key"):
+            write_xray_config(clean["vless_key"], self._settings.data_dir)
+        applied = self.refresh_connectivity()
+        return {"applied": applied, "stored": masked(clean)}
+
+    def connectivity_view(self) -> dict:
+        from .connectivity import load_connectivity, masked
+
+        return masked(load_connectivity(self._uow))
+
+    def connectivity_check(self) -> dict:
+        """Быстрая диагностика: поиск, YouTube, внешний IP (через прокси при наличии)."""
+        out: dict = {"proxy": self._settings.web_proxy or "(без прокси)"}
+        try:
+            r = self.search("docker documentation", 3)
+            out["web_search"] = f"{r.get('provider')}: {r.get('count')} рез-тов"
+        except Exception as e:  # noqa: BLE001
+            out["web_search"] = f"ошибка: {str(e)[:80]}"
+        try:
+            import subprocess
+
+            cmd = ["yt-dlp", "ytsearch1:test", "--flat-playlist", "--no-warnings", "--retries", "1",
+                   "--socket-timeout", "6", "--print", "%(id)s"]
+            if self._settings.yt_proxy:
+                cmd[1:1] = ["--proxy", self._settings.yt_proxy]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            out["youtube"] = "ok" if (r.returncode == 0 and r.stdout.strip()) else "недоступен"
+        except Exception:  # noqa: BLE001
+            out["youtube"] = "таймаут"
+        try:
+            ip = httpx.get(
+                "https://api.ipify.org", timeout=10,
+                proxy=self._settings.web_proxy or None,
+            ).text
+            out["external_ip"] = ip
+        except Exception:  # noqa: BLE001
+            out["external_ip"] = "недоступен"
+        return out
 
     # --- поиск ---
 

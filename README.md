@@ -32,11 +32,12 @@ cd web && npm run lint && npx tsc --noEmit && npm run build
 
 ## Архитектура сервера
 
-Модульный монолит, 12 модулей. Порядок = порядок зависимостей (`app/bootstrap.py`):
+Модульный монолит, 14 модулей. Порядок = порядок зависимостей (`app/bootstrap.py`):
 
 | Модуль | Ответственность |
 |---|---|
 | `profile` | профиль пользователя: железо (машины для практики), предпочтения обучения |
+| `research` | поиск и чтение веба: цепочка провайдеров (Tavily/Serper по ключу → ddg → Википедия → HN), arXiv, youtube_search, GitHub-ридер idea-scout, настройки связи (`/api/connectivity`): ключи поиска, socks5-прокси, vless → xray-sidecar |
 | `skills` | drop-in скиллы `server/skills/<name>/` (SKILL.md + run.py), видны из MCP и агентам |
 | `knowledge` | база знаний: MD-блоки + frontmatter, категории, теги, версии, генерация блоков агентами |
 | `library` | источники (book/video/web), главы, jobs обработки, загрузка PDF |
@@ -54,10 +55,10 @@ cd web && npm run lint && npx tsc --noEmit && npm run build
 
 **Хранение**: SQLite (+FTS5) в `data/`, блоки — MD-файлы в `kb/`, миграции — Alembic (`server/migrations/`). Контекст LLM бережём: книги читаются по главам порциями (`read_chapter` offset/limit).
 
-**LLM и агенты** (`app/llm`, `app/agent`): ModelRouter с ролями, OpenAI-совместимый провайдер (стрим, tool calls, structured output), рантайм-цикл «модель → инструменты → модель» с отменой и трейсами в `agent_runs`. Агенты — declarative-спеки с промптами в `modules/<mod>/agents/*/prompt.md`: тьюторы чата (free_chat, quick_reviewer, session_tutor), генераторы блоков (block_writer, categorizer, chapter_summarizer, source_overviewer), review_examiner, prompt_tuner.
+**LLM и агенты** (`app/llm`, `app/agent`): ModelRouter с ролями, OpenAI-совместимый провайдер (стрим, tool calls, structured output), рантайм-цикл «модель → инструменты → модель» с отменой и трейсами в `agent_runs`. Агенты — declarative-спеки с промптами в `modules/<mod>/agents/*/prompt.md`: тьюторы чата (free_chat, quick_reviewer, session_tutor), repo_scout (idea-scout: идеи из GitHub-репозиториев → data/ideas + Telegram), генераторы блоков (block_writer, categorizer, chapter_summarizer, source_overviewer), review_examiner, prompt_tuner.
 
 **Протоколы**:
-- REST `/api/*` — CRUD + SSE чата (`POST /api/conversations/{uid}/messages`: события delta/tool_start/tool_end/card/session/title/done).
+- REST `/api/*` — CRUD + SSE чата (`POST /api/conversations/{uid}/messages`: события delta/tool_start/tool_end/card/session/title/done; `research:true` — ресёрч-режим, директива уходит агенту, в чате видна только тема).
 - MCP: `/mcp` (~50 инструментов) и `/mcp/<module>`.
 - Карточки UI (command/question/evaluation/block_saved/block_updated/prompt_change/note_draft) приходят инструментами через `_card`.
 

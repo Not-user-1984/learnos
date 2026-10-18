@@ -187,3 +187,67 @@ def test_parse_repo_ref():
     assert parse_repo_ref("o/r") == "o/r"
     with pytest.raises(ValueError):
         parse_repo_ref("https://gitlab.com/o/r")
+
+
+def test_vless_to_config_reality():
+    from app.modules.research.connectivity import vless_to_config
+
+    link = (
+        "vless://01234567-89ab-cdef-0123-456789abcdef@nl.example.com:443"
+        "?encryption=none&security=reality&sni=www.example.com&fp=chrome&pbk=PUBKEY&sid=ab12&type=tcp&flow=xtls-rprx-vision"
+    )
+    cfg = vless_to_config(link)
+    ob = cfg["outbounds"][0]
+    assert ob["protocol"] == "vless"
+    vnext = ob["settings"]["vnext"][0]
+    assert vnext["address"] == "nl.example.com" and vnext["port"] == 443
+    assert vnext["users"][0]["id"] == "01234567-89ab-cdef-0123-456789abcdef"
+    assert vnext["users"][0]["flow"] == "xtls-rprx-vision"
+    st = ob["streamSettings"]
+    assert st["security"] == "reality" and st["realitySettings"]["publicKey"] == "PUBKEY"
+    assert cfg["inbounds"][0]["protocol"] == "socks" and cfg["inbounds"][0]["port"] == 1080
+
+
+def test_vless_to_config_ws_tls():
+    from app.modules.research.connectivity import vless_to_config
+
+    link = "vless://01234567-89ab-cdef-0123-456789abcdef@h.example.org:8443?type=ws&security=tls&sni=cdn.example&path=%2Fws"
+    cfg = vless_to_config(link)
+    st = cfg["outbounds"][0]["streamSettings"]
+    assert st["network"] == "ws" and st["wsSettings"]["path"] == "/ws"
+    assert st["security"] == "tls" and st["tlsSettings"]["serverName"] == "cdn.example"
+
+
+def test_vless_invalid_link():
+    import pytest
+
+    from app.modules.research.connectivity import vless_to_config
+
+    with pytest.raises(ValueError):
+        vless_to_config("https://example.com/not-vless")
+
+
+def test_connectivity_apply_and_proxy_priority():
+    from types import SimpleNamespace
+
+    from app.modules.research.connectivity import apply_to_settings, effective_proxy, masked
+
+    s = SimpleNamespace(search_provider="chain", web_proxy="", yt_proxy="", telegram_proxy="")
+    out = apply_to_settings(
+        s, {"search_provider": "tavily", "search_api_key": "tvly-xyz", "vless_key": "vless://..."}
+    )
+    assert out["proxy"].startswith("socks5://xray")
+    assert s.web_proxy == "socks5://xray:1080" and s.telegram_proxy.startswith("socks5://xray")
+
+    assert effective_proxy({"proxy_url": "socks5://1.2.3.4:1080"}, "old") == "socks5://1.2.3.4:1080"
+    assert effective_proxy({}, "old-env-proxy") == "old-env-proxy"
+
+    m = masked(
+        {
+            "search_api_key": "tvly-abcdef123456",
+            "vless_key": "",
+            "proxy_url": "x",
+            "search_provider": "tavily",
+        }
+    )
+    assert "…" in m["search_api_key"] and m["has_vless_key"] is False

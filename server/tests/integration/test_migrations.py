@@ -132,7 +132,7 @@ def test_v1_to_head_moves_data_and_kb(v1_layout):
             # ревизия дошла до головы
             assert (
                 conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == "0006_external_mcp"
+                == "0007_app_settings"
             )  # head (обновляется с новыми ревизиями)
 
             # sources получил uid, строки сохранены
