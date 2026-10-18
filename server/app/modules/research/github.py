@@ -36,8 +36,10 @@ def _headers() -> dict:
     return h
 
 
-def _get(path: str, **kw) -> httpx.Response:
-    r = httpx.get(f"{GH}{path}", headers=_headers(), timeout=20, follow_redirects=True, **kw)
+def _get(path: str, accept: str = "application/vnd.github+json", params: dict | None = None) -> httpx.Response:
+    h = _headers()
+    h["Accept"] = accept
+    r = httpx.get(f"{GH}{path}", headers=h, params=params, timeout=20, follow_redirects=True)
     if r.status_code == 403 and "rate limit" in r.text.lower():
         raise ValueError("GitHub API rate limit — задай GITHUB_TOKEN (см. secrets-map)")
     r.raise_for_status()
@@ -49,7 +51,7 @@ def repo_overview(ref: str, readme_chars: int = 12_000) -> dict:
     repo = parse_repo_ref(ref)
     meta = _get(f"/repos/{repo}").json()
     try:
-        readme = _get(f"/repos/{repo}/readme", headers={"Accept": "application/vnd.github.raw"}).text
+        readme = _get(f"/repos/{repo}/readme", accept="application/vnd.github.raw+json").text
     except Exception:  # noqa: BLE001 — readme не критичен
         readme = ""
     tree_lines: list[str] = []
@@ -89,7 +91,7 @@ def repo_overview(ref: str, readme_chars: int = 12_000) -> dict:
 def repo_file(ref: str, path: str) -> dict:
     """Текст файла репозитория (обрезка до _MAX_FILE символов)."""
     repo = parse_repo_ref(ref)
-    r = _get(f"/repos/{repo}/contents/{path.lstrip('/')}", headers={"Accept": "application/vnd.github.raw"})
+    r = _get(f"/repos/{repo}/contents/{path.lstrip('/')}", accept="application/vnd.github.raw+json")
     text = r.text
     return {
         "repo": repo,
