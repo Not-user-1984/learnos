@@ -36,7 +36,7 @@ def _headers() -> dict:
     return h
 
 
-def _get(path: str, accept: str = "application/vnd.github+json", params: dict | None = None) -> httpx.Response:
+def _get(path: str, accept: str = "application/vnd.github+json", params: dict | None = None):
     h = _headers()
     h["Accept"] = accept
     r = httpx.get(f"{GH}{path}", headers=h, params=params, timeout=20, follow_redirects=True)
