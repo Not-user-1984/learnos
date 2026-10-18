@@ -183,6 +183,37 @@ async def test_unknown_tool_ends_with_ok_false(tmp_path):
     assert events[-1].type == "final"
 
 
+# --- падение инструмента не роняет агент ---
+
+
+async def test_tool_exception_becomes_failed_result(tmp_path):
+    """Исключение внутри инструмента → tool_end ok=false, агент жив и отвечает финалом."""
+    registry = ToolRegistry()
+
+    def boom(args: EchoArgs, ctx: ToolContext) -> dict:
+        raise RuntimeError("'BlockDraft' object has no attribute 'model_dump'")
+
+    registry.register(
+        ToolSpec(
+            name="boom", module="test", description="падает", args_model=EchoArgs, handler=boom, label="Бум"
+        )
+    )
+    fake = FakeLLMProvider()
+    fake.queue(
+        FakeTurn(tool_calls=[FakeLLMProvider.call("boom", text="x")]),
+        FakeTurn(text="Инструмент упал, но я продолжил и ответил"),
+    )
+    runtime = AgentRuntime(make_router(fake), registry)
+
+    events = await collect(runtime, make_spec(tmp_path, tools=frozenset({"boom"})), make_ctx())
+
+    tool_end = next(e for e in events if e.type == "tool_end")
+    assert tool_end.ok is False
+    assert "model_dump" in tool_end.summary  # агент видит причину и может сказать о ней
+    assert events[-1].type == "final"
+    assert "продолжил" in events[-1].text
+
+
 # --- трейсинг ---
 
 

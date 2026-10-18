@@ -160,16 +160,20 @@ class AgentRuntime:
                         type="tool_start", call_id=call.id, name=call.name, args=call.arguments, label=label
                     )
                     if known:
-                        result = self._tools.call(
-                            call.name,
-                            call.arguments,
-                            ToolContext(
-                                channel="agent",
-                                conversation_uid=ctx.conversation_uid,
-                                session_uid=ctx.session_uid,
-                                agent_name=spec.name,
-                            ),
-                        )
+                        try:
+                            result = self._tools.call(
+                                call.name,
+                                call.arguments,
+                                ToolContext(
+                                    channel="agent",
+                                    conversation_uid=ctx.conversation_uid,
+                                    session_uid=ctx.session_uid,
+                                    agent_name=spec.name,
+                                ),
+                            )
+                        except Exception as e:  # noqa: BLE001 — падение инструмента не должно ронять агент
+                            log.warning("tool %s failed: %s", call.name, e)
+                            result = {"error": "tool_failed", "message": f"{call.name}: {e}"[:300]}
                     else:
                         result = {
                             "error": "unknown_tool",

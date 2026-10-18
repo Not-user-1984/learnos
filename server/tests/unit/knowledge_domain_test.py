@@ -170,3 +170,25 @@ def test_sanitize_mermaid_strips_emoji():
 
     ok_code = 'flowchart LR\n    A["Команда"] -->|"нужен компонент"| B["Готова"]'
     assert sanitize_mermaid(ok_code) == ok_code
+
+
+def test_block_draft_dataclass_fits_block_draft_in():
+    """save_note генерит BlockDraft (dataclass) и конвертит в BlockDraftIn через asdict.
+
+    Регрессия прода 2026-10-18: 'BlockDraft' object has no attribute 'model_dump'.
+    """
+    from dataclasses import asdict
+
+    from app.modules.knowledge.domain import BlockDraft, BlockSource, Concept
+    from app.modules.knowledge.schemas import BlockDraftIn
+
+    draft = BlockDraft(
+        title="Rust: владение",
+        concepts=(Concept(term="ownership", definition="правила владения памятью"),),
+        tags=("rust",),
+        sources=(BlockSource(source="src_book", chapter=1, title="гл. 4"),),
+    )
+    parsed = BlockDraftIn(**asdict(draft))
+    assert parsed.title == "Rust: владение"
+    assert parsed.concepts[0].term == "ownership"
+    assert parsed.sources[0].source == "src_book"

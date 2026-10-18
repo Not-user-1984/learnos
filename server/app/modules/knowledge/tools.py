@@ -338,6 +338,8 @@ def _meta_to_dict(m) -> dict:
 
 def _draft_from_conversation(c, ctx: ToolContext, args: SaveNoteArgs) -> BlockDraftIn | None:
     """Генерация драфта block_writer'ом из истории разговора."""
+    from dataclasses import asdict
+
     from .schemas import BlockDraftIn
 
     try:
@@ -350,4 +352,5 @@ def _draft_from_conversation(c, ctx: ToolContext, args: SaveNoteArgs) -> BlockDr
         return None
     if generated is None:
         return None
-    return BlockDraftIn(**generated.model_dump())
+    # BlockDraft — domain-dataclass (не pydantic), разворачиваем в dict
+    return BlockDraftIn(**asdict(generated))
