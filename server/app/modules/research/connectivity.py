@@ -25,8 +25,8 @@ def load_connectivity(uow) -> dict:
     """Прочитать app_settings → словарь настроек связи."""
     import sqlalchemy as sa
 
-    with uow() as session:
-        rows = session.execute(sa.text("SELECT key, value FROM app_settings")).fetchall()
+    with uow() as uw:
+        rows = uw.session.execute(sa.text("SELECT key, value FROM app_settings")).fetchall()
     return {k: "" for k in KEYS} | {r[0]: r[1] or "" for r in rows if r[0] in KEYS}
 
 
@@ -35,9 +35,9 @@ def save_connectivity(uow, patch: dict) -> dict:
     import sqlalchemy as sa
 
     clean = {k: str(patch.get(k, "") or "").strip() for k in KEYS}
-    with uow() as session:
+    with uow() as uw:
         for k, v in clean.items():
-            session.execute(
+            uw.session.execute(
                 sa.text(
                     "INSERT INTO app_settings (key, value, updated_at) VALUES (:k, :v, :t) "
                     "ON CONFLICT(key) DO UPDATE SET value=:v, updated_at=:t"
