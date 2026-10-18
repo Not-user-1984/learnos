@@ -1,16 +1,18 @@
 "use client";
 
-/** Кнопки запуска сценариев изучения: книга / видео / свободный разговор. */
+/** Кнопки запуска сценариев изучения: книга / видео / ресёрч / свободный разговор. */
 
 import { useState } from "react";
-import { BookOpen, MessageSquare, Video } from "lucide-react";
+import { BookOpen, Globe, MessageSquare, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StudyFlowDialog } from "@/components/chat/study-flow";
 import { NewConversationButton } from "@/components/chat/new-conversation";
 
+type Tab = "book" | "video" | "research";
+
 export function StudyButtons({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"book" | "video">("book");
+  const [tab, setTab] = useState<Tab>("book");
 
   return (
     <>
@@ -34,6 +36,16 @@ export function StudyButtons({ compact = false }: { compact?: boolean }) {
         >
           <Video className="h-4 w-4" /> Обсудить видео
         </Button>
+        <Button
+          size={compact ? "sm" : "default"}
+          variant="outline"
+          onClick={() => {
+            setTab("research");
+            setOpen(true);
+          }}
+        >
+          <Globe className="h-4 w-4" /> Ресёрч темы
+        </Button>
         <NewConversationButton />
       </div>
       <StudyFlowDialog open={open} onOpenChange={setOpen} defaultTab={tab} />
@@ -41,14 +53,14 @@ export function StudyButtons({ compact = false }: { compact?: boolean }) {
   );
 }
 
-/** Пустое состояние чата: два больших сценария + свободный чат. */
+/** Пустое состояние чата: три больших сценария + свободный чат. */
 export function StudyEmptyState() {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"book" | "video">("book");
+  const [tab, setTab] = useState<Tab>("book");
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <button
           onClick={() => {
             setTab("book");
@@ -73,6 +85,19 @@ export function StudyEmptyState() {
           <p className="font-semibold">Обсудить видео</p>
           <p className="text-sm text-muted-foreground">
             Вставь ссылку на YouTube — транскрипт обработается, и агент готов разбирать видео по частям.
+          </p>
+        </button>
+        <button
+          onClick={() => {
+            setTab("research");
+            setOpen(true);
+          }}
+          className="group flex flex-col gap-2 rounded-2xl border bg-card p-6 text-left transition hover:border-emerald-500/60"
+        >
+          <Globe className="h-8 w-8 text-emerald-500" />
+          <p className="font-semibold">Ресёрч темы</p>
+          <p className="text-sm text-muted-foreground">
+            Опиши тему — агент обойдёт сеть (доки, статьи, видео), покажет лучших кандидатов и добавит топ в Библиотеку.
           </p>
         </button>
       </div>
