@@ -25,6 +25,8 @@ class MessageIn(BaseModel):
     """Сообщение пользователя."""
 
     content: str = Field(min_length=1)
+    # режим ресёрча: инструкция уходит агенту в system_extra, в чате видна только тема
+    research: bool = False
 
 
 class ConversationItem(BaseModel):

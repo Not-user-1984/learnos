@@ -115,3 +115,32 @@ def test_first_message_contains_user_role(client, fake_llm):
     assert fake_llm.requests, "запрос к LLM должен был случиться"
     roles = [m.role for m in fake_llm.requests[-1][1].messages]
     assert "user" in roles
+
+
+def test_research_flag_directive_hidden_from_chat(client, fake_llm):
+    """research=true: директива уходит агенту в system_extra, в чате — только тема.
+
+    Пользователь не должен видеть служебную простыню ни сообщением, ни в истории.
+    """
+    fake_llm.queue(FakeTurn(text="Нашёл три источника, топ-2 добавил."))
+    conv = client.post("/api/conversations", json={"mode": "free", "title": "ресёрч"}).json()
+    with client.stream(
+        "POST",
+        f"/api/conversations/{conv['uid']}/messages",
+        json={"content": "Докер для начинающих", "research": True},
+    ) as resp:
+        raw = "".join(resp.iter_text())
+
+    events = parse_sse(raw)
+    assert [name for name, _ in events][-1] == "done"
+
+    # тема сохранилась как обычное сообщение юзера — без служебной простыни
+    fresh = client.get(f"/api/conversations/{conv['uid']}").json()
+    user_msgs = [m["content"] for m in fresh["messages"] if m["role"] == "user"]
+    assert user_msgs == ["Докер для начинающих"]
+
+    # директива и повышенный лимит шагов дошли до агента
+    system = fake_llm.requests[-1][1].messages[0].content
+    assert "ресёрч-цикл" in system
+    assert "web_search" in system
+

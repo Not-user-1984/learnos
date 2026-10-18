@@ -3,7 +3,7 @@
 import json
 import logging
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from ...agent.runtime import AgentRuntime
@@ -34,6 +34,17 @@ AGENT_BY_MODE = {
     "session": "session_tutor",
     "tuning": "prompt_tuner",
 }
+
+# Ресёрч как состояние чата: директива видна только агенту (в system_extra),
+# пользователь пишет тему как обычное сообщение.
+RESEARCH_DIRECTIVE = (
+    "Это сообщение запускает ресёрч-цикл по теме пользователя. Найди лучшие источники: "
+    "официальные доки, статьи, видео. Ищи вширь (2–3 захода), остановись при повторах, "
+    "покажи список кандидатов с пояснением «почему этот». Топ-3–5 лучших добавь сам в Библиотеку "
+    "(kind=web через add_source + process_source; YouTube — kind=video), скажи что добавил. "
+    "Остальные — по просьбе пользователя. Прогресс комментируй коротко: что нашёл, что читаешь."
+)
+RESEARCH_MAX_STEPS = 30  # цикл «поиск → чтение статей → добавление» не укладывается в дефолтные 12
 
 
 def _agent_for_mode(registry, mode: str) -> str:
@@ -183,11 +194,13 @@ class ChatService:
 
     # --- отправка сообщения (SSE) ---
 
-    async def stream_reply(self, uid: str, content: str) -> AsyncIterator[SseEvent]:
+    async def stream_reply(self, uid: str, content: str, research: bool = False) -> AsyncIterator[SseEvent]:
         """Сохранить сообщение пользователя и запустить агента; поток SSE-событий.
 
         Генерация продолжает работу при разрыве соединения: события копятся в task,
         ответ сохраняется в БД независимо от читателя.
+        research=True — сообщение запускает ресёрч-цикл: директива уходит агенту
+        в system_extra (пользователь видит только свою тему), лимит шагов выше.
         """
         conv = self.get_conversation(uid)
         now = now_iso(self._clock)
@@ -213,13 +226,17 @@ class ChatService:
 
         agent_name = _agent_for_mode(self._agents, conv["mode"])
         spec: AgentSpec = self._agents.get(agent_name)
+        system_extra = self._context_block(conv, session)
+        if research:
+            spec = replace(spec, max_steps=RESEARCH_MAX_STEPS)
+            system_extra = f"{system_extra}\n\n{RESEARCH_DIRECTIVE}".strip()
         # conv прочитан до вставки user-сообщения: добавляем его сами, иначе первый
         # запрос разговора уйдёт без единого user-сообщения (z.ai отвечает 1214)
         history = await self._build_history(conv) + [Message(role="user", content=content)]
         ctx = AgentContext(
             conversation_uid=uid,
             session_uid=session["session_uid"] if session else None,
-            system_extra=self._context_block(conv, session),
+            system_extra=system_extra,
             cancellation=self._running.get(uid),
         )
         if uid in self._running:

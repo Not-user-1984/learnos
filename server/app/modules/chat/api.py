@@ -62,7 +62,7 @@ def make_router(svc) -> APIRouter:
         async def pump() -> None:
             """Генерация агента → очередь; не зависит от читателя."""
             try:
-                async for ev in svc.stream_reply(uid, body.content):
+                async for ev in svc.stream_reply(uid, body.content, research=body.research):
                     await queue.put(ev)
             except Exception as e:  # noqa: BLE001 — ошибка уходит клиенту как SSE error
                 await queue.put(SseEvent("error", {"error": "internal", "message": str(e)[:300]}))

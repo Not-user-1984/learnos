@@ -4,18 +4,20 @@
 
 import type { SseEvent } from "@/lib/types";
 
-/** Прочитать SSE-поток ответа агента; onEvent вызывается на каждое событие. */
+/** Прочитать SSE-поток ответа агента; onEvent вызывается на каждое событие.
+ *  research=true — сообщение запускает ресёрч-цикл (директива уйдёт агенту, в чате видна только тема). */
 export async function streamChat(
   conversationUid: string,
   content: string,
   onEvent: (ev: SseEvent) => void,
   signal?: AbortSignal,
+  research = false,
 ): Promise<void> {
   // относительный путь: Next проксирует /api на ядро
   const res = await fetch(`/api/conversations/${conversationUid}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, research }),
     signal,
   });
   if (!res.ok || !res.body) {

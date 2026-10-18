@@ -67,7 +67,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
   }, [messages, streamText, liveCards]);
 
-  const send = async (content: string) => {
+  const send = async (content: string, opts?: { research?: boolean }) => {
     if (!content.trim() || streaming) return;
     lastSentRef.current = content;
     setInput("");
@@ -143,7 +143,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           setChips([]);
           break;
       }
-    }, controller.signal).catch((e) => {
+    }, controller.signal, opts?.research).catch((e) => {
       streamFail = e;
     });
 
@@ -192,12 +192,14 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     abortRef.current = null;
   };
 
-  // цитата из читалки: ?initial=… — отправляем автоматически один раз
+  // ?initial=… — отправляем автоматически один раз (цитата из читалки, тема ресёрча);
+  // ?research=1 — тема запускает ресёрч-цикл: директива уйдёт агенту, в чате видна только тема
   useEffect(() => {
     const initial = searchParams.get("initial");
+    const research = searchParams.get("research") === "1";
     if (initial && !initialSentRef.current && conversation.messages.length === 0) {
       initialSentRef.current = true;
-      void send(initial);
+      void send(initial, { research });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);

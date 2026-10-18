@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, CheckCircle2, Loader2, Search, Upload, Video } from "lucide-react";
+import { BookOpen, CheckCircle2, Loader2, Upload, Video } from "lucide-react";
 import { toast } from "sonner";
 import type { ChapterCard, SourceCard } from "@/lib/types";
 import { api, apiPost, apiUpload } from "@/lib/api";
@@ -40,10 +40,10 @@ export function StudyFlowDialog({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  defaultTab?: "book" | "video" | "research";
+  defaultTab?: "book" | "video";
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"book" | "video" | "research">(defaultTab);
+  const [tab, setTab] = useState<"book" | "video">(defaultTab);
   const [step, setStep] = useState<Step>("pick");
   const [sourceUid, setSourceUid] = useState<string | null>(null);
   const [job, setJob] = useState<Job | null>(null);
@@ -52,7 +52,6 @@ export function StudyFlowDialog({
   const [sourceKind, setSourceKind] = useState<"book" | "video">("book");
   const [mode, setMode] = useState<"quick" | "session">("quick");
   const [videoUrl, setVideoUrl] = useState("");
-  const [topic, setTopic] = useState("");
   const [library, setLibrary] = useState<SourceCard[]>([]);
   const [busy, setBusy] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -173,24 +172,6 @@ export function StudyFlowDialog({
     }
   };
 
-  const startResearch = async () => {
-    if (!topic.trim()) return;
-    setBusy(true);
-    try {
-      const conv = await apiPost<{ uid: string }>("/conversations", {
-        mode: "free",
-        title: `Ресёрч: ${topic.slice(0, 50)}`,
-      });
-      const initial = `Найди лучшие источники по теме «${topic.trim()}»: официальные доки, статьи, видео. Поищи вширь (2–3 захода), остановись при повторах, покажи список кандидатов с пояснением «почему этот». Топ-3–5 лучших добавь сам в Библиотеку (kind=web через add_source + process_source; YouTube — kind=video), скажи что добавил. Остальные — по моей просьбе.`;
-      onOpenChange(false);
-      router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(initial)}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "не удалось начать ресёрч");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const pickLibrary = async (uid: string) => {
     const src = await api<{ uid: string; title: string; status: string; chapters: ChapterCard[] }>(`/sources/${uid}`);
     if (src.status === "processed" && (src.chapters?.length ?? 0) > 0) {
@@ -241,19 +222,16 @@ export function StudyFlowDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{tab === "book" ? "Изучить книгу" : tab === "video" ? "Обсудить видео" : "Ресёрч темы"}</DialogTitle>
+          <DialogTitle>{tab === "book" ? "Изучить книгу" : "Обсудить видео"}</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => v && setTab(v as "book" | "video" | "research")}>
+        <Tabs value={tab} onValueChange={(v) => v && setTab(v as "book" | "video")}>
           <TabsList className="w-full">
             <TabsTrigger value="book" className="flex-1 gap-1.5">
               <BookOpen className="h-3.5 w-3.5" /> Книга
             </TabsTrigger>
             <TabsTrigger value="video" className="flex-1 gap-1.5">
               <Video className="h-3.5 w-3.5" /> Видео
-            </TabsTrigger>
-            <TabsTrigger value="research" className="flex-1 gap-1.5">
-              <Search className="h-3.5 w-3.5" /> Ресёрч
             </TabsTrigger>
           </TabsList>
 
@@ -307,26 +285,6 @@ export function StudyFlowDialog({
                 <Button disabled={busy || !videoUrl.trim()} onClick={startVideo}>
                   {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Video className="mr-1 h-4 w-4" />}
                   Добавить и обработать
-                </Button>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="research" className="pt-4">
-            {step === "pick" && (
-              <div className="flex flex-col gap-3">
-                <p className="text-xs text-muted-foreground">
-                  Опиши тему — агент обойдёт сеть (доки, статьи, видео), покажет лучших кандидатов и добавит топ в Библиотеку.
-                </p>
-                <Input
-                  placeholder="Например: observability в Kubernetes для начинающих"
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && void startResearch()}
-                />
-                <Button disabled={busy || !topic.trim()} onClick={startResearch}>
-                  {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Search className="mr-1 h-4 w-4" />}
-                  Начать ресёрч
                 </Button>
               </div>
             )}
