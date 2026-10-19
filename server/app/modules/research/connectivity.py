@@ -73,8 +73,14 @@ def apply_to_settings(settings, values: dict) -> dict:
     proxy = effective_proxy(values, settings.web_proxy)
     settings.web_proxy = proxy
     settings.yt_proxy = proxy
+    import os
+
+    # скилл обработки видео — subprocess, читает env при каждом запуске
     if proxy:
+        os.environ["LEARNOS_YT_PROXY"] = proxy
         settings.telegram_proxy = proxy
+    else:
+        os.environ.pop("LEARNOS_YT_PROXY", None)
     return {"provider": settings.search_provider, "proxy": proxy, "vless": bool(values.get("vless_key"))}
 
 

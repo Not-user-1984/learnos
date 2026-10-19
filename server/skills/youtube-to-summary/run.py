@@ -9,15 +9,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from app.paths import DATA_DIR
 
-PROXY_URL = os.environ.get("LEARNOS_YT_PROXY") or "socks5://127.0.0.1:7890"
+
+def _proxy_url() -> str:
+    """Прокси из env (LEARNOS_YT_PROXY) — обновляется настройками UI на лету,
+    поэтому читаем при каждом вызове, а не на импорте."""
+    return (os.environ.get("LEARNOS_YT_PROXY") or "").strip()
 
 
 def _proxy_up() -> bool:
-    """Прокси для YouTube (в Docker — host.docker.internal, локально — 127.0.0.1)."""
+    """Жив ли прокси-хост (TCP): например socks5://xray:1080 из настроек UI."""
     from urllib.parse import urlparse
 
-    parsed = urlparse(PROXY_URL if "://" in PROXY_URL else f"//{PROXY_URL}")
-    host, port = parsed.hostname or "127.0.0.1", parsed.port or 7890
+    url = _proxy_url()
+    if not url:
+        return False
+    parsed = urlparse(url if "://" in url else f"//{url}")
+    host, port = parsed.hostname or "", parsed.port or 1080
+    if not host:
+        return False
     try:
         with socket.create_connection((host, port), timeout=1):
             return True
@@ -76,7 +85,7 @@ def main(url: str) -> dict:
         url,
     ]
     if _proxy_up():
-        cmd += ["--proxy", PROXY_URL]
+        cmd += ["--proxy", _proxy_url()]
 
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     stdout = (proc.stdout or "").strip().splitlines()

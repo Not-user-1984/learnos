@@ -81,8 +81,18 @@ class ResearchService:
         try:
             import subprocess
 
-            cmd = ["yt-dlp", "ytsearch1:test", "--flat-playlist", "--no-warnings", "--retries", "1",
-                   "--socket-timeout", "6", "--print", "%(id)s"]
+            cmd = [
+                "yt-dlp",
+                "ytsearch1:test",
+                "--flat-playlist",
+                "--no-warnings",
+                "--retries",
+                "1",
+                "--socket-timeout",
+                "6",
+                "--print",
+                "%(id)s",
+            ]
             if self._settings.yt_proxy:
                 cmd[1:1] = ["--proxy", self._settings.yt_proxy]
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -91,7 +101,8 @@ class ResearchService:
             out["youtube"] = "таймаут"
         try:
             ip = httpx.get(
-                "https://api.ipify.org", timeout=10,
+                "https://api.ipify.org",
+                timeout=10,
                 proxy=self._settings.web_proxy or None,
             ).text
             out["external_ip"] = ip
