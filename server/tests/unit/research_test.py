@@ -251,3 +251,21 @@ def test_connectivity_apply_and_proxy_priority():
         }
     )
     assert "…" in m["search_api_key"] and m["has_vless_key"] is False
+
+
+def test_vless_to_config_xhttp_reality():
+    """Нод пользователя: VLESS+Reality+XHTTP (mihomo-профиль vless-nl)."""
+    from app.modules.research.connectivity import vless_to_config
+
+    link = (
+        "vless://01234567-89ab-cdef-0123-456789abcdef@132.243.123.172:443"
+        "?type=xhttp&security=reality&sni=www.bol.com&fp=firefox&pbk=PUB&sid=a29f&path=%2Fsearch&mode=auto"
+    )
+    cfg = vless_to_config(link)
+    st = cfg["outbounds"][0]["streamSettings"]
+    assert st["network"] == "xhttp"
+    assert st["xhttpSettings"]["path"] == "/search"
+    assert st["xhttpSettings"]["mode"] == "auto"
+    assert st["security"] == "reality"
+    assert st["realitySettings"]["serverName"] == "www.bol.com"
+    assert st["realitySettings"]["fingerprint"] == "firefox"

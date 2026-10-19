@@ -105,6 +105,13 @@ def vless_to_config(link: str) -> dict:
         stream["wsSettings"] = {"path": unquote(q.get("path", "/")), "headers": {"Host": q.get("host", host)}}
     if network == "grpc":
         stream["grpcSettings"] = {"serviceName": q.get("serviceName", "")}
+    if network in ("xhttp", "splithttp"):
+        stream["network"] = "xhttp"
+        stream["xhttpSettings"] = {
+            "path": unquote(q.get("path", "/")),
+            "host": q.get("host", ""),
+            "mode": q.get("mode", "auto"),
+        }
     if security == "tls":
         stream["security"] = "tls"
         stream["tlsSettings"] = {
