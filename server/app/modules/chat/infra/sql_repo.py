@@ -74,6 +74,12 @@ class ConversationRepository:
         )
 
     def delete(self, session: Session, conv_id: int) -> None:
+        # сессии-уроки остаются в истории, отвязанными от удалённого разговора
+        from sqlalchemy import text
+
+        session.execute(
+            text("UPDATE sessions SET conversation_id=NULL WHERE conversation_id=:c"), {"c": conv_id}
+        )
         session.execute(delete(messages).where(messages.c.conversation_id == conv_id))
         session.execute(delete(conversations).where(conversations.c.id == conv_id))
 
