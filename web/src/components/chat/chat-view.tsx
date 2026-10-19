@@ -16,6 +16,7 @@ import { CardView } from "@/components/chat/cards";
 import { TuningEmptyState } from "@/components/chat/tuning-panel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { modeLabel } from "@/lib/format";
 
@@ -374,24 +375,68 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
       </div>
 
       {conversation.mode === "session" && session && (
-        <aside className="hidden w-64 shrink-0 flex-col gap-4 border-l p-4 text-sm md:flex">
-          <div>
-            <h2 className="mb-2 font-medium">Сессия</h2>
-            <ol className="flex flex-col gap-1">
-              {SESSION_STEPS.map((st) => (
-                <li key={st} className={cn("flex items-center gap-2 rounded-md px-2 py-1", session.state === st && "bg-accent")}>
-                  <span className={cn("h-2 w-2 rounded-full", SESSION_STEPS.indexOf(st) <= SESSION_STEPS.indexOf(session.state) ? "bg-emerald-500" : "bg-muted-foreground/30")} />
-                  {STEP_LABELS[st]}
-                </li>
-              ))}
-            </ol>
-          </div>
-          {session.chapter_idx && <p className="text-muted-foreground">Глава {session.chapter_idx}</p>}
-          <Link href="/kb?view=inbox" className="text-violet-500 hover:underline">
-            Входящие блоков →
-          </Link>
-        </aside>
+        <>
+          {/* планшет: панель сессии прячется в кнопку с прогрессом в шапке */}
+          <SessionPanelDialog session={session} />
+          <aside className="hidden w-64 shrink-0 flex-col gap-4 border-l p-4 text-sm lg:flex">
+            <div>
+              <h2 className="mb-2 font-medium">Сессия</h2>
+              <ol className="flex flex-col gap-1">
+                {SESSION_STEPS.map((st) => (
+                  <li key={st} className={cn("flex items-center gap-2 rounded-md px-2 py-1", session.state === st && "bg-accent")}>
+                    <span className={cn("h-2 w-2 rounded-full", SESSION_STEPS.indexOf(st) <= SESSION_STEPS.indexOf(session.state) ? "bg-emerald-500" : "bg-muted-foreground/30")} />
+                    {STEP_LABELS[st]}
+                  </li>
+                ))}
+              </ol>
+            </div>
+            {session.chapter_idx && <p className="text-muted-foreground">Глава {session.chapter_idx}</p>}
+            <Link href="/kb?view=inbox" className="text-violet-500 hover:underline">
+              Входящие блоков →
+            </Link>
+          </aside>
+        </>
       )}
+    </div>
+  );
+}
+
+function SessionPanelDialog({ session }: { session: NonNullable<ConversationDetail["session"]> }) {
+  const [open, setOpen] = useState(false);
+  const done = SESSION_STEPS.indexOf(session.state) + 1;
+  return (
+    <div className="lg:hidden">
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed bottom-24 right-4 z-20 flex items-center gap-2 rounded-full border bg-card px-3 py-2 text-sm shadow-lg"
+        aria-label="Прогресс сессии"
+      >
+        <span className="flex gap-1">
+          {SESSION_STEPS.map((st, i) => (
+            <span
+              key={st}
+              className={cn("h-1.5 w-1.5 rounded-full", i < done ? "bg-emerald-500" : "bg-muted-foreground/30")}
+            />
+          ))}
+        </span>
+        {STEP_LABELS[session.state]} · {done}/{SESSION_STEPS.length}
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Сессия</DialogTitle>
+          </DialogHeader>
+          <ol className="flex flex-col gap-1 text-sm">
+            {SESSION_STEPS.map((st) => (
+              <li key={st} className={cn("flex items-center gap-2 rounded-md px-2 py-1.5", session.state === st && "bg-accent")}>
+                <span className={cn("h-2 w-2 rounded-full", SESSION_STEPS.indexOf(st) <= SESSION_STEPS.indexOf(session.state) ? "bg-emerald-500" : "bg-muted-foreground/30")} />
+                {STEP_LABELS[st]}
+              </li>
+            ))}
+          </ol>
+          {session.chapter_idx && <p className="mt-2 text-muted-foreground">Глава {session.chapter_idx}</p>}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
