@@ -5,6 +5,7 @@ import { AlertTriangle, Inbox } from "lucide-react";
 import { api } from "@/lib/api";
 import type { BlockCard, CategoryNode } from "@/lib/types";
 import { CategoryTree } from "@/components/kb/category-tree";
+import { CategoryDrawer } from "@/components/kb/category-drawer";
 import { BlockCard as BlockCardView } from "@/components/kb/block-card";
 import { InboxPanel } from "@/components/kb/inbox";
 import { Input } from "@/components/ui/input";
@@ -31,12 +32,14 @@ export default async function KbPage({ searchParams }: Props) {
 
   return (
     <div className="flex h-full">
-      <div className="hidden w-60 shrink-0 overflow-y-auto border-r p-3 md:block">
+      {/* на планшете дерево уходит в диалог-кнопку, на широких — колонка слева */}
+      <div className="hidden w-60 shrink-0 overflow-y-auto border-r p-3 lg:block">
         <CategoryTree nodes={categories} active={sp.category ?? null} />
       </div>
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto p-6">
-        <header className="mb-4 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold">
+      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6">
+        <header className="mb-4 flex flex-wrap items-center gap-2 sm:gap-3">
+          <CategoryDrawer nodes={categories} active={sp.category ?? null} />
+          <h1 className="min-w-0 truncate text-xl font-semibold">
             {sp.category ? `Категория: ${sp.category}` : "База знаний"}
           </h1>
           {inbox.length > 0 && (
@@ -48,14 +51,14 @@ export default async function KbPage({ searchParams }: Props) {
           )}
           <form className="ml-auto flex items-center gap-2" action="/kb">
             {sp.category && <input type="hidden" name="category" value={sp.category} />}
-            <Input name="q" defaultValue={sp.q ?? ""} placeholder="Поиск по заголовку…" className="h-9 w-56" />
+            <Input name="q" defaultValue={sp.q ?? ""} placeholder="Поиск…" className="h-9 w-36 sm:w-56" />
             <select
               name="kind"
               defaultValue={sp.kind ?? ""}
               className="h-9 rounded-md border bg-background px-2 text-sm"
               aria-label="Тип блока"
             >
-              <option value="">все типы</option>
+              <option value="">все</option>
               <option value="lesson">уроки</option>
               <option value="note">конспекты</option>
             </select>
