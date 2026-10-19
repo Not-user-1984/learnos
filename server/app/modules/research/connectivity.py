@@ -153,7 +153,7 @@ def vless_to_config(link: str) -> dict:
             },
             {"tag": "direct", "protocol": "freedom"},
         ],
-        "routing": {"rules": [{"type": "field", "outboundTag": "proxy"}]},
+        # routing не задаём: первый outbound — дефолт; пустое правило xray отвергает
     }
 
 
