@@ -101,12 +101,13 @@ function CommandCardView({ card, onInsert }: { card: Card; onInsert?: (t: string
 
 function QuestionCardView({ card }: { card: Card }) {
   return (
-    <div className="rounded-xl border border-violet-500/40 bg-violet-500/5 p-4">
-      <p className="mb-1 text-xs text-muted-foreground">
+    <div className="rounded-xl border-2 border-violet-500/50 bg-violet-500/5 p-4 shadow-sm">
+      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-violet-500">
         Фейнман-вопрос {card.index ?? ""}
         {card.total ? ` / ${card.total}` : ""} {card.concept && `· ${card.concept}`}
       </p>
       <p className="font-medium">{card.question}</p>
+      <p className="mt-2 text-xs text-muted-foreground">ответь своими словами прямо в чат</p>
     </div>
   );
 }

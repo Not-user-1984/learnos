@@ -5,7 +5,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CircleStop, GraduationCap, Loader2, NotebookPen, Paperclip, SendHorizontal, Target, Terminal } from "lucide-react";
+import { CircleStop, GraduationCap, HelpCircle, Loader2, NotebookPen, Paperclip, SendHorizontal, Target, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import type { ChatMessage, ConversationDetail, SseEvent } from "@/lib/types";
 import { useSearchParams } from "next/navigation";
@@ -304,6 +304,16 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
                 Повторить
               </Button>
             </div>
+          </div>
+        )}
+        {conversation.mode === "session" && !streaming && session && session.state !== "done" && (
+          <div className="mx-auto mb-1 flex max-w-3xl flex-wrap gap-2 px-4">
+            <button
+              onClick={() => void send("Фейнман: запусти проверку — задай следующий вопрос по пройденному (карточкой ask).")}
+              className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-sm text-violet-500 transition hover:bg-violet-500/20"
+            >
+              <HelpCircle className="h-4 w-4" /> Фейнман-вопросы
+            </button>
           </div>
         )}
         {(conversation.mode === "quick" || conversation.mode === "free") && !streaming && (
