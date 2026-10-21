@@ -4,8 +4,7 @@ import Link from "next/link";
 import { AlertTriangle, Inbox } from "lucide-react";
 import { api } from "@/lib/api";
 import type { BlockCard, CategoryNode } from "@/lib/types";
-import { CategoryTree } from "@/components/kb/category-tree";
-import { CategoryDrawer } from "@/components/kb/category-drawer";
+import { CategorySidebar } from "@/components/kb/category-sidebar";
 import { BlockCard as BlockCardView } from "@/components/kb/block-card";
 import { InboxPanel } from "@/components/kb/inbox";
 import { Input } from "@/components/ui/input";
@@ -32,13 +31,10 @@ export default async function KbPage({ searchParams }: Props) {
 
   return (
     <div className="flex h-full">
-      {/* на планшете дерево уходит в диалог-кнопку, на широких — колонка слева */}
-      <div className="hidden w-60 shrink-0 overflow-y-auto border-r p-3 lg:block">
-        <CategoryTree nodes={categories} active={sp.category ?? null} />
-      </div>
+      {/* категории: видны по умолчанию на любом экране, сворачиваются кнопкой в узкую полоску */}
+      <CategorySidebar nodes={categories} active={sp.category ?? null} />
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6">
         <header className="mb-4 flex flex-wrap items-center gap-2 sm:gap-3">
-          <CategoryDrawer nodes={categories} active={sp.category ?? null} />
           <h1 className="min-w-0 truncate text-xl font-semibold">
             {sp.category ? `Категория: ${sp.category}` : "База знаний"}
           </h1>
