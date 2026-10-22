@@ -18,9 +18,10 @@ function prettyTitle(title: string): string {
   return title.replace(/_/g, " ");
 }
 
-/** Заголовок главы: если в самом названии уже есть номер — не дублируем его. */
+/** Заголовок главы: позиционный номер + название без собственной нумерации (иначе «3. 1. Приложения»). */
 function chapterLabel(idx: number, title: string): string {
-  return /^\s*\d+[.)]?\s/.test(title) ? title : `${idx}. ${title}`;
+  const inner = title.replace(/^\s*\d+[.)]?\s+/, "");
+  return `${idx}. ${inner || title}`;
 }
 
 export default async function SourcePage({ params }: { params: Promise<{ uid: string }> }) {
