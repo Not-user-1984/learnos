@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bot, ChevronDown, ChevronRight, Loader2, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import { api, apiDelete, apiPatch, apiPost } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -186,7 +186,7 @@ export function AgentsSettings() {
           новые агенты — конструктором.
         </p>
         <Button size="sm" variant="outline" onClick={() => { setDraft(null); setBuilderOpen(true); }}>
-          <Plus className="mr-1 h-4 w-4" /> Новый агент
+          <Icon name="add" size={16} className="mr-1" /> Новый агент
         </Button>
       </div>
 
@@ -197,13 +197,13 @@ export function AgentsSettings() {
             className="flex w-full items-start gap-2.5 px-4 py-2.5 text-left transition hover:bg-accent/40"
           >
             {open === a.agent ? (
-              <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <Icon name="expand_more" size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <Icon name="chevron_right" size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
             )}
             <div className="min-w-0 flex-1">
               <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
-                <Bot className="h-3.5 w-3.5 text-violet-500" />
+                <Icon name="smart_toy" size={14} className="text-violet-500" />
                 {a.agent}
                 {a.custom && (
                   <Badge className="bg-emerald-500/15 text-[10px] text-emerald-500">мой агент</Badge>
@@ -221,7 +221,7 @@ export function AgentsSettings() {
             <div className="border-t bg-background/40 px-4 py-3">
               {loadingDetail === a.agent || !detail[a.agent] ? (
                 <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> читаю поведение…
+                  <Icon name="progress_activity" size={14} className="animate-spin" /> читаю поведение…
                 </p>
               ) : (
                 <div className="flex flex-col gap-3">
@@ -239,7 +239,7 @@ export function AgentsSettings() {
                   </pre>
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => void tuneInChat(a)}>
-                      <Wand2 className="mr-1 h-3.5 w-3.5" /> Помочь настроить
+                      <Icon name="auto_fix" size={14} className="mr-1" /> Помочь настроить
                     </Button>
                     {a.custom && (
                       <>
@@ -254,7 +254,7 @@ export function AgentsSettings() {
                           Изменить
                         </Button>
                         <Button size="sm" variant="destructive" onClick={() => setRemoving(a)}>
-                          <Trash2 className="mr-1 h-3.5 w-3.5" /> Удалить
+                          <Icon name="delete" size={14} className="mr-1" /> Удалить
                         </Button>
                       </>
                     )}
@@ -285,7 +285,7 @@ export function AgentsSettings() {
                 className="min-h-24"
               />
               <Button disabled={drafting} onClick={() => void composeDraft()}>
-                {drafting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
+                {drafting ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="auto_awesome" size={16} className="mr-1" />}
                 Собрать с нейронкой
               </Button>
             </div>
@@ -342,7 +342,7 @@ export function AgentsSettings() {
                   ← Заново
                 </Button>
                 <Button disabled={creating} onClick={() => void create()}>
-                  {creating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Bot className="mr-1 h-4 w-4" />}
+                  {creating ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="smart_toy" size={16} className="mr-1" />}
                   Создать агента
                 </Button>
               </DialogFooter>
@@ -367,7 +367,7 @@ export function AgentsSettings() {
               Отмена
             </Button>
             <Button disabled={saving} onClick={() => void saveEdit()}>
-              {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              {saving ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : null}
               Сохранить
             </Button>
           </DialogFooter>
@@ -391,7 +391,7 @@ export function AgentsSettings() {
                   Отмена
                 </Button>
                 <Button variant="destructive" disabled={deleting} onClick={() => void remove(removing)}>
-                  {deleting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1 h-4 w-4" />}
+                  {deleting ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="delete" size={16} className="mr-1" />}
                   Удалить
                 </Button>
               </DialogFooter>

@@ -1,7 +1,7 @@
 /** База знаний: дерево категорий, входящие, фильтры, сетка блоков. */
 
 import Link from "next/link";
-import { AlertTriangle, Inbox } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { api } from "@/lib/api";
 import type { BlockCard, CategoryNode } from "@/lib/types";
 import { CategorySidebar } from "@/components/kb/category-sidebar";
@@ -41,7 +41,7 @@ export default async function KbPage({ searchParams }: Props) {
           {inbox.length > 0 && (
             <Link href="/kb?view=inbox">
               <Badge variant="secondary" className="gap-1">
-                <Inbox className="h-3 w-3" /> Входящие: {inbox.length}
+                <Icon name="inbox" size={12} /> Входящие: {inbox.length}
               </Badge>
             </Link>
           )}
@@ -64,7 +64,7 @@ export default async function KbPage({ searchParams }: Props) {
         {sp.view === "inbox" && (
           <section className="mb-6">
             <h2 className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Inbox className="h-4 w-4" /> Входящие — подтвердите категорию
+              <Icon name="inbox" size={16} /> Входящие — подтвердите категорию
             </h2>
             <InboxPanel blocks={inbox} categories={categories} />
           </section>
@@ -72,7 +72,7 @@ export default async function KbPage({ searchParams }: Props) {
 
         {blocks.length === 0 ? (
           <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">
-            <AlertTriangle className="mx-auto mb-3 h-8 w-8 opacity-40" />
+            <Icon name="warning" size={32} className="mx-auto mb-3 opacity-40" />
             <p className="font-medium text-foreground">Здесь пока пусто</p>
             <p className="mt-1 text-sm">
               Блок рождается только через разговор с агентом:{" "}

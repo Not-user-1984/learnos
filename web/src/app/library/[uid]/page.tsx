@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookMarked } from "lucide-react";
-import { kindEmoji } from "@/lib/format";
+import { Icon } from "@/components/ui/icon";
+import { kindIcon } from "@/lib/format";
 import { api } from "@/lib/api";
 import type { ActivityCard, ChapterCard, SourceDetail } from "@/lib/types";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
@@ -41,8 +41,8 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
     <div className="h-full overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6 sm:py-6 lg:max-w-4xl xl:max-w-6xl 2xl:max-w-7xl">
         <header className="mb-5 flex flex-wrap items-start gap-x-3 gap-y-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/20 to-violet-500/20 text-2xl sm:h-14 sm:w-14 sm:text-3xl">
-            {kindEmoji(source.kind)}
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/20 to-violet-500/20 text-primary-foreground sm:h-14 sm:w-14">
+            <Icon name={kindIcon(source.kind)} size={30} />
           </div>
           <div className="min-w-0 flex-1 basis-56">
             <h1
@@ -99,7 +99,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
             {chapters.map((ch) => (
               <li key={ch.idx} className="border-b last:border-b-0">
                 <div className="flex flex-wrap items-start gap-x-2 gap-y-2 py-3">
-                  <BookMarked className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <Icon name="book_2" size={16} className="mt-1 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1 basis-64">
                     <div className="flex flex-wrap items-center gap-x-2">
                       <Link

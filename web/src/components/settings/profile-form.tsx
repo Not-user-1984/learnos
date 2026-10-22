@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import type { Profile } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -110,7 +110,7 @@ export function ProfileForm({ initial }: { initial: Profile }) {
 
       <div>
         <Button onClick={save} disabled={busy}>
-          {busy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+          {busy && <Icon name="progress_activity" size={16} className="mr-1.5 animate-spin" />}
           Сохранить профиль
         </Button>
       </div>

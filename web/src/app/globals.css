@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "material-symbols/rounded.css";
+@import "@fontsource-variable/literata/opsz.css";
 
 @plugin "@tailwindcss/typography";
 
@@ -51,6 +53,7 @@
 }
 
 :root {
+  --font-serif: "Literata Variable", Georgia, "Iowan Old Style", serif;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -86,37 +89,133 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
+  --background: oklch(0.16 0.012 290);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
+  --card: oklch(0.215 0.014 290);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.215 0.014 290);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
+  --primary: oklch(0.67 0.16 290);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.27 0.016 290);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --muted: oklch(0.27 0.016 290);
+  --muted-foreground: oklch(0.71 0.012 290);
+  --accent: oklch(0.28 0.02 290);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.6 0.12 290);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
+  --sidebar: oklch(0.205 0.014 290);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary: oklch(0.67 0.16 290);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent: oklch(0.27 0.02 290);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.6 0.12 290);
+}
+
+/* Тема «пергамент»: тёплая бумага, сепия, книжный serif (Literata). */
+.parchment {
+  --background: oklch(0.93 0.034 87);
+  --foreground: oklch(0.32 0.052 62);
+  --card: oklch(0.955 0.026 89);
+  --card-foreground: oklch(0.32 0.052 62);
+  --popover: oklch(0.955 0.026 89);
+  --popover-foreground: oklch(0.32 0.052 62);
+  --primary: oklch(0.47 0.105 55);
+  --primary-foreground: oklch(0.96 0.02 89);
+  --secondary: oklch(0.875 0.048 80);
+  --secondary-foreground: oklch(0.36 0.06 58);
+  --muted: oklch(0.885 0.042 84);
+  --muted-foreground: oklch(0.5 0.055 68);
+  --accent: oklch(0.865 0.055 78);
+  --accent-foreground: oklch(0.36 0.06 58);
+  --destructive: oklch(0.5 0.15 30);
+  --border: oklch(0.83 0.05 84);
+  --input: oklch(0.83 0.05 84);
+  --ring: oklch(0.5 0.09 60);
+  --chart-1: oklch(0.55 0.09 60);
+  --chart-2: oklch(0.45 0.08 45);
+  --chart-3: oklch(0.6 0.07 30);
+  --chart-4: oklch(0.35 0.05 70);
+  --chart-5: oklch(0.7 0.06 90);
+  --sidebar: oklch(0.9 0.038 86);
+  --sidebar-foreground: oklch(0.32 0.052 62);
+  --sidebar-primary: oklch(0.47 0.105 55);
+  --sidebar-primary-foreground: oklch(0.96 0.02 89);
+  --sidebar-accent: oklch(0.855 0.055 79);
+  --sidebar-accent-foreground: oklch(0.36 0.06 58);
+  --sidebar-border: oklch(0.83 0.05 84);
+  --sidebar-ring: oklch(0.5 0.09 60);
+}
+
+/* Иконки Material Symbols Rounded (Pixel/Android-стиль). */
+.ms {
+  font-family: "Material Symbols Rounded";
+  font-style: normal;
+  font-weight: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
+}
+.ms-filled {
+  font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24;
+}
+
+/* Пергамент: книжный шрифт интерфейса, зерно бумаги, тёплые заголовки. */
+html.parchment body {
+  font-family: var(--font-serif), Georgia, "Iowan Old Style", serif;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+}
+html.parchment h1,
+html.parchment h2,
+html.parchment h3,
+html.parchment h4 {
+  font-family: var(--font-serif), Georgia, serif;
+}
+/* Сепия для markdown-контента в пергаменте (перебивает prose-zinc). */
+html.parchment .prose {
+  --tw-prose-body: oklch(0.32 0.052 62);
+  --tw-prose-headings: oklch(0.26 0.055 55);
+  --tw-prose-lead: oklch(0.5 0.055 68);
+  --tw-prose-links: oklch(0.44 0.1 50);
+  --tw-prose-bold: oklch(0.26 0.055 55);
+  --tw-prose-counters: oklch(0.5 0.055 68);
+  --tw-prose-bullets: oklch(0.55 0.08 60);
+  --tw-prose-hr: oklch(0.83 0.05 84);
+  --tw-prose-quotes: oklch(0.36 0.06 58);
+  --tw-prose-quote-borders: oklch(0.55 0.09 60);
+  --tw-prose-captions: oklch(0.5 0.055 68);
+  --tw-prose-code: oklch(0.42 0.08 48);
+  --tw-prose-th-borders: oklch(0.83 0.05 84);
+  --tw-prose-td-borders: oklch(0.86 0.045 84);
+}
+html.parchment .prose blockquote {
+  font-style: italic;
+}
+/* Инлайн-код на бумаге — «чернильная» плашка. */
+html.parchment .prose :not(pre) > code {
+  background: oklch(0.86 0.045 82);
+  color: oklch(0.4 0.09 48);
+  border: 1px solid oklch(0.8 0.05 82);
 }
 
 @layer base {

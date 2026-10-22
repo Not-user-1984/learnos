@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, CheckCircle2, Loader2, Upload, Video } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import type { ChapterCard, SourceCard } from "@/lib/types";
 import { api, apiPost, apiUpload } from "@/lib/api";
@@ -228,10 +228,10 @@ export function StudyFlowDialog({
         <Tabs value={tab} onValueChange={(v) => v && setTab(v as "book" | "video")}>
           <TabsList className="w-full">
             <TabsTrigger value="book" className="flex-1 gap-1.5">
-              <BookOpen className="h-3.5 w-3.5" /> Книга
+              <Icon name="auto_stories" size={14} /> Книга
             </TabsTrigger>
             <TabsTrigger value="video" className="flex-1 gap-1.5">
-              <Video className="h-3.5 w-3.5" /> Видео
+              <Icon name="movie" size={14} /> Видео
             </TabsTrigger>
           </TabsList>
 
@@ -239,7 +239,7 @@ export function StudyFlowDialog({
             {step === "pick" && (
               <div className="flex flex-col gap-3">
                 <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground transition hover:border-violet-500/50 hover:text-foreground">
-                  {busy ? <Loader2 className="h-6 w-6 animate-spin" /> : <Upload className="h-6 w-6" />}
+                  {busy ? <Icon name="progress_activity" size={24} className="animate-spin" /> : <Icon name="upload" size={24} />}
                   {busy ? "Загружаю…" : "Выбери или перетащи PDF-книгу"}
                   <input
                     type="file"
@@ -262,7 +262,7 @@ export function StudyFlowDialog({
                       <SelectContent>
                         {processedBooks.map((s) => (
                           <SelectItem key={s.uid} value={s.uid}>
-                            📕 {s.title} · {s.chapters_count} гл.
+                            <><Icon name="menu_book" size={16} /> {s.title} · {s.chapters_count} гл.</>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -283,7 +283,7 @@ export function StudyFlowDialog({
                   onKeyDown={(e) => e.key === "Enter" && void startVideo()}
                 />
                 <Button disabled={busy || !videoUrl.trim()} onClick={startVideo}>
-                  {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Video className="mr-1 h-4 w-4" />}
+                  {busy ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="movie" size={16} className="mr-1" />}
                   Добавить и обработать
                 </Button>
               </div>
@@ -293,7 +293,7 @@ export function StudyFlowDialog({
           {step === "processing" && job && (
             <div className="flex flex-col gap-3 py-4">
               <p className="flex items-center gap-2 text-sm font-medium">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Icon name="progress_activity" size={16} className="animate-spin" />
                 {(sourceKind === "video" ? JOB_LABEL_VIDEO : JOB_LABEL_BOOK)[
                   job.status === "done" ? "summarize_chapters" : "process_source"
                 ] ?? "Обрабатываю источник"}
@@ -313,7 +313,7 @@ export function StudyFlowDialog({
             <div className="flex flex-col gap-4 pt-2">
               <div>
                 <p className="flex items-center gap-1.5 text-sm font-medium">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  <Icon name="check_circle" size={16} className="text-emerald-500" />
                   {sourceKind === "video" ? "Видео готово к разбору" : "Карта изучения"}: {sourceTitle}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -342,16 +342,16 @@ export function StudyFlowDialog({
                     if (val === "quick" || val === "session") setMode(val);
                   }}
                 >
-                  <ToggleGroupItem value="quick">⚡ Быстрый разбор</ToggleGroupItem>
-                  <ToggleGroupItem value="session">🎓 Сессия-урок</ToggleGroupItem>
+                  <ToggleGroupItem value="quick"><Icon name="bolt" size={16} /> Быстрый разбор</ToggleGroupItem>
+                  <ToggleGroupItem value="session"><Icon name="school" size={16} /> Сессия-урок</ToggleGroupItem>
                 </ToggleGroup>
                 <Button className="ml-auto" disabled={busy} onClick={startStudying}>
                   {busy ? (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    <Icon name="progress_activity" size={16} className="mr-1 animate-spin" />
                   ) : sourceKind === "video" ? (
-                    <Video className="mr-1 h-4 w-4" />
+                    <Icon name="movie" size={16} className="mr-1" />
                   ) : (
-                    <BookOpen className="mr-1 h-4 w-4" />
+                    <Icon name="auto_stories" size={16} className="mr-1" />
                   )}
                   Начать{sourceKind === "book" && chapters.length > 1 ? " с главы 1" : ""}
                 </Button>

@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, ClipboardCopy, Loader2, NotebookPen, Pencil, Settings2, Terminal, X } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import type { Card, NoteDraft } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +52,7 @@ function CommandCardView({ card, onInsert }: { card: Card; onInsert?: (t: string
     <div className="rounded-xl border bg-card p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Badge className="gap-1 bg-violet-500/15 text-violet-500 hover:bg-violet-500/25">
-          <Terminal className="h-3 w-3" /> {card.machine_name ?? card.machine ?? ""}
+          <Icon name="terminal" size={12} /> {card.machine_name ?? card.machine ?? ""}
         </Badge>
         <Badge className={RISK_COLORS[risk] ?? RISK_COLORS.low}>риск: {card.risk ?? "low"}</Badge>
         {card.step !== undefined && <span className="text-xs text-muted-foreground">шаг {card.step}</span>}
@@ -66,7 +66,7 @@ function CommandCardView({ card, onInsert }: { card: Card; onInsert?: (t: string
             navigator.clipboard.writeText(card.command ?? "").then(() => toast.success("Команда скопирована"));
           }}
         >
-          <ClipboardCopy className="h-4 w-4" /> Копировать
+          <Icon name="content_copy" size={16} /> Копировать
         </Button>
         {onInsert && (
           <Button size="sm" variant="outline" onClick={() => onInsert("```\n(вставь сюда вывод команды)\n```")}>
@@ -113,12 +113,12 @@ function QuestionCardView({ card }: { card: Card }) {
 }
 
 function EvaluationCardView({ card }: { card: Card }) {
-  const icon = card.verdict === "understood" ? "✅" : card.verdict === "partial" ? "◐" : "❌";
+  const icon = card.verdict === "understood" ? "check_circle" : card.verdict === "partial" ? "contrast" : "cancel";
   const label = card.verdict === "understood" ? "понял" : card.verdict === "partial" ? "частично" : "мимо";
   return (
     <div className="rounded-xl border p-4">
-      <p className="mb-1 font-medium">
-        {icon} {label}
+      <p className="mb-1 flex items-center gap-1.5 font-medium">
+        <Icon name={icon} size={18} filled /> {label}
       </p>
       <p className="text-sm text-muted-foreground">{card.comment}</p>
       {card.weak_spot && (
@@ -136,7 +136,7 @@ function BlockCardView({ card }: { card: Card }) {
     return (
       <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4">
         <p className="mb-1 flex items-center gap-2 text-sm font-medium">
-          <Check className="h-4 w-4 text-emerald-500" /> Блок сохранён ({card.kind === "lesson" ? "урок" : "конспект"})
+          <Icon name="check" size={16} className="text-emerald-500" /> Блок сохранён ({card.kind === "lesson" ? "урок" : "конспект"})
         </p>
         <p className="font-medium">{card.title}</p>
         {card.summary && <p className="mt-1 text-sm text-muted-foreground">{card.summary}</p>}
@@ -180,7 +180,7 @@ function BlockCardView({ card }: { card: Card }) {
             }
           }}
         >
-          {restoring && <Loader2 className="h-3 w-3 animate-spin" />}
+          {restoring && <Icon name="progress_activity" size={12} className="animate-spin" />}
           Откатить к v{card.from_version}
         </button>
       </div>
@@ -211,7 +211,7 @@ function NoteDraftCardView({
   return (
     <div className="rounded-xl border border-sky-500/40 bg-sky-500/5 p-4">
       <p className="mb-1 flex items-center gap-2 text-sm font-medium">
-        <NotebookPen className="h-4 w-4 text-sky-500" /> Превью конспекта
+        <Icon name="edit_note" size={16} className="text-sky-500" /> Превью конспекта
         {card.preview_id ? ` #${card.preview_id}` : ""} · ничего не записано
       </p>
       <p className="font-medium">{d.title}</p>
@@ -291,7 +291,7 @@ function NoteDraftCardView({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {onSend ? (
           <Button size="sm" disabled={busy} onClick={approve}>
-            {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
+            {busy ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="check" size={16} className="mr-1" />}
             Записать в базу
           </Button>
         ) : (
@@ -299,7 +299,7 @@ function NoteDraftCardView({
         )}
         {onInsert && !busy && (
           <Button size="sm" variant="outline" onClick={() => onInsert(`Поправим конспект (превью #${card.preview_id}): `)}>
-            <Pencil className="mr-1 h-4 w-4" /> Поправить
+            <Icon name="edit" size={16} className="mr-1" /> Поправить
           </Button>
         )}
         <span className="text-xs text-muted-foreground">
@@ -331,7 +331,7 @@ function PromptChangeCardView({ card }: { card: Card }) {
   return (
     <div className="rounded-xl border border-sky-500/40 bg-sky-500/5 p-4">
       <p className="mb-1 flex items-center gap-2 text-sm font-medium">
-        <Settings2 className="h-4 w-4 text-sky-500" />
+        <Icon name="tune" size={16} className="text-sky-500" />
         Правка промпта: <b>{card.agent}</b>
       </p>
       <p className="mb-2 text-sm text-muted-foreground">{card.summary}</p>
@@ -354,16 +354,16 @@ function PromptChangeCardView({ card }: { card: Card }) {
       {status === "pending" ? (
         <div className="mt-3 flex gap-2">
           <Button size="sm" disabled={busy} onClick={() => void act("approve")}>
-            {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
+            {busy ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="check" size={16} className="mr-1" />}
             Применить
           </Button>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void act("reject")}>
-            <X className="mr-1 h-4 w-4" /> Отклонить
+            <Icon name="close" size={16} className="mr-1" /> Отклонить
           </Button>
         </div>
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">
-          {status === "applied" ? "✅ применено — поведение агента обновлено" : "отклонено"}
+          {status === "applied" ? (<><Icon name="check_circle" size={16} className="mr-1 inline align-[-2px]" filled /> применено — поведение агента обновлено</>) : "отклонено"}
         </p>
       )}
     </div>

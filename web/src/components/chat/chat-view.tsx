@@ -5,7 +5,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CircleStop, GraduationCap, HelpCircle, Loader2, NotebookPen, Paperclip, SendHorizontal, Target, Terminal } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import type { ChatMessage, ConversationDetail, SseEvent } from "@/lib/types";
 import { useSearchParams } from "next/navigation";
@@ -287,12 +287,12 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
                   </div>
                 ) : (
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" /> агент думает…
+                    <Icon name="progress_activity" size={16} className="animate-spin" /> агент думает…
                   </p>
                 )}
                 {reconnecting && (
                   <p className="mt-2 flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                    <Loader2 className="h-4 w-4 animate-spin" /> связь прервалась — догоняю ответ агента…
+                    <Icon name="progress_activity" size={16} className="animate-spin" /> связь прервалась — догоняю ответ агента…
                   </p>
                 )}
               </div>
@@ -324,7 +324,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
               onClick={() => void send("Фейнман: запусти проверку — задай следующий вопрос по пройденному (карточкой ask).")}
               className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-sm text-violet-500 transition hover:bg-violet-500/20"
             >
-              <HelpCircle className="h-4 w-4" /> Фейнман-вопросы
+              <Icon name="help" size={16} /> Фейнман-вопросы
             </button>
           </div>
         )}
@@ -334,7 +334,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
               onClick={() => void send("Закрепим материал нашего разговора: задай вопросы по ключевым понятиям, по одному за раз.")}
               className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-500 transition hover:bg-sky-500/20"
             >
-              <Target className="h-4 w-4" /> Закрепить пройденное
+              <Icon name="track_changes" size={16} /> Закрепить пройденное
             </button>
             <button
               onClick={() =>
@@ -342,14 +342,14 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
               }
               className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-500 transition hover:bg-emerald-500/20"
             >
-              <NotebookPen className="h-4 w-4" /> Конспект в базу знаний
+              <Icon name="edit_note" size={16} /> Конспект в базу знаний
             </button>
             <button
               onClick={() => void buildCourse()}
               disabled={courseBusy}
               className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-sm text-violet-500 transition hover:bg-violet-500/20 disabled:opacity-60"
             >
-              {courseBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <GraduationCap className="h-4 w-4" />}
+              {courseBusy ? <Icon name="progress_activity" size={16} className="animate-spin" /> : <Icon name="school" size={16} />}
               Собрать курс
             </button>
           </div>
@@ -357,7 +357,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
         <div className="border-t p-3">
           <div className="mx-auto flex max-w-3xl items-end gap-2">
             <Button variant="ghost" size="icon" aria-label="Прикрепить" onClick={() => toast.info("Загрузка PDF — на странице Библиотеки")}>
-              <Paperclip className="h-4 w-4" />
+              <Icon name="attach_file" size={16} />
             </Button>
             <Textarea
               value={input}
@@ -374,11 +374,11 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
             />
             {streaming ? (
               <Button variant="destructive" size="icon" aria-label="Стоп" onClick={stop}>
-                <CircleStop className="h-4 w-4" />
+                <Icon name="stop_circle" size={16} />
               </Button>
             ) : (
               <Button size="icon" aria-label="Отправить" disabled={!input.trim()} onClick={() => void send(input)}>
-                <SendHorizontal className="h-4 w-4" />
+                <Icon name="send" size={16} />
               </Button>
             )}
           </div>
@@ -478,7 +478,7 @@ function Message({
   }
   return (
     <div className="flex flex-col gap-2">
-      <p className="px-1 text-xs text-muted-foreground">🤖 Агент · {time}</p>
+      <p className="flex items-center gap-1 px-1 text-xs text-muted-foreground"><Icon name="smart_toy" size={14} /> Агент · {time}</p>
       <div className="rounded-2xl border bg-muted/50 px-5 py-4">
         <Markdown content={message.content} className={CHAT_PROSE} />
       </div>
@@ -504,7 +504,7 @@ function ToolChipView({ chip }: { chip: ToolChip }) {
               : "text-muted-foreground",
         )}
       >
-        <Terminal className="h-3 w-3" />
+        <Icon name="terminal" size={12} />
         {chip.label || chip.name}
         {(chip.count ?? 1) > 1 && (
           <span
@@ -514,7 +514,7 @@ function ToolChipView({ chip }: { chip: ToolChip }) {
             ×{chip.count}
           </span>
         )}
-        {chip.ok === undefined && <Loader2 className="h-3 w-3 animate-spin" />}
+        {chip.ok === undefined && <Icon name="progress_activity" size={12} className="animate-spin" />}
       </button>
       {open && chip.summary && <p className="mt-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{chip.summary}</p>}
     </div>

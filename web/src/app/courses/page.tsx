@@ -1,7 +1,7 @@
 /** Курсы: список с прогрессом + создание (вручную/агентом). */
 
 import Link from "next/link";
-import { GraduationCap } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { api } from "@/lib/api";
 import type { Course } from "@/lib/types";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
@@ -19,7 +19,7 @@ export default async function CoursesPage() {
       </header>
       {courses.length === 0 ? (
         <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">
-          <GraduationCap className="mx-auto mb-3 h-8 w-8 opacity-40" />
+          <Icon name="school" size={32} className="mx-auto mb-3 opacity-40" />
           <p className="font-medium text-foreground">Курсов нет</p>
           <p className="mt-1 text-sm">Курс — подборка источников и блоков по теме. Можно собрать вручную или поручить агенту.</p>
         </div>

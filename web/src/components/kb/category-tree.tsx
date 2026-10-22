@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Inbox } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import type { CategoryNode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +27,7 @@ export function CategoryTree({ nodes, active }: { nodes: CategoryNode[]; active:
           !active && "bg-accent/60",
         )}
       >
-        <Inbox className="h-3.5 w-3.5 text-muted-foreground" />
+        <Icon name="inbox" size={14} className="text-muted-foreground" />
         Все блоки
       </Link>
       {nodes.map((n) => (
@@ -45,7 +45,7 @@ function Node({ node, active, depth }: { node: CategoryNode; active: string | nu
       <div className="flex items-center gap-1" style={{ paddingLeft: depth * 12 }}>
         {node.children.length > 0 ? (
           <button aria-label="Раскрыть" onClick={() => setOpen((v) => !v)} className="rounded p-0.5 hover:bg-accent">
-            {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+            {open ? <Icon name="expand_more" size={14} className="text-muted-foreground" /> : <Icon name="chevron_right" size={14} className="text-muted-foreground" />}
           </button>
         ) : (
           <span className="w-5" />

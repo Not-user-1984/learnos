@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Zap } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import { apiPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -55,7 +55,7 @@ export function SourceActions({
         title={chapterIdx ? `Быстрый разбор главы ${chapterIdx}` : "Быстрый разбор источника"}
         onClick={() => void start("quick")}
       >
-        <Zap className="h-4 w-4 text-amber-500" />
+        <Icon name="bolt" size={16} className="text-amber-500" />
         <span className="hidden lg:inline">Быстрый разбор</span>
       </Button>
       <Button
@@ -64,7 +64,7 @@ export function SourceActions({
         title={chapterIdx ? `Сессия по главе ${chapterIdx}` : "Сессия по источнику"}
         onClick={() => void start("session")}
       >
-        <GraduationCap className="h-4 w-4" />
+        <Icon name="school" size={16} />
         <span className="hidden lg:inline">Сессия</span>
       </Button>
     </div>

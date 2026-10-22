@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight, History, Loader2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import type { ConversationItem } from "@/lib/types";
 import { api } from "@/lib/api";
@@ -43,7 +43,7 @@ export function ChapterHistoryButton({
   return (
     <>
       <Button variant="outline" size={size === "icon" ? "icon" : "sm"} aria-label="История разговоров по главе" onClick={() => void openHistory()}>
-        <History className={size === "icon" ? "h-4 w-4" : "mr-1 h-4 w-4"} />
+        <Icon name="history" size={16} className={size === "icon" ? "" : "mr-1"} />
         {size === "sm" && "История"}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -55,7 +55,7 @@ export function ChapterHistoryButton({
           </DialogHeader>
           {history === null && (
             <p className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> ищу разговоры…
+              <Icon name="progress_activity" size={16} className="animate-spin" /> ищу разговоры…
             </p>
           )}
           {history !== null && history.length === 0 && (
@@ -84,7 +84,7 @@ export function ChapterHistoryButton({
                     {c.messages_count ? ` · ${c.messages_count} сообщ.` : ""}
                   </p>
                 </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <Icon name="chevron_right" size={16} className="shrink-0 text-muted-foreground" />
               </Link>
             ))}
           </div>

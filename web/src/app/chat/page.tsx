@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { modeEmoji, modeLabel } from "@/lib/format";
+import { Icon } from "@/components/ui/icon";
+import { modeIcon, modeLabel } from "@/lib/format";
 import type { ConversationItem } from "@/lib/types";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { StudyButtons, StudyEmptyState } from "@/components/chat/study-buttons";
@@ -31,7 +32,7 @@ export default async function ChatListPage() {
               className="group relative flex items-center gap-3 rounded-xl border bg-card p-4 transition hover:border-violet-500/50"
             >
               <Link href={`/chat/${c.uid}`} className="flex min-w-0 flex-1 items-center gap-3">
-                <span className="text-lg">{modeEmoji(c.mode)}</span>
+                <Icon name={modeIcon(c.mode)} size={22} className="text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{c.title}</p>
                   <p className="text-xs text-muted-foreground">{modeLabel(c.mode)}</p>
@@ -41,7 +42,7 @@ export default async function ChatListPage() {
               <ConfirmDeleteButton
                 endpoint={`/conversations/${c.uid}`}
                 title="Удалить разговор?"
-                name={`${modeEmoji(c.mode)} ${c.title}`}
+                name={c.title}
                 description="Сообщения разговора удалятся безвозвратно. Блоки базы знаний, созданные по нему, останутся."
                 successMessage="Разговор удалён"
                 className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 transition group-hover:opacity-100"

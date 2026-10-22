@@ -3,7 +3,7 @@
 /** Кнопки интеграций: тест Telegram-моста. */
 
 import { useState } from "react";
-import { Loader2, MessageCircle, Send } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import { api, apiPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -31,11 +31,11 @@ export function TelegramTestButton() {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Button variant="outline" onClick={send} disabled={busy}>
-        {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+        {busy ? <Icon name="progress_activity" size={16} className="mr-1.5 animate-spin" /> : <Icon name="send" size={16} className="mr-1.5" />}
         Отправить тест
       </Button>
       <Button variant="ghost" size="sm" onClick={check}>
-        <MessageCircle className="mr-1.5 h-4 w-4" />
+        <Icon name="chat_bubble" size={16} className="mr-1.5" />
         {state ? (state.configured ? "мост настроен" : "нет токена") : "статус"}
       </Button>
     </div>

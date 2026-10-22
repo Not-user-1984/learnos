@@ -5,21 +5,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  BookOpen,
-  Brain,
-  ChevronsLeft,
-  ChevronsRight,
-  GraduationCap,
-  Inbox,
-  Library,
-  Menu,
-  MessageSquare,
-  Search,
-  Settings,
-  X,
-} from "lucide-react";
-import { modeEmoji } from "@/lib/format";
+import { Icon } from "@/components/ui/icon";
+import { modeIcon } from "@/lib/format";
 import { api } from "@/lib/api";
 import type { BlockCard, ConversationItem } from "@/lib/types";
 import { CommandPalette } from "@/components/command-palette";
@@ -28,11 +15,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/chat", label: "Чат", icon: MessageSquare },
-  { href: "/kb", label: "База знаний", icon: Brain },
-  { href: "/library", label: "Библиотека", icon: Library },
-  { href: "/courses", label: "Курсы", icon: GraduationCap },
-  { href: "/settings", label: "Настройки", icon: Settings },
+  { href: "/chat", label: "Чат", icon: "chat" },
+  { href: "/kb", label: "База знаний", icon: "psychology" },
+  { href: "/library", label: "Библиотека", icon: "collections_bookmark" },
+  { href: "/courses", label: "Курсы", icon: "school" },
+  { href: "/settings", label: "Настройки", icon: "settings" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -49,7 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const nav = (
     <nav className="flex flex-col gap-1 p-2">
-      {NAV.map(({ href, label, icon: Icon }) => {
+      {NAV.map(({ href, label, icon }) => {
         const active = pathname.startsWith(href);
         return (
           <Link
@@ -62,11 +49,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "hover:bg-sidebar-accent/50",
             )}
           >
-            <Icon className="h-4 w-4 shrink-0" />
+            <Icon name={icon} size={20} filled={pathname.startsWith(href)} className="shrink-0" />
             {!collapsed && <span>{label}</span>}
             {!collapsed && href === "/kb" && inbox !== null && inbox > 0 && (
               <span className="ml-auto flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-xs text-violet-500">
-                <Inbox className="h-3 w-3" />
+                <Icon name="inbox" size={12} />
                 {inbox}
               </span>
             )}
@@ -88,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="block truncate rounded-md px-2 py-1.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent/50"
             title={c.title}
           >
-            {modeEmoji(c.mode)} {c.title}
+            <Icon name={modeIcon(c.mode)} size={14} className="text-muted-foreground" /> {c.title}
           </Link>
         ))}
       </div>
@@ -104,17 +91,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className="flex h-14 items-center gap-2 border-b px-3">
-          <BookOpen className="h-5 w-5 shrink-0 text-violet-500" />
+          <Icon name="auto_stories" size={20} className="shrink-0 text-violet-500" />
           {!collapsed && <span className="font-semibold">LearnOS</span>}
         </div>
         {nav}
         {recents}
         <div className="mt-auto flex items-center justify-between border-t p-2">
           <Button variant="ghost" size="icon" aria-label="Поиск (⌘K)" onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))}>
-            <Search className="h-4 w-4" />
+            <Icon name="search" size={16} />
           </Button>
           <Button variant="ghost" size="icon" aria-label="Свернуть меню" onClick={() => setCollapsed((v) => !v)}>
-            {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+            {collapsed ? <Icon name="keyboard_double_arrow_right" size={16} /> : <Icon name="keyboard_double_arrow_left" size={16} />}
           </Button>
         </div>
       </aside>
@@ -125,10 +112,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button aria-label="Закрыть меню" className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-sidebar text-sidebar-foreground">
             <div className="flex h-14 items-center gap-2 border-b px-3">
-              <BookOpen className="h-5 w-5 text-violet-500" />
+              <Icon name="auto_stories" size={20} className="text-violet-500" />
               <span className="font-semibold">LearnOS</span>
               <Button variant="ghost" size="icon" className="ml-auto" aria-label="Закрыть меню" onClick={() => setMobileOpen(false)}>
-                <X className="h-4 w-4" />
+                <Icon name="close" size={16} />
               </Button>
             </div>
             {nav}
@@ -140,7 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center gap-2 border-b px-3 md:justify-end md:px-4">
           <Button variant="ghost" size="icon" className="md:hidden" aria-label="Меню" onClick={() => setMobileOpen(true)}>
-            <Menu className="h-5 w-5" />
+            <Icon name="menu" size={20} />
           </Button>
           <span className="font-semibold md:hidden">LearnOS</span>
           <div className="ml-auto">

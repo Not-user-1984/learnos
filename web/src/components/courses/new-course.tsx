@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import { apiPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -69,7 +69,7 @@ export function NewCourseButton() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button size="sm" />}>
-        <Plus className="h-4 w-4" /> Новый курс
+        <Icon name="add" size={16} /> Новый курс
       </DialogTrigger>
       <DialogContent className="max-h-[80dvh] overflow-y-auto">
         <DialogHeader>

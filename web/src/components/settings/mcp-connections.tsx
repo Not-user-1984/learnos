@@ -3,7 +3,7 @@
 /** Сторонние MCP-подключения: список со статусами, конструктор (ссылка/конфиг → LLM), проверка, удаление. */
 
 import { useCallback, useEffect, useState } from "react";
-import { Cable, Loader2, Plug, PlugZap, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import { api, apiDelete, apiPost } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -152,7 +152,7 @@ export function McpConnections() {
           инструменты сразу появятся у агентов.
         </p>
         <Button size="sm" variant="outline" onClick={() => { setDraft(null); setProbeResult(null); setOpen(true); }}>
-          <Plus className="mr-1 h-4 w-4" /> Подключить MCP
+          <Icon name="add" size={16} className="mr-1" /> Подключить MCP
         </Button>
       </div>
 
@@ -165,7 +165,7 @@ export function McpConnections() {
         const st = STATUS_VIEW[m.status] ?? STATUS_VIEW.unchecked;
         return (
           <div key={m.name} className="flex items-start gap-3 rounded-xl border bg-card px-4 py-3">
-            <Cable className={cn("mt-0.5 h-4 w-4 shrink-0", m.status === "ok" ? "text-emerald-500" : "text-muted-foreground")} />
+            <Icon name="cable" size={16} className={cn("mt-0.5 shrink-0", m.status === "ok" ? "text-emerald-500" : "text-muted-foreground")} />
             <div className="min-w-0 flex-1">
               <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
                 {m.name}
@@ -190,10 +190,10 @@ export function McpConnections() {
             </div>
             <div className="flex shrink-0 gap-1">
               <Button size="sm" variant="ghost" aria-label="Обновить" disabled={busy === m.name} onClick={() => void refresh(m.name)}>
-                {busy === m.name ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                {busy === m.name ? <Icon name="progress_activity" size={14} className="animate-spin" /> : <Icon name="refresh" size={14} />}
               </Button>
               <Button size="sm" variant="ghost" aria-label="Отключить" disabled={busy === m.name} onClick={() => setRemoving(m)}>
-                <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                <Icon name="delete" size={14} className="text-rose-500" />
               </Button>
             </div>
           </div>
@@ -227,7 +227,7 @@ export function McpConnections() {
                 локальные stdio-конфиги (command/npx) не подходят.
               </p>
               <Button disabled={drafting} onClick={() => void composeDraft()}>
-                {drafting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
+                {drafting ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="auto_awesome" size={16} className="mr-1" />}
                 Разобрать с нейронкой
               </Button>
             </div>
@@ -265,11 +265,11 @@ export function McpConnections() {
                   ← Заново
                 </Button>
                 <Button variant="outline" disabled={probing || creating} onClick={() => void probe()}>
-                  {probing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <PlugZap className="mr-1 h-4 w-4" />}
+                  {probing ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="electric_bolt" size={16} className="mr-1" />}
                   Проверить
                 </Button>
                 <Button disabled={creating} onClick={() => void create()}>
-                  {creating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Plug className="mr-1 h-4 w-4" />}
+                  {creating ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="power" size={16} className="mr-1" />}
                   Подключить
                 </Button>
               </DialogFooter>
@@ -291,7 +291,7 @@ export function McpConnections() {
               Отмена
             </Button>
             <Button variant="destructive" onClick={() => removing && void remove(removing)}>
-              <Trash2 className="mr-1 h-4 w-4" /> Отключить
+              <Icon name="delete" size={16} className="mr-1" /> Отключить
             </Button>
           </DialogFooter>
         </DialogContent>

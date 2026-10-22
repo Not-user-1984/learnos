@@ -1,7 +1,7 @@
 /** Общие подписи и эмодзи для UI: источники и режимы чата — единое место правды. */
 
-export function kindEmoji(kind: string): string {
-  return kind === "book" ? "📕" : kind === "video" ? "🎬" : "🌐";
+export function kindIcon(kind: string): string {
+  return kind === "book" ? "menu_book" : kind === "video" ? "movie" : "public";
 }
 
 export const MODE_LABEL: Record<string, string> = {
@@ -16,7 +16,7 @@ export function modeLabel(mode: string): string {
   return MODE_LABEL[mode] ?? mode;
 }
 
-export function modeEmoji(mode: string): string {
-  if (mode.startsWith("agent:")) return "🤖";
-  return mode === "quick" ? "⚡" : mode === "session" ? "🎓" : mode === "tuning" ? "⚙️" : "💬";
+export function modeIcon(mode: string): string {
+  if (mode.startsWith("agent:")) return "smart_toy";
+  return mode === "quick" ? "bolt" : mode === "session" ? "school" : mode === "tuning" ? "tune" : "chat";
 }

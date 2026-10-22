@@ -4,9 +4,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
-import { kindEmoji } from "@/lib/format";
+import { kindIcon } from "@/lib/format";
 import type { SourceDetail } from "@/lib/types";
 import { api, apiPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,7 @@ export function NewConversationButton() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button size="sm" />}>
-        <Plus className="h-4 w-4" /> Новый разговор
+        <Icon name="add" size={16} /> Новый разговор
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -78,13 +78,13 @@ export function NewConversationButton() {
             }}
             className="justify-start"
           >
-            <ToggleGroupItem value="quick">⚡ Быстрый разбор</ToggleGroupItem>
-            <ToggleGroupItem value="session">🎓 Сессия</ToggleGroupItem>
-            <ToggleGroupItem value="free">💬 Свободный</ToggleGroupItem>
-            <ToggleGroupItem value="tuning">⚙️ Настроить агента</ToggleGroupItem>
+            <ToggleGroupItem value="quick"><Icon name="bolt" size={16} /> Быстрый разбор</ToggleGroupItem>
+            <ToggleGroupItem value="session"><Icon name="school" size={16} /> Сессия</ToggleGroupItem>
+            <ToggleGroupItem value="free"><Icon name="chat" size={16} /> Свободный</ToggleGroupItem>
+            <ToggleGroupItem value="tuning"><Icon name="tune" size={16} /> Настроить агента</ToggleGroupItem>
             {customAgents.map((a) => (
               <ToggleGroupItem key={a.name} value={`agent:${a.name}`} title={a.description}>
-                🤖 {a.name}
+                <><Icon name="smart_toy" size={16} /> {a.name}</>
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
@@ -98,7 +98,7 @@ export function NewConversationButton() {
                 <SelectContent>
                   {sources.map((s) => (
                     <SelectItem key={s.uid} value={s.uid}>
-                      {kindEmoji(s.kind)} {s.title}
+                      <Icon name={kindIcon(s.kind)} size={16} /> {s.title}
                     </SelectItem>
                   ))}
                 </SelectContent>

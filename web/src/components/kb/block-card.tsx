@@ -3,7 +3,7 @@
 /** Карточка блока в сетке базы знаний. */
 
 import Link from "next/link";
-import { AlertTriangle, BookMarked, Video } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import type { BlockCard } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { CATEGORY_COLORS } from "./category-tree";
@@ -27,13 +27,13 @@ export function BlockCard({ block }: { block: BlockCard }) {
         <Badge variant="outline">{block.kind === "lesson" ? "урок" : "конспект"}</Badge>
         {src && (
           <span className="inline-flex items-center gap-1">
-            {src.source.startsWith("src") ? <BookMarked className="h-3 w-3" /> : <Video className="h-3 w-3" />}
+            {src.source.startsWith("src") ? <Icon name="book_2" size={12} /> : <Icon name="movie" size={12} />}
             {src.title || src.source}
           </span>
         )}
         {block.weak_spots_count > 0 && (
           <span className="inline-flex items-center gap-1 text-amber-500">
-            <AlertTriangle className="h-3 w-3" />
+            <Icon name="warning" size={12} />
             {block.weak_spots_count}
           </span>
         )}

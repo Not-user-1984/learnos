@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Trash2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import { apiDelete } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -74,11 +74,11 @@ export function ConfirmDeleteButton({
             "rounded-lg bg-background/60 p-1.5 text-muted-foreground backdrop-blur transition hover:text-rose-500"
           }
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Icon name="delete" size={14} />
         </button>
       ) : (
         <Button variant="outline" size="sm" className={buttonClassName} onClick={() => setOpen(true)}>
-          <Trash2 className="h-3.5 w-3.5" />
+          <Icon name="delete" size={14} />
           {label ?? "Удалить"}
         </Button>
       )}
@@ -95,7 +95,7 @@ export function ConfirmDeleteButton({
               Отмена
             </Button>
             <Button variant="destructive" disabled={deleting} onClick={() => void confirm()}>
-              {deleting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1 h-4 w-4" />}
+              {deleting ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="delete" size={16} className="mr-1" />}
               Удалить
             </Button>
           </DialogFooter>

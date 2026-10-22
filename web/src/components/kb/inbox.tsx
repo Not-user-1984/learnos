@@ -4,7 +4,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Inbox } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import type { BlockCard, CategoryNode } from "@/lib/types";
 import { apiPost } from "@/lib/api";
@@ -32,7 +32,7 @@ export function InboxPanel({ blocks, categories }: { blocks: BlockCard[]; catego
   if (blocks.length === 0) {
     return (
       <p className="flex items-center gap-2 rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-        <Inbox className="h-4 w-4" /> Входящие пусты: у всех блоков категория подтверждена
+        <Icon name="inbox" size={16} /> Входящие пусты: у всех блоков категория подтверждена
       </p>
     );
   }
@@ -63,7 +63,7 @@ export function InboxPanel({ blocks, categories }: { blocks: BlockCard[]; catego
               disabled={busy === b.block_uid || pending}
               onClick={() => confirm(b.block_uid, b.category_path)}
             >
-              <Check className="h-4 w-4" /> Принять
+              <Icon name="check" size={16} /> Принять
             </Button>
           </span>
         </div>

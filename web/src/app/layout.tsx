@@ -6,7 +6,8 @@ import { AppShell } from "@/components/app-shell";
 import { SwRegister } from "@/components/sw-register";
 import "./globals.css";
 
-// Inter/JetBrains Mono вместо Geist: у Geist нет кириллицы, интерфейс русский
+// Inter/JetBrains Mono вместо Geist: у Geist нет кириллицы, интерфейс русский.
+// Literata (книжный serif для «пергамента» и читалки) — self-host через @fontsource в globals.css.
 const sans = Inter({ variable: "--font-sans", subsets: ["latin", "cyrillic"] });
 const mono = JetBrains_Mono({ variable: "--font-geist-mono", subsets: ["latin", "cyrillic"] });
 
@@ -19,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ru" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} themes={["dark", "light", "parchment"]}>
           <AppShell>{children}</AppShell>
           <Toaster richColors position="bottom-right" />
           <SwRegister />

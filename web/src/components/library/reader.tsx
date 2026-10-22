@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AArrowDown, AArrowUp, ChevronLeft, ChevronRight, Loader2, MessageCircle, Search } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import { apiPost } from "@/lib/api";
 import { formatChapter } from "@/lib/reader-format";
@@ -31,7 +31,7 @@ const FAMILY_EVENT = "learnos-reader-family-change";
 
 const FAMILIES = [
   { value: "sans", label: "Обычный", css: "ui-sans-serif, system-ui, sans-serif" },
-  { value: "serif", label: "Книжный", css: "Georgia, 'Iowan Old Style', serif" },
+  { value: "serif", label: "Книжный", css: "var(--font-serif), Georgia, 'Iowan Old Style', serif" },
   { value: "mono", label: "Моно", css: "ui-monospace, 'SF Mono', Menlo, monospace" },
 ];
 
@@ -114,16 +114,16 @@ export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, 
     <div className="flex h-full flex-col">
       <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur sm:px-4">
         <Link href={`/library/${sourceUid}`} className="flex min-w-0 items-center gap-1 text-sm text-violet-500 hover:underline">
-          <ChevronLeft className="h-4 w-4 shrink-0" />
+          <Icon name="chevron_left" size={16} className="shrink-0" />
           <span className="truncate">{sourceTitle}</span>
         </Link>
         <span className="ml-auto hidden text-sm text-muted-foreground sm:block">Глава {chapter.idx}</span>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" aria-label="Меньше шрифт" onClick={() => changeFont(-0.05)}>
-            <AArrowDown className="h-4 w-4" />
+            <Icon name="text_decrease" size={16} />
           </Button>
           <Button variant="ghost" size="icon" aria-label="Больше шрифт" onClick={() => changeFont(0.05)}>
-            <AArrowUp className="h-4 w-4" />
+            <Icon name="text_increase" size={16} />
           </Button>
           <select
             aria-label="Гарнитура"
@@ -139,7 +139,7 @@ export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, 
           </select>
           <ChapterHistoryButton sourceUid={sourceUid} chapterIdx={chapter.idx} chapterTitle={chapter.title} />
           <Button size="sm" variant="outline" disabled={starting !== null} onClick={() => void openDiscussion(null)}>
-            {starting === "chat" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <MessageCircle className="mr-1 h-4 w-4" />}
+            {starting === "chat" ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="chat_bubble" size={16} className="mr-1" />}
             <span className="hidden sm:inline">Обсудить главу</span>
             <span className="sm:hidden">Чат</span>
           </Button>
@@ -163,14 +163,14 @@ export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, 
         <nav className="mx-auto flex max-w-2xl items-center justify-between border-t px-5 py-5 sm:px-8">
           {prevIdx ? (
             <Link href={`/library/${sourceUid}/${prevIdx}`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-              <ChevronLeft className="h-4 w-4" /> Глава {prevIdx}
+              <Icon name="chevron_left" size={16} /> Глава {prevIdx}
             </Link>
           ) : (
             <span />
           )}
           {nextIdx && (
             <Link href={`/library/${sourceUid}/${nextIdx}`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-              Глава {nextIdx} <ChevronRight className="h-4 w-4" />
+              Глава {nextIdx} <Icon name="chevron_right" size={16} />
             </Link>
           )}
         </nav>
@@ -181,11 +181,11 @@ export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, 
           <div className="pointer-events-auto flex max-w-2xl flex-wrap items-center gap-2 rounded-2xl border bg-card p-3 shadow-lg">
             <p className="line-clamp-2 min-w-0 flex-1 text-xs text-muted-foreground">«{selection.slice(0, 140)}…»</p>
             <Button size="sm" disabled={starting !== null} onClick={() => void openDiscussion(selection)}>
-              {starting === "chat" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <MessageCircle className="mr-1 h-4 w-4" />}
+              {starting === "chat" ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="chat_bubble" size={16} className="mr-1" />}
               Обсудить
             </Button>
             <Button size="sm" variant="outline" disabled={starting !== null} onClick={() => void researchSelection(selection)}>
-              {starting === "research" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Search className="mr-1 h-4 w-4" />}
+              {starting === "research" ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="search" size={16} className="mr-1" />}
               Ресёрч
             </Button>
           </div>

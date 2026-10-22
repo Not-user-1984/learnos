@@ -8,6 +8,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import type { BlockDetail, CategoryNode } from "@/lib/types";
 import { Markdown } from "@/components/markdown/Markdown";
+import { Icon } from "@/components/ui/icon";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -184,7 +185,7 @@ export function BlockPageClient({
         <h2 className="mb-3 mt-6 font-medium">Действия</h2>
         <div className="flex flex-col gap-2">
           <Button variant="outline" size="sm" onClick={discussInChat}>
-            💬 Обсудить в чате
+            <><Icon name="chat" size={16} /> Обсудить в чате</>
           </Button>
           <Button
             variant="outline"

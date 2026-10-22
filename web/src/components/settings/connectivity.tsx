@@ -5,7 +5,7 @@
  *  Применяется на лету: провайдер/прокси пересобираются без рестарта сервера. */
 
 import { useEffect, useState } from "react";
-import { Globe, Loader2, PlugZap, ShieldCheck } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,7 +104,7 @@ export function ConnectivitySettings() {
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="flex items-center gap-1.5">
-            <Globe className="h-4 w-4 text-emerald-500" /> Поиск
+            <Icon name="public" size={16} className="text-emerald-500" /> Поиск
           </span>
           <Select onValueChange={(v: unknown) => { const val = Array.isArray(v) ? String(v[0]) : (v as string | null); if (val) setProvider(val); }}>
             <SelectTrigger aria-label="Провайдер поиска">
@@ -131,7 +131,7 @@ export function ConnectivitySettings() {
 
       <label className="flex flex-col gap-1.5 text-sm">
         <span className="flex items-center gap-1.5">
-          <ShieldCheck className="h-4 w-4 text-sky-500" /> Прокси socks5/http (для всего стека)
+          <Icon name="verified_user" size={16} className="text-sky-500" /> Прокси socks5/http (для всего стека)
         </span>
         <Input
           placeholder="socks5://192.168.0.100:7890 или http://…"
@@ -142,7 +142,7 @@ export function ConnectivitySettings() {
 
       <label className="flex flex-col gap-1.5 text-sm">
         <span className="flex items-center gap-1.5">
-          <PlugZap className="h-4 w-4 text-violet-500" /> VLESS-ключ (внутренний xray → socks5)
+          <Icon name="electric_bolt" size={16} className="text-violet-500" /> VLESS-ключ (внутренний xray → socks5)
         </span>
         <Input
           placeholder={state.has_vless_key ? state.vless_key : "vless://uuid@host:порт?…"}
@@ -156,10 +156,10 @@ export function ConnectivitySettings() {
 
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={save} disabled={busy}>
-          {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null} Сохранить и применить
+          {busy ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : null} Сохранить и применить
         </Button>
         <Button variant="outline" onClick={runCheck} disabled={checking}>
-          {checking ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null} Проверить связь
+          {checking ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : null} Проверить связь
         </Button>
       </div>
 

@@ -4,8 +4,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { BookOpen, Search, Video } from "lucide-react";
-import { kindEmoji } from "@/lib/format";
+import { Icon } from "@/components/ui/icon";
+import { kindIcon } from "@/lib/format";
 import type { SourceCard } from "@/lib/types";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,8 @@ import { cn } from "@/lib/utils";
 
 const KIND_TABS = [
   { value: "all", label: "Все", icon: null },
-  { value: "book", label: "Книги", icon: BookOpen },
-  { value: "video", label: "Видео", icon: Video },
+  { value: "book", label: "Книги", icon: "auto_stories" },
+  { value: "video", label: "Видео", icon: "movie" },
   { value: "web", label: "Статьи", icon: null },
 ] as const;
 
@@ -52,9 +52,9 @@ export function LibraryBrowser({ sources }: { sources: SourceCard[] }) {
       <div className="flex flex-wrap items-center gap-3">
         <Tabs value={kind} onValueChange={(v: unknown) => { const val = Array.isArray(v) ? String(v[0]) : (v as string | null); if (val) setKind(val as typeof kind); }}>
           <TabsList>
-            {KIND_TABS.map(({ value, label, icon: Icon }) => (
+            {KIND_TABS.map(({ value, label, icon }) => (
               <TabsTrigger key={value} value={value} className="gap-1.5">
-                {Icon && <Icon className="h-3.5 w-3.5" />}
+                {icon && <Icon name={icon} size={14} filled={kind === value} />}
                 {label}
                 <span className="text-xs text-muted-foreground">{counts[value] ?? 0}</span>
               </TabsTrigger>
@@ -62,7 +62,7 @@ export function LibraryBrowser({ sources }: { sources: SourceCard[] }) {
           </TabsList>
         </Tabs>
         <div className="relative ml-auto">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Icon name="search" size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -92,7 +92,7 @@ export function LibraryBrowser({ sources }: { sources: SourceCard[] }) {
                       s.kind === "web" && "bg-gradient-to-br from-emerald-500/15 to-sky-500/20",
                     )}
                   >
-                    {kindEmoji(s.kind)}
+                    <Icon name={kindIcon(s.kind)} size={36} filled />
                   </div>
                   <div className="flex flex-1 flex-col gap-1.5 p-4">
                     <p className="line-clamp-2 font-medium leading-snug">{s.title}</p>
@@ -112,7 +112,7 @@ export function LibraryBrowser({ sources }: { sources: SourceCard[] }) {
                 <ConfirmDeleteButton
                   endpoint={`/sources/${s.uid}`}
                   title="Удалить источник?"
-                  name={`${kindEmoji(s.kind)} ${s.title}`}
+                  name={s.title}
                   description="Уйдут главы и файлы источника из библиотеки. Разговоры и блоки базы знаний останутся — если по источнику есть блоки, удаление будет запрещено."
                   successMessage="Источник удалён"
                   className="absolute right-2 top-2 opacity-0 transition group-hover:opacity-100"

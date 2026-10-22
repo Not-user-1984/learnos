@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Upload } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import { apiPost, apiUpload } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,7 @@ export function AddSourceButton() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button size="sm" />}>
-        <Plus className="h-4 w-4" /> Добавить источник
+        <Icon name="add" size={16} /> Добавить источник
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -79,7 +79,7 @@ export function AddSourceButton() {
           <TabsContent value="pdf" className="flex flex-col gap-3 pt-3">
             <Input placeholder="Название (необязательно)" value={title} onChange={(e) => setTitle(e.target.value)} />
             <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-8 text-sm text-muted-foreground hover:border-violet-500/50">
-              <Upload className="h-6 w-6" />
+              <Icon name="upload" size={24} />
               Перетащи PDF или кликни для выбора
               <input
                 type="file"

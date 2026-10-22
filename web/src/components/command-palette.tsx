@@ -5,7 +5,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { kindEmoji } from "@/lib/format";
+import { Icon } from "@/components/ui/icon";
+import { kindIcon } from "@/lib/format";
 import { api } from "@/lib/api";
 import type { BlockCard, SourceCard } from "@/lib/types";
 
@@ -43,17 +44,17 @@ export function CommandPalette() {
       <CommandList>
         <CommandEmpty>Ничего не найдено</CommandEmpty>
         <CommandGroup heading="Переход">
-          <CommandItem onSelect={() => go("/chat")}>💬 Чат</CommandItem>
-          <CommandItem onSelect={() => go("/kb")}>📚 База знаний</CommandItem>
-          <CommandItem onSelect={() => go("/library")}>📖 Библиотека</CommandItem>
-          <CommandItem onSelect={() => go("/courses")}>🎓 Курсы</CommandItem>
-          <CommandItem onSelect={() => go("/settings")}>⚙ Настройки</CommandItem>
+          <CommandItem onSelect={() => go("/chat")}><Icon name="chat" size={18} /> Чат</CommandItem>
+          <CommandItem onSelect={() => go("/kb")}><Icon name="psychology" size={18} /> База знаний</CommandItem>
+          <CommandItem onSelect={() => go("/library")}><Icon name="collections_bookmark" size={18} /> Библиотека</CommandItem>
+          <CommandItem onSelect={() => go("/courses")}><Icon name="school" size={18} /> Курсы</CommandItem>
+          <CommandItem onSelect={() => go("/settings")}><Icon name="settings" size={18} /> Настройки</CommandItem>
         </CommandGroup>
         {blocks.length > 0 && (
           <CommandGroup heading="Блоки знаний">
             {blocks.map((b) => (
               <CommandItem key={b.block_uid} onSelect={() => go(`/kb/${b.block_uid}`)}>
-                📄 {b.title}
+                <Icon name="description" size={18} /> {b.title}
               </CommandItem>
             ))}
           </CommandGroup>
@@ -62,7 +63,7 @@ export function CommandPalette() {
           <CommandGroup heading="Источники">
             {sources.map((s) => (
               <CommandItem key={s.uid} onSelect={() => go(`/library/${s.uid}`)}>
-                {kindEmoji(s.kind)} {s.title}
+                <Icon name={kindIcon(s.kind)} size={18} /> {s.title}
               </CommandItem>
             ))}
           </CommandGroup>
