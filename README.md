@@ -64,7 +64,7 @@ cd web && npm run lint && npx tsc --noEmit && npm run build
 
 ## Архитектура веба
 
-Next.js App Router, TS strict, Tailwind + shadcn-подход, тёмная тема, PWA. Серверные страницы тянут данные через `web/src/lib/api.ts`, чат — SSE (`lib/chat/stream.ts`), markdown с mermaid-рендером и авто-починкой битых схем (`components/markdown/Mermaid.tsx`). Общие подписи/эмодзи режимов и типов источников — `lib/format.ts`. Типы — рукописные в `lib/types.ts` (единственный источник правды).
+Next.js App Router, TS strict, Tailwind + shadcn-подход, PWA. Дизайн-система: три темы (пергамент — по умолчанию, тёмная, светлая), иконки Material Symbols Rounded, шрифты Inter/Literata — [web/DESIGN.md](web/DESIGN.md). Серверные страницы тянут данные через `web/src/lib/api.ts`, чат — SSE (`lib/chat/stream.ts`), markdown с mermaid-рендером и авто-починкой битых схем (`components/markdown/Mermaid.tsx`). Общие подписи/эмодзи режимов и типов источников — `lib/format.ts`. Типы — рукописные в `lib/types.ts` (единственный источник правды).
 
 Ключевые сценарии UI: мастер изучения (книга/видео → карта глав → разбор/сессия), чат с чипами инструментов и карточками (включая превью конспекта с апрувом), читалка главы с историей разговоров по главе, библиотека, база знаний (категории/версии/входящие), курсы, настройки. Любой материал (источник, курс, разговор, блок БЗ, активность) удаляется с диалогом подтверждения — сервер блокирует удаление при живых зависимостях (блок в курсе, сессия с блоком БЗ).
 
@@ -97,3 +97,4 @@ Next.js App Router, TS strict, Tailwind + shadcn-подход, тёмная те
 - [task_ai/README.md](task_ai/README.md) — ТЗ: справочники 01–08, этапы, приоритеты
 - [task_ai/tasks/README.md](task_ai/tasks/README.md) — система задач агента-разработчика
 - [task_ai/archive/README.md](task_ai/archive/README.md) — история выполненного
+- [web/DESIGN.md](web/DESIGN.md) — дизайн-система веба: темы, иконки, шрифты, токены
