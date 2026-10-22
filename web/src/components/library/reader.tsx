@@ -3,13 +3,14 @@
 /** Читалка главы: e-book-режим — подглавы заголовками, выбор гарнитуры,
  *  выделение фрагмента → обсуждение или ресёрч в новой вкладке. */
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AArrowDown, AArrowUp, ChevronLeft, ChevronRight, Loader2, MessageCircle, Search } from "lucide-react";
 import { toast } from "sonner";
 import { apiPost } from "@/lib/api";
 import { formatChapter } from "@/lib/reader-format";
+import { useStored } from "@/lib/use-stored";
 import { Markdown } from "@/components/markdown/Markdown";
 import { Button } from "@/components/ui/button";
 import { ChapterHistoryButton } from "./chapter-history";
@@ -36,23 +37,6 @@ const FAMILIES = [
 
 function clampFont(v: number): number {
   return Math.min(1.4, Math.max(0.85, Math.round(v * 100) / 100));
-}
-
-/** Значение из localStorage без setState-в-эффекте: подписка на событие изменения. */
-function useStored(key: string, event: string, fallback: string): [string, (v: string) => void] {
-  const value = useSyncExternalStore(
-    (cb) => {
-      window.addEventListener(event, cb);
-      return () => window.removeEventListener(event, cb);
-    },
-    () => localStorage.getItem(key) ?? fallback,
-    () => fallback,
-  );
-  const set = (v: string) => {
-    localStorage.setItem(key, v);
-    window.dispatchEvent(new Event(event));
-  };
-  return [value, set];
 }
 
 function useReaderFont(): [number, (delta: number) => void] {

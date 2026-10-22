@@ -3,28 +3,20 @@
 /** Дерево категорий: показано по умолчанию на любом экране; кнопка сворачивает
  *  в узкую полоску слева (и разворачивает обратно). Состояние запоминается. */
 
-import { useEffect, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { CategoryNode } from "@/lib/types";
+import { useStored } from "@/lib/use-stored";
 import { Button } from "@/components/ui/button";
 import { CategoryTree } from "./category-tree";
 
 const HIDDEN_KEY = "learnos-kb-sidebar-hidden";
+const HIDDEN_EVENT = "learnos-kb-sidebar-hidden-change";
 
 export function CategorySidebar({ nodes, active }: { nodes: CategoryNode[]; active: string | null }) {
-  const [hidden, setHidden] = useState(false);
+  const [hiddenRaw, setHidden] = useStored(HIDDEN_KEY, HIDDEN_EVENT, "0");
+  const hidden = hiddenRaw === "1";
 
-  useEffect(() => {
-    setHidden(localStorage.getItem(HIDDEN_KEY) === "1");
-  }, []);
-
-  const toggle = () => {
-    setHidden((h) => {
-      const next = !h;
-      localStorage.setItem(HIDDEN_KEY, next ? "1" : "0");
-      return next;
-    });
-  };
+  const toggle = () => setHidden(hidden ? "0" : "1");
 
   if (hidden) {
     return (
