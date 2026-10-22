@@ -144,8 +144,16 @@ export function PdfViewer({
 
   useEffect(() => {
     intentRef.current = page;
-    void jump(page);
-  }, [page, jump]);
+    if (numPages > 0) void jump(page);
+  }, [page, jump, numPages]);
+
+  // стартовое намерение применяется, когда документ И геометрия готовы
+  // (numPages > 0 ставится тем же коммитом, что и docRef):
+  // прыжок в «пустой» геометрии теряется — высоты холдеров ещё не встали
+  useEffect(() => {
+    if (numPages === 0 || !baseSize || containerW <= 0) return;
+    void jump(intentRef.current);
+  }, [numPages, baseSize, containerW, jump]);
 
   // --- документ: динамический импорт pdfjs (только в браузере), один на url ---
   useEffect(() => {
@@ -173,8 +181,7 @@ export function PdfViewer({
         setNumPages(doc.numPages);
         const vp = first.getViewport({ scale: 1 });
         setBaseSize({ w: vp.width, h: vp.height });
-        // применить накопленное намерение, если переход просили во время загрузки
-        if (intentRef.current > 1) void jump(intentRef.current);
+        // накопленное намерение применит эффект готовности (документ + геометрия)
       } catch (e) {
         if (!cancelled && guard === loadGuard.current) {
           setError(e instanceof Error ? e.message : "не удалось открыть PDF");
