@@ -229,6 +229,8 @@ export function ChapterReader({
             url={`/api/sources/${sourceUid}/file`}
             page={pdfPage}
             onPageChange={setVisiblePage}
+            openHref={`/library/${sourceUid}/read?ch=${chapter.idx}&page=${visiblePage ?? pdfPage}`}
+            className="min-h-0"
           />
           <nav className="flex shrink-0 items-center justify-between border-t px-5 py-2.5">
             {prevIdx ? (
