@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
-import { flattenCategories } from "@/lib/categories";
+import { flattenCategories, categoryLabel } from "@/lib/categories";
 import type { CategoryNode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +50,7 @@ export function CategorySelect({
   }, [open]);
 
   const q = query.trim().toLowerCase();
+  const label = categoryLabel(categories, value ?? null);
   const items = useMemo(
     () =>
       flattenCategories(categories).filter(
@@ -71,6 +72,7 @@ export function CategorySelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
+        title={value ?? undefined}
         onClick={() => {
           setQuery("");
           setOpen((v) => !v);
@@ -81,7 +83,7 @@ export function CategorySelect({
         )}
       >
         <span className={cn("flex-1 truncate text-left", !value && "text-muted-foreground")}>
-          {value ?? placeholder}
+          {label ?? placeholder}
         </span>
         <Icon name="expand_more" size={16} className="pointer-events-none shrink-0 text-muted-foreground" />
       </button>

@@ -1,7 +1,9 @@
 "use client";
 
-/** Страница блока: шапка, тело по секциям, правая панель (категория, версии, действия).
- *  Панель сворачивается в узкую полоску справа (как сайдбар категорий на /kb), состояние запоминается. */
+/** Страница блока: шапка, тело по секциям, панель (категория, версии, действия).
+ *  На широких экранах (lg+) панель справа и сворачивается в узкую полоску,
+ *  состояние запоминается; на узких по умолчанию свёрнута (текст на всю ширину),
+ *  разворачивается в секцию под текстом. */
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -17,11 +19,22 @@ import { CategorySelect } from "./category-select";
 import { apiPost } from "@/lib/api";
 import { markKbListDirty } from "@/lib/kb-sync";
 import { useStored } from "@/lib/use-stored";
+import { useMediaQuery } from "@/lib/use-media";
 
 type Version = { version: number; reason: string | null; conversation_uid: string | null; created_at: string; size: number };
 
 const ASIDE_HIDDEN_KEY = "learnos-kb-block-aside-hidden";
 const ASIDE_HIDDEN_EVENT = "learnos-kb-block-aside-hidden-change";
+
+/** Компактная дата для метаданных: «22.10.2026, 16:58». */
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 export function BlockPageClient({
   block,
@@ -39,6 +52,13 @@ export function BlockPageClient({
   const [versionContent, setVersionContent] = useState<string | null>(null);
   const [asideHiddenRaw, setAsideHidden] = useStored(ASIDE_HIDDEN_KEY, ASIDE_HIDDEN_EVENT, "0");
   const asideHidden = asideHiddenRaw === "1";
+  // Запомненное состояние относится к боковой панели на широких экранах;
+  // на узких панель по умолчанию свёрнута и раскрывается разово, под текст.
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const [narrowOpen, setNarrowOpen] = useState(false);
+  const panelVisible = isDesktop ? !asideHidden : narrowOpen;
+  const showPanel = () => (isDesktop ? setAsideHidden("0") : setNarrowOpen(true));
+  const hidePanel = () => (isDesktop ? setAsideHidden("1") : setNarrowOpen(false));
 
   const confirmCategory = async () => {
     setConfirming(true);
@@ -123,17 +143,22 @@ export function BlockPageClient({
 
       <h2 className="mb-3 mt-6 font-medium">Действия</h2>
       <div className="flex flex-col gap-2">
-        <Button variant="outline" size="sm" onClick={discussInChat}>
-          <><Icon name="chat" size={16} /> Обсудить в чате</>
+        <Button variant="outline" size="sm" className="justify-start whitespace-nowrap" onClick={discussInChat}>
+          <>
+            <Icon name="chat" size={16} /> Обсудить в чате
+          </>
         </Button>
         <Button
           variant="outline"
           size="sm"
+          className="justify-start whitespace-nowrap"
           onClick={() => {
             navigator.clipboard.writeText(block.content).then(() => toast.success("MD скопирован"));
           }}
         >
-          📋 Скопировать MD
+          <>
+            <Icon name="content_copy" size={16} /> Скопировать MD
+          </>
         </Button>
         <a href={`/api/kb/blocks/${block.block_uid}/raw`} className="text-primary hover:underline">
           Скачать .md
@@ -147,7 +172,7 @@ export function BlockPageClient({
           redirectTo="/kb"
           appearance="button"
           label="Удалить блок"
-          buttonClassName="w-full justify-start border-destructive/40 text-rose-500 hover:text-rose-400"
+          buttonClassName="w-full justify-start whitespace-nowrap border-destructive/40 text-rose-500 hover:text-rose-400"
         />
       </div>
 
@@ -169,17 +194,25 @@ export function BlockPageClient({
 
       <h2 className="mb-3 mt-6 font-medium">Метаданные</h2>
       <dl className="space-y-1 text-xs text-muted-foreground">
-        <div>создан: {new Date(block.created_at).toLocaleString("ru-RU")}</div>
-        <div>обновлён: {new Date(block.updated_at).toLocaleString("ru-RU")}</div>
-        {block.tags.length > 0 && <div>теги: {block.tags.join(", ")}</div>}
-        {block.session_uid && <div>сессия: {block.session_uid}</div>}
+        <div className="whitespace-nowrap">создан: {fmtDate(block.created_at)}</div>
+        <div className="whitespace-nowrap">обновлён: {fmtDate(block.updated_at)}</div>
+        {block.tags.length > 0 && (
+          <div className="truncate" title={block.tags.join(", ")}>
+            теги: {block.tags.join(", ")}
+          </div>
+        )}
+        {block.session_uid && (
+          <div className="truncate" title={block.session_uid}>
+            сессия: {block.session_uid}
+          </div>
+        )}
       </dl>
     </>
   );
 
   return (
-    <div className="flex h-full">
-      <article className="min-w-0 flex-1 overflow-y-auto">
+    <div className="flex h-full flex-col lg:flex-row">
+      <article className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 py-10 sm:px-10">
         <header className="mb-10">
           {block.category_path && (
@@ -240,21 +273,8 @@ export function BlockPageClient({
         </div>
       </article>
 
-      {asideHidden ? (
-        <div className="flex w-10 shrink-0 justify-center border-l pt-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            aria-label="Показать панель блока"
-            title="Показать панель блока"
-            onClick={() => setAsideHidden("0")}
-          >
-            <Icon name="right_panel_open" size={16} />
-          </Button>
-        </div>
-      ) : (
-        <aside className="flex w-72 shrink-0 flex-col border-l">
+      {panelVisible ? (
+        <aside className="flex max-h-[60vh] w-full shrink-0 flex-col border-t lg:h-full lg:max-h-none lg:w-72 lg:border-l lg:border-t-0">
           <div className="flex items-center justify-between px-4 pb-1 pt-3">
             <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Панель</span>
             <Button
@@ -263,13 +283,26 @@ export function BlockPageClient({
               className="h-7 w-7"
               aria-label="Скрыть панель блока"
               title="Скрыть панель блока"
-              onClick={() => setAsideHidden("1")}
+              onClick={hidePanel}
             >
-              <Icon name="right_panel_close" size={16} />
+              <Icon name={isDesktop ? "right_panel_close" : "bottom_panel_close"} size={16} />
             </Button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-2 text-sm">{asideBody}</div>
         </aside>
+      ) : (
+        <div className="flex h-10 w-full shrink-0 justify-center border-t lg:h-full lg:w-10 lg:border-l lg:border-t-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 self-center"
+            aria-label="Показать панель блока"
+            title="Показать панель блока"
+            onClick={showPanel}
+          >
+            <Icon name={isDesktop ? "right_panel_open" : "bottom_panel_open"} size={16} />
+          </Button>
+        </div>
       )}
     </div>
   );
