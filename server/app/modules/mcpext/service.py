@@ -84,13 +84,29 @@ class McpExtService:
             raise NotFound("LLM не настроен — конструктор недоступен")
         out = run_coro_sync(self._runtime.run_structured(mcp_designer, AgentContext(), brief))
         name = out.name.strip().lower().replace(" ", "_").replace("-", "_")
-        return {
+        result = {
             "name": name if valid_mcp_name(name) else "",
             "url": out.url.strip(),
             "description": out.description.strip(),
             "headers": {str(k): str(v) for k, v in (out.headers or {}).items()},
             "summary": out.summary.strip(),
         }
+        # без remote-url не молчим, а объясняем, что не так и что делать
+        if not result["url"] or not _is_http_url(result["url"]):
+            low = brief.lower()
+            if "command" in low or "npx" in low or "stdio" in low or "uvx" in low:
+                result["summary"] = (
+                    "Это конфиг локального stdio-сервера (command/npx) — LearnOS подключает "
+                    "только remote MCP по http(s), чтобы инструменты были видны всем агентам "
+                    "из любого канала. Поищи у этого MCP remote-режим или хостинг "
+                    "(mcpmarket/дока: «streamable http url») и кинь ссылку."
+                )
+            else:
+                result["summary"] = (
+                    "Не нашёл http(s)-ссылку на MCP-сервер. Поддерживаются remote MCP: "
+                    "вставь ссылку вида https://…/mcp или JSON-конфиг с полем url."
+                )
+        return result
 
     # --- CRUD ---
 

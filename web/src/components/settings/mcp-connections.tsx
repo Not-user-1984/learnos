@@ -39,6 +39,7 @@ export function McpConnections() {
   const [raw, setRaw] = useState("");
   const [drafting, setDrafting] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
   const [probeResult, setProbeResult] = useState<{ ok: boolean; count?: number; error?: string } | null>(null);
   const [creating, setCreating] = useState(false);
@@ -58,16 +59,18 @@ export function McpConnections() {
       return;
     }
     setDrafting(true);
+    setDraftError(null);
     setProbeResult(null);
     try {
       const d = await apiPost<Draft>("/mcpext/draft", { brief: raw });
       if (!d.url) {
-        toast.error("не нашёл ссылку — поддерживаются remote MCP по http(s); вставь ссылку или конфиг");
+        // сервер объяснил причину в summary — показываем в модалке, чтобы не потерялось
+        setDraftError(d.summary || "не нашёл ссылку — поддерживаются remote MCP по http(s)");
         return;
       }
       setDraft(d);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "конструктор не сработал");
+      setDraftError(e instanceof Error ? e.message : "конструктор не сработал");
     } finally {
       setDrafting(false);
     }
@@ -214,6 +217,15 @@ export function McpConnections() {
                 placeholder={"https://mcp.example.com/mcp\n\nили JSON:\n{\"mcpServers\": {\"github\": {\"url\": \"…\"}}}"}
                 className="min-h-28 font-mono text-xs"
               />
+              {draftError && (
+                <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs leading-relaxed text-rose-500">
+                  {draftError}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Нейронка разбирает ~10 секунд. Важно: подключаются remote MCP (streamable http) —
+                локальные stdio-конфиги (command/npx) не подходят.
+              </p>
               <Button disabled={drafting} onClick={() => void composeDraft()}>
                 {drafting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
                 Разобрать с нейронкой
