@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import type { BlockCard, CategoryNode } from "@/lib/types";
 import { apiPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CategorySelect } from "./category-select";
 
 export function InboxPanel({ blocks, categories }: { blocks: BlockCard[]; categories: CategoryNode[] }) {
   const router = useRouter();
@@ -44,19 +44,13 @@ export function InboxPanel({ blocks, categories }: { blocks: BlockCard[]; catego
           <span className="font-medium">{b.title}</span>
           <span className="text-sm text-muted-foreground">агент предлагает: {b.category_path ?? "—"}</span>
           <span className="ml-auto flex items-center gap-2">
-            <Select onValueChange={(v: unknown) => { const val = Array.isArray(v) ? String(v[0]) : (v as string | null); if (val) confirm(b.block_uid, val === "__none__" ? null : val); }}>
-              <SelectTrigger className="h-8 w-52 text-xs" aria-label="Другая категория">
-                <SelectValue placeholder="Выбрать другую…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Без категории</SelectItem>
-                {flatten(categories).map((c) => (
-                  <SelectItem key={c.path} value={c.path}>
-                    {c.title} ({c.path})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CategorySelect
+              categories={categories}
+              placeholder="Выбрать другую…"
+              ariaLabel="Другая категория"
+              className="w-52"
+              onSelect={(path) => confirm(b.block_uid, path)}
+            />
             <Button
               size="sm"
               variant="outline"
@@ -70,8 +64,4 @@ export function InboxPanel({ blocks, categories }: { blocks: BlockCard[]; catego
       ))}
     </div>
   );
-}
-
-function flatten(nodes: CategoryNode[]): CategoryNode[] {
-  return nodes.flatMap((n) => [n, ...flatten(n.children)]);
 }

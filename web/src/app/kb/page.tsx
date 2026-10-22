@@ -7,6 +7,7 @@ import type { BlockCard, CategoryNode } from "@/lib/types";
 import { CategorySidebar } from "@/components/kb/category-sidebar";
 import { BlockCard as BlockCardView } from "@/components/kb/block-card";
 import { InboxPanel } from "@/components/kb/inbox";
+import { KbListRefresh } from "@/components/kb/kb-list-refresh";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
@@ -31,6 +32,8 @@ export default async function KbPage({ searchParams }: Props) {
 
   return (
     <div className="flex h-full">
+      {/* после мутаций категорий на других страницах список обновляется по dirty-флагу */}
+      <KbListRefresh />
       {/* категории: видны по умолчанию на любом экране, сворачиваются кнопкой в узкую полоску */}
       <CategorySidebar nodes={categories} active={sp.category ?? null} />
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6">

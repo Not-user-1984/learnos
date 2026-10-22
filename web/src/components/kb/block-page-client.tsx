@@ -1,6 +1,7 @@
 "use client";
 
-/** Страница блока: шапка, тело по секциям, правая колонка (категория, версии, действия). */
+/** Страница блока: шапка, тело по секциям, правая панель (категория, версии, действия).
+ *  Панель сворачивается в узкую полоску справа (как сайдбар категорий на /kb), состояние запоминается. */
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -12,10 +13,15 @@ import { Icon } from "@/components/ui/icon";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CategorySelect } from "./category-select";
 import { apiPost } from "@/lib/api";
+import { markKbListDirty } from "@/lib/kb-sync";
+import { useStored } from "@/lib/use-stored";
 
 type Version = { version: number; reason: string | null; conversation_uid: string | null; created_at: string; size: number };
+
+const ASIDE_HIDDEN_KEY = "learnos-kb-block-aside-hidden";
+const ASIDE_HIDDEN_EVENT = "learnos-kb-block-aside-hidden-change";
 
 export function BlockPageClient({
   block,
@@ -31,11 +37,14 @@ export function BlockPageClient({
   const [moving, setMoving] = useState(false);
   const [viewVersion, setViewVersion] = useState<number | null>(null);
   const [versionContent, setVersionContent] = useState<string | null>(null);
+  const [asideHiddenRaw, setAsideHidden] = useStored(ASIDE_HIDDEN_KEY, ASIDE_HIDDEN_EVENT, "0");
+  const asideHidden = asideHiddenRaw === "1";
 
   const confirmCategory = async () => {
     setConfirming(true);
     try {
       await apiPost(`/kb/blocks/${block.block_uid}/category`, { path: block.category_path, confirm: true });
+      markKbListDirty();
       toast.success("Категория подтверждена");
       router.refresh();
     } catch (e) {
@@ -45,11 +54,11 @@ export function BlockPageClient({
     }
   };
 
-  const moveCategory = async (value: string) => {
-    const path = value === "__none__" ? null : value;
+  const moveCategory = async (path: string | null) => {
     setMoving(true);
     try {
       await apiPost(`/kb/blocks/${block.block_uid}/category`, { path, confirm: true });
+      markKbListDirty();
       toast.success(path ? `Категория: ${path}` : "Категория убрана");
       router.refresh();
     } catch (e) {
@@ -77,6 +86,7 @@ export function BlockPageClient({
   const restore = async (v: number) => {
     try {
       await apiPost(`/kb/blocks/${block.block_uid}/restore/${v}`, {});
+      markKbListDirty();
       toast.success(`Откат к версии ${v}`);
       router.refresh();
     } catch (e) {
@@ -98,6 +108,74 @@ export function BlockPageClient({
       toast.error("API недоступен из браузера — используйте прокси");
     }
   };
+
+  const asideBody = (
+    <>
+      <h2 className="mb-2 font-medium">Категория</h2>
+      <CategorySelect
+        categories={categories}
+        value={block.category_path}
+        disabled={moving}
+        ariaLabel="Категория блока"
+        onSelect={(path) => void moveCategory(path)}
+      />
+      <p className="mt-1.5 text-xs text-muted-foreground">меняется сразу, история — в версиях</p>
+
+      <h2 className="mb-3 mt-6 font-medium">Действия</h2>
+      <div className="flex flex-col gap-2">
+        <Button variant="outline" size="sm" onClick={discussInChat}>
+          <><Icon name="chat" size={16} /> Обсудить в чате</>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            navigator.clipboard.writeText(block.content).then(() => toast.success("MD скопирован"));
+          }}
+        >
+          📋 Скопировать MD
+        </Button>
+        <a href={`/api/kb/blocks/${block.block_uid}/raw`} className="text-primary hover:underline">
+          Скачать .md
+        </a>
+        <ConfirmDeleteButton
+          endpoint={`/kb/blocks/${block.block_uid}`}
+          title="Удалить блок?"
+          name={block.title}
+          description="Блок исчезнет из базы знаний вместе с версиями и поисковым индексом — знания пропадут. Если блок входит в курс, удаление будет запрещено."
+          successMessage="Блок удалён"
+          redirectTo="/kb"
+          appearance="button"
+          label="Удалить блок"
+          buttonClassName="w-full justify-start border-destructive/40 text-rose-500 hover:text-rose-400"
+        />
+      </div>
+
+      <h2 className="mb-3 mt-6 font-medium">Версии ({versions.length})</h2>
+      <div className="flex flex-col gap-1">
+        <p className="rounded-md border bg-card px-2 py-1.5">v{block.version} — текущая</p>
+        {versions.map((v) => (
+          <div key={v.version} className="flex items-center gap-1 rounded-md border px-2 py-1.5">
+            <span className="flex-1 truncate" title={v.reason ?? ""}>
+              v{v.version} · {v.reason ?? "правка"}
+            </span>
+            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => showVersion(v.version)}>
+              смотреть
+            </Button>
+          </div>
+        ))}
+        {versions.length === 0 && <p className="text-muted-foreground">правок ещё не было</p>}
+      </div>
+
+      <h2 className="mb-3 mt-6 font-medium">Метаданные</h2>
+      <dl className="space-y-1 text-xs text-muted-foreground">
+        <div>создан: {new Date(block.created_at).toLocaleString("ru-RU")}</div>
+        <div>обновлён: {new Date(block.updated_at).toLocaleString("ru-RU")}</div>
+        {block.tags.length > 0 && <div>теги: {block.tags.join(", ")}</div>}
+        {block.session_uid && <div>сессия: {block.session_uid}</div>}
+      </dl>
+    </>
+  );
 
   return (
     <div className="flex h-full">
@@ -162,84 +240,37 @@ export function BlockPageClient({
         </div>
       </article>
 
-      <aside className="w-72 shrink-0 overflow-y-auto border-l p-4 text-sm">
-        <h2 className="mb-2 font-medium">Категория</h2>
-        <Select
-          disabled={moving}
-          onValueChange={(v: unknown) => { const val = Array.isArray(v) ? String(v[0]) : (v as string | null); if (val) void moveCategory(val); }}
-        >
-          <SelectTrigger className="h-9 w-full text-xs" aria-label="Категория блока">
-            <SelectValue placeholder={block.category_path ?? "Без категории"} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">Без категории</SelectItem>
-            {flatten(categories).map((c) => (
-              <SelectItem key={c.path} value={c.path}>
-                {c.title} ({c.path})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="mt-1.5 text-xs text-muted-foreground">меняется сразу, история — в версиях</p>
-
-        <h2 className="mb-3 mt-6 font-medium">Действия</h2>
-        <div className="flex flex-col gap-2">
-          <Button variant="outline" size="sm" onClick={discussInChat}>
-            <><Icon name="chat" size={16} /> Обсудить в чате</>
-          </Button>
+      {asideHidden ? (
+        <div className="flex w-10 shrink-0 justify-center border-l pt-3">
           <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              navigator.clipboard.writeText(block.content).then(() => toast.success("MD скопирован"));
-            }}
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            aria-label="Показать панель блока"
+            title="Показать панель блока"
+            onClick={() => setAsideHidden("0")}
           >
-            📋 Скопировать MD
+            <Icon name="right_panel_open" size={16} />
           </Button>
-          <a href={`/api/kb/blocks/${block.block_uid}/raw`} className="text-primary hover:underline">
-            Скачать .md
-          </a>
-          <ConfirmDeleteButton
-            endpoint={`/kb/blocks/${block.block_uid}`}
-            title="Удалить блок?"
-            name={block.title}
-            description="Блок исчезнет из базы знаний вместе с версиями и поисковым индексом — знания пропадут. Если блок входит в курс, удаление будет запрещено."
-            successMessage="Блок удалён"
-            redirectTo="/kb"
-            appearance="button"
-            label="Удалить блок"
-            buttonClassName="w-full justify-start border-destructive/40 text-rose-500 hover:text-rose-400"
-          />
         </div>
-
-        <h2 className="mb-3 mt-6 font-medium">Версии ({versions.length})</h2>
-        <div className="flex flex-col gap-1">
-          <p className="rounded-md border bg-card px-2 py-1.5">v{block.version} — текущая</p>
-          {versions.map((v) => (
-            <div key={v.version} className="flex items-center gap-1 rounded-md border px-2 py-1.5">
-              <span className="flex-1 truncate" title={v.reason ?? ""}>
-                v{v.version} · {v.reason ?? "правка"}
-              </span>
-              <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => showVersion(v.version)}>
-                смотреть
-              </Button>
-            </div>
-          ))}
-          {versions.length === 0 && <p className="text-muted-foreground">правок ещё не было</p>}
-        </div>
-
-        <h2 className="mb-3 mt-6 font-medium">Метаданные</h2>
-        <dl className="space-y-1 text-xs text-muted-foreground">
-          <div>создан: {new Date(block.created_at).toLocaleString("ru-RU")}</div>
-          <div>обновлён: {new Date(block.updated_at).toLocaleString("ru-RU")}</div>
-          {block.tags.length > 0 && <div>теги: {block.tags.join(", ")}</div>}
-          {block.session_uid && <div>сессия: {block.session_uid}</div>}
-        </dl>
-      </aside>
+      ) : (
+        <aside className="flex w-72 shrink-0 flex-col border-l">
+          <div className="flex items-center justify-between px-4 pb-1 pt-3">
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Панель</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              aria-label="Скрыть панель блока"
+              title="Скрыть панель блока"
+              onClick={() => setAsideHidden("1")}
+            >
+              <Icon name="right_panel_close" size={16} />
+            </Button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-2 text-sm">{asideBody}</div>
+        </aside>
+      )}
     </div>
   );
-}
-
-function flatten(nodes: CategoryNode[]): CategoryNode[] {
-  return nodes.flatMap((n) => [n, ...flatten(n.children)]);
 }
