@@ -76,7 +76,7 @@ export default async function KbPage({ searchParams }: Props) {
             <p className="font-medium text-foreground">Здесь пока пусто</p>
             <p className="mt-1 text-sm">
               Блок рождается только через разговор с агентом:{" "}
-              <Link href="/chat" className="text-violet-500 hover:underline">
+              <Link href="/chat" className="text-primary hover:underline">
                 начни быстрый разбор или сессию
               </Link>
             </p>

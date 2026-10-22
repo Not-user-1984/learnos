@@ -142,7 +142,7 @@ export function ConnectivitySettings() {
 
       <label className="flex flex-col gap-1.5 text-sm">
         <span className="flex items-center gap-1.5">
-          <Icon name="electric_bolt" size={16} className="text-violet-500" /> VLESS-ключ (внутренний xray → socks5)
+          <Icon name="electric_bolt" size={16} className="text-primary" /> VLESS-ключ (внутренний xray → socks5)
         </span>
         <Input
           placeholder={state.has_vless_key ? state.vless_key : "vless://uuid@host:порт?…"}

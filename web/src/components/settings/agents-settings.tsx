@@ -203,7 +203,7 @@ export function AgentsSettings() {
             )}
             <div className="min-w-0 flex-1">
               <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
-                <Icon name="smart_toy" size={14} className="text-violet-500" />
+                <Icon name="smart_toy" size={14} className="text-primary" />
                 {a.agent}
                 {a.custom && (
                   <Badge className="bg-emerald-500/15 text-[10px] text-emerald-500">мой агент</Badge>
@@ -328,7 +328,7 @@ export function AgentsSettings() {
                       className={cn(
                         "rounded-full border px-2.5 py-1 font-mono text-[10px] transition",
                         draft.tools.includes(t.name)
-                          ? "border-violet-500/60 bg-violet-500/15 text-violet-600 dark:text-violet-300"
+                          ? "border-primary/60 bg-primary/15 text-primary"
                           : "text-muted-foreground hover:bg-accent",
                       )}
                     >

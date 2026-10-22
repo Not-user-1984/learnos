@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ru" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} themes={["dark", "light", "parchment"]}>
+        <ThemeProvider attribute="class" defaultTheme="parchment" enableSystem={false} themes={["dark", "light", "parchment"]}>
           <AppShell>{children}</AppShell>
           <Toaster richColors position="bottom-right" />
           <SwRegister />

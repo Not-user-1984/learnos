@@ -41,7 +41,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
     <div className="h-full overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6 sm:py-6 lg:max-w-4xl xl:max-w-6xl 2xl:max-w-7xl">
         <header className="mb-5 flex flex-wrap items-start gap-x-3 gap-y-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/20 to-violet-500/20 text-primary-foreground sm:h-14 sm:w-14">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-primary/25 text-primary-foreground sm:h-14 sm:w-14">
             <Icon name={kindIcon(source.kind)} size={30} />
           </div>
           <div className="min-w-0 flex-1 basis-56">
@@ -56,7 +56,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
               {source.url && (
                 <>
                   {" · "}
-                  <a className="text-violet-500 hover:underline" href={source.url} target="_blank" rel="noreferrer">
+                  <a className="text-primary hover:underline" href={source.url} target="_blank" rel="noreferrer">
                     источник
                   </a>
                 </>
@@ -67,7 +67,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
         </header>
 
         {activity && (
-          <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3 text-sm">
+          <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm">
             <p className="font-medium">
               Изучение идёт: глава {activity.cursor_chapter}
               {activity.total_chapters > 0 && ` из ${activity.total_chapters}`}
@@ -104,7 +104,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
                     <div className="flex flex-wrap items-center gap-x-2">
                       <Link
                         href={`/library/${source.uid}/${ch.idx}`}
-                        className="font-medium hover:text-violet-500 hover:underline"
+                        className="font-medium hover:text-primary hover:underline"
                       >
                         {chapterLabel(ch.idx, ch.title)}
                       </Link>

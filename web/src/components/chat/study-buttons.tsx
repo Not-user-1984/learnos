@@ -131,9 +131,9 @@ export function StudyEmptyState() {
             setTab("book");
             setOpen(true);
           }}
-          className="group flex flex-col gap-2 rounded-2xl border bg-card p-6 text-left transition hover:border-violet-500/60"
+          className="group flex flex-col gap-2 rounded-2xl border bg-card p-6 text-left transition hover:border-primary/60"
         >
-          <Icon name="auto_stories" size={32} className="text-violet-500" />
+          <Icon name="auto_stories" size={32} className="text-primary" />
           <p className="font-semibold">Изучить книгу</p>
           <p className="text-sm text-muted-foreground">
             Загрузи PDF — нейронка разобьёт на главы, построит карту изучения и проведёт по ней блок за блоком.
@@ -144,7 +144,7 @@ export function StudyEmptyState() {
             setTab("video");
             setOpen(true);
           }}
-          className="group flex flex-col gap-2 rounded-2xl border bg-card p-6 text-left transition hover:border-violet-500/60"
+          className="group flex flex-col gap-2 rounded-2xl border bg-card p-6 text-left transition hover:border-primary/60"
         >
           <Icon name="movie" size={32} className="text-rose-500" />
           <p className="font-semibold">Обсудить видео</p>

@@ -238,7 +238,7 @@ export function StudyFlowDialog({
           <TabsContent value="book" className="pt-4">
             {step === "pick" && (
               <div className="flex flex-col gap-3">
-                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground transition hover:border-violet-500/50 hover:text-foreground">
+                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground transition hover:border-primary/50 hover:text-foreground">
                   {busy ? <Icon name="progress_activity" size={24} className="animate-spin" /> : <Icon name="upload" size={24} />}
                   {busy ? "Загружаю…" : "Выбери или перетащи PDF-книгу"}
                   <input

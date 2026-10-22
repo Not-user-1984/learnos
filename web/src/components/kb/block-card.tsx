@@ -13,7 +13,7 @@ export function BlockCard({ block }: { block: BlockCard }) {
   return (
     <Link
       href={`/kb/${block.block_uid}`}
-      className="group relative flex flex-col gap-2 overflow-hidden rounded-xl border bg-card p-4 transition hover:border-violet-500/50"
+      className="group relative flex flex-col gap-2 overflow-hidden rounded-xl border bg-card p-4 transition hover:border-primary/50"
     >
       {block.category_path && (
         <span className={`absolute inset-y-0 left-0 w-1 ${CATEGORY_COLORS[_rootColor(block.category_path)]}`} />
@@ -46,5 +46,5 @@ export function BlockCard({ block }: { block: BlockCard }) {
 function _rootColor(path: string): string {
   // цвет наследуется от корня пути; фронт не знает цветов подузлов — используем карту по первому сегменту
   const roots: Record<string, string> = { programming: "sky", infra: "emerald", life: "amber" };
-  return roots[path.split("/")[0]] ?? "violet";
+  return roots[path.split("/")[0]] ?? "primary";
 }

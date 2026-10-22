@@ -119,14 +119,14 @@ export function BlockPageClient({
             <Badge variant="outline">{block.kind === "lesson" ? "урок" : "конспект"}</Badge>
             {block.version > 1 && <Badge variant="secondary">v{block.version}</Badge>}
             {block.category_status === "suggested" && (
-              <Badge className="gap-1 bg-violet-500/15 text-violet-500 hover:bg-violet-500/25">
+              <Badge className="gap-1 bg-primary/15 text-primary hover:bg-primary/25">
                 категория не подтверждена
               </Badge>
             )}
           </div>
           {block.summary && <p className="mt-2 text-muted-foreground">{block.summary}</p>}
           {block.category_status === "suggested" && block.category_path && (
-            <div className="mt-3 flex items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 text-sm">
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
               Агент предлагает категорию: <b>{block.category_path}</b>
               <Button size="sm" className="ml-auto" onClick={confirmCategory} disabled={confirming}>
                 Принять
@@ -196,7 +196,7 @@ export function BlockPageClient({
           >
             📋 Скопировать MD
           </Button>
-          <a href={`/api/kb/blocks/${block.block_uid}/raw`} className="text-violet-500 hover:underline">
+          <a href={`/api/kb/blocks/${block.block_uid}/raw`} className="text-primary hover:underline">
             Скачать .md
           </a>
           <ConfirmDeleteButton

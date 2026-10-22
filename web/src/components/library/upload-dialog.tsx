@@ -78,7 +78,7 @@ export function AddSourceButton() {
           </TabsList>
           <TabsContent value="pdf" className="flex flex-col gap-3 pt-3">
             <Input placeholder="Название (необязательно)" value={title} onChange={(e) => setTitle(e.target.value)} />
-            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-8 text-sm text-muted-foreground hover:border-violet-500/50">
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-8 text-sm text-muted-foreground hover:border-primary/50">
               <Icon name="upload" size={24} />
               Перетащи PDF или кликни для выбора
               <input

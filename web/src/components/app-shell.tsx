@@ -52,7 +52,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Icon name={icon} size={20} filled={pathname.startsWith(href)} className="shrink-0" />
             {!collapsed && <span>{label}</span>}
             {!collapsed && href === "/kb" && inbox !== null && inbox > 0 && (
-              <span className="ml-auto flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-xs text-violet-500">
+              <span className="ml-auto flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs text-primary">
                 <Icon name="inbox" size={12} />
                 {inbox}
               </span>
@@ -91,7 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className="flex h-14 items-center gap-2 border-b px-3">
-          <Icon name="auto_stories" size={20} className="shrink-0 text-violet-500" />
+          <Icon name="auto_stories" size={20} className="shrink-0 text-primary" />
           {!collapsed && <span className="font-semibold">LearnOS</span>}
         </div>
         {nav}
@@ -112,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button aria-label="Закрыть меню" className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-sidebar text-sidebar-foreground">
             <div className="flex h-14 items-center gap-2 border-b px-3">
-              <Icon name="auto_stories" size={20} className="text-violet-500" />
+              <Icon name="auto_stories" size={20} className="text-primary" />
               <span className="font-semibold">LearnOS</span>
               <Button variant="ghost" size="icon" className="ml-auto" aria-label="Закрыть меню" onClick={() => setMobileOpen(false)}>
                 <Icon name="close" size={16} />

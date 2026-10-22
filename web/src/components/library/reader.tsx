@@ -113,7 +113,7 @@ export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, 
   return (
     <div className="flex h-full flex-col">
       <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur sm:px-4">
-        <Link href={`/library/${sourceUid}`} className="flex min-w-0 items-center gap-1 text-sm text-violet-500 hover:underline">
+        <Link href={`/library/${sourceUid}`} className="flex min-w-0 items-center gap-1 text-sm text-primary hover:underline">
           <Icon name="chevron_left" size={16} className="shrink-0" />
           <span className="truncate">{sourceTitle}</span>
         </Link>
@@ -155,7 +155,7 @@ export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, 
             {chapter.idx}. {chapter.title}
           </h1>
           {chapter.summary && (
-            <p className="mb-8 border-l-2 border-violet-400 pl-4 text-muted-foreground">{chapter.summary}</p>
+            <p className="mb-8 border-l-2 border-primary/50 pl-4 text-muted-foreground">{chapter.summary}</p>
           )}
           <Markdown content={formatChapter(text, chapter.title)} />
         </article>

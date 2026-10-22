@@ -51,7 +51,7 @@ function CommandCardView({ card, onInsert }: { card: Card; onInsert?: (t: string
   return (
     <div className="rounded-xl border bg-card p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <Badge className="gap-1 bg-violet-500/15 text-violet-500 hover:bg-violet-500/25">
+        <Badge className="gap-1 bg-primary/15 text-primary hover:bg-primary/25">
           <Icon name="terminal" size={12} /> {card.machine_name ?? card.machine ?? ""}
         </Badge>
         <Badge className={RISK_COLORS[risk] ?? RISK_COLORS.low}>риск: {card.risk ?? "low"}</Badge>
@@ -101,8 +101,8 @@ function CommandCardView({ card, onInsert }: { card: Card; onInsert?: (t: string
 
 function QuestionCardView({ card }: { card: Card }) {
   return (
-    <div className="rounded-xl border-2 border-violet-500/50 bg-violet-500/5 p-4 shadow-sm">
-      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-violet-500">
+    <div className="rounded-xl border-2 border-primary/50 bg-primary/5 p-4 shadow-sm">
+      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-primary">
         Фейнман-вопрос {card.index ?? ""}
         {card.total ? ` / ${card.total}` : ""} {card.concept && `· ${card.concept}`}
       </p>
@@ -143,12 +143,12 @@ function BlockCardView({ card }: { card: Card }) {
         {(card.category || card.category_suggested) && (
           <p className="mt-2 text-sm">
             Категория: <b>{card.category ?? card.category_suggested}</b> — поменять можно на{" "}
-            <Link className="text-violet-500 hover:underline" href={`/kb/${card.block_uid}`}>
+            <Link className="text-primary hover:underline" href={`/kb/${card.block_uid}`}>
               странице блока
             </Link>
           </p>
         )}
-        <Link href={`/kb/${card.block_uid}`} className="mt-2 inline-block text-sm text-violet-500 hover:underline">
+        <Link href={`/kb/${card.block_uid}`} className="mt-2 inline-block text-sm text-primary hover:underline">
           Открыть блок →
         </Link>
       </div>
@@ -161,7 +161,7 @@ function BlockCardView({ card }: { card: Card }) {
       </p>
       {card.reason && <p className="text-sm text-muted-foreground">{card.reason}</p>}
       <div className="mt-2 flex gap-2">
-        <Link href={`/kb/${card.block_uid}`} className="text-sm text-violet-500 hover:underline">
+        <Link href={`/kb/${card.block_uid}`} className="text-sm text-primary hover:underline">
           Посмотреть
         </Link>
         <button
@@ -218,7 +218,7 @@ function NoteDraftCardView({
       {d.summary && <p className="mt-1 text-sm text-muted-foreground">{d.summary}</p>}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {d.category_suggestion && (
-          <Badge className="bg-violet-500/15 text-violet-500">категория: {d.category_suggestion}</Badge>
+          <Badge className="bg-primary/15 text-primary">категория: {d.category_suggestion}</Badge>
         )}
         {(d.tags ?? []).map((t) => (
           <Badge key={t} variant="outline">

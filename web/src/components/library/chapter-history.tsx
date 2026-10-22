@@ -68,7 +68,7 @@ export function ChapterHistoryButton({
               <Link
                 key={c.uid}
                 href={`/chat/${c.uid}`}
-                className="flex items-center gap-3 rounded-xl border px-4 py-3 transition hover:border-violet-500/50 hover:bg-accent"
+                className="flex items-center gap-3 rounded-xl border px-4 py-3 transition hover:border-primary/50 hover:bg-accent"
                 onClick={() => setOpen(false)}
               >
                 <div className="min-w-0 flex-1">

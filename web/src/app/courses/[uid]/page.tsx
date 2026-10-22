@@ -40,12 +40,12 @@ export default async function CoursePage({ params }: { params: Promise<{ uid: st
           />
         </div>
         <div className="mt-3 h-2 max-w-md overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-violet-500" style={{ width: `${course.items_count ? (course.items_done / course.items_count) * 100 : 0}%` }} />
+          <div className="h-full rounded-full bg-primary" style={{ width: `${course.items_count ? (course.items_done / course.items_count) * 100 : 0}%` }} />
         </div>
       </header>
 
       {course.next_step && (
-        <div className="mb-6 rounded-xl border border-violet-500/40 bg-violet-500/5 p-4">
+        <div className="mb-6 rounded-xl border border-primary/40 bg-primary/5 p-4">
           <p className="text-sm font-medium">Следующий шаг</p>
           <p className="mt-1">
             {course.next_step.title} <span className="text-muted-foreground">— {course.next_step.hint}</span>
@@ -65,7 +65,7 @@ export default async function CoursePage({ params }: { params: Promise<{ uid: st
               {item.item_type === "source" ? "источник" : item.item_type === "chapter" ? "глава" : "блок"}
             </Badge>
             {item.item_type === "block" && item.block_uid && (
-              <Link href={`/kb/${item.block_uid}`} className="text-sm text-violet-500 hover:underline">
+              <Link href={`/kb/${item.block_uid}`} className="text-sm text-primary hover:underline">
                 открыть
               </Link>
             )}

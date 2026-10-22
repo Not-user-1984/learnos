@@ -26,12 +26,12 @@ export default async function CoursesPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {courses.map((c) => (
-            <div key={c.uid} className="group relative rounded-xl border bg-card p-4 transition hover:border-violet-500/50">
+            <div key={c.uid} className="group relative rounded-xl border bg-card p-4 transition hover:border-primary/50">
               <Link href={`/courses/${c.uid}`} className="flex flex-col">
                 <p className="font-medium">{c.title}</p>
                 <p className="text-sm text-muted-foreground">{c.topic}</p>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-violet-500" style={{ width: `${c.items_count ? (c.items_done / c.items_count) * 100 : 0}%` }} />
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${c.items_count ? (c.items_done / c.items_count) * 100 : 0}%` }} />
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {c.items_done}/{c.items_count} пройдено

@@ -29,7 +29,7 @@ export function Markdown({ content, linkTitles = {}, className = "" }: Props) {
       className={`prose prose-zinc dark:prose-invert max-w-none
         prose-headings:mt-8 prose-headings:mb-3 prose-headings:font-semibold
         prose-p:leading-[1.75] prose-li:leading-[1.75] prose-ul:my-3 prose-ol:my-3
-        prose-table:my-4 prose-blockquote:my-4 prose-blockquote:border-violet-400
+        prose-table:my-4 prose-blockquote:my-4 prose-blockquote:border-primary/60
         prose-hr:my-8 ${className}`}
     >
       <ReactMarkdown
@@ -55,7 +55,7 @@ export function Markdown({ content, linkTitles = {}, className = "" }: Props) {
             if (!isBlock) {
               return (
                 <code
-                  className="rounded-md border border-zinc-200/60 bg-zinc-100 px-1.5 py-0.5 font-mono text-[0.85em] text-violet-700 dark:border-zinc-700/60 dark:bg-zinc-800 dark:text-violet-300"
+                  className="rounded-md border border-border/60 bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-primary"
                   {...props}
                 >
                   {children}

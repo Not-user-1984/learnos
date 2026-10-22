@@ -29,7 +29,7 @@ export default async function ChatListPage() {
           {conversations.map((c) => (
             <div
               key={c.uid}
-              className="group relative flex items-center gap-3 rounded-xl border bg-card p-4 transition hover:border-violet-500/50"
+              className="group relative flex items-center gap-3 rounded-xl border bg-card p-4 transition hover:border-primary/50"
             >
               <Link href={`/chat/${c.uid}`} className="flex min-w-0 flex-1 items-center gap-3">
                 <Icon name={modeIcon(c.mode)} size={22} className="text-muted-foreground" />

@@ -322,7 +322,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           <div className="mx-auto mb-1 flex max-w-3xl flex-wrap gap-2 px-4">
             <button
               onClick={() => void send("Фейнман: запусти проверку — задай следующий вопрос по пройденному (карточкой ask).")}
-              className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-sm text-violet-500 transition hover:bg-violet-500/20"
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-sm text-primary transition hover:bg-primary/20"
             >
               <Icon name="help" size={16} /> Фейнман-вопросы
             </button>
@@ -347,7 +347,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
             <button
               onClick={() => void buildCourse()}
               disabled={courseBusy}
-              className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-sm text-violet-500 transition hover:bg-violet-500/20 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-sm text-primary transition hover:bg-primary/20 disabled:opacity-60"
             >
               {courseBusy ? <Icon name="progress_activity" size={16} className="animate-spin" /> : <Icon name="school" size={16} />}
               Собрать курс
@@ -402,7 +402,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
               </ol>
             </div>
             {session.chapter_idx && <p className="text-muted-foreground">Глава {session.chapter_idx}</p>}
-            <Link href="/kb?view=inbox" className="text-violet-500 hover:underline">
+            <Link href="/kb?view=inbox" className="text-primary hover:underline">
               Входящие блоков →
             </Link>
           </aside>
@@ -470,7 +470,7 @@ function Message({
         <p className="px-1 text-xs text-muted-foreground">
           Ты · {time}
         </p>
-        <div className="max-w-[85%] rounded-2xl bg-violet-600 px-4 py-2.5 text-white">
+        <div className="max-w-[85%] rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground">
           <Markdown content={message.content} className="[&_p]:my-0" />
         </div>
       </div>

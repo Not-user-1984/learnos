@@ -82,12 +82,12 @@ export function LibraryBrowser({ sources }: { sources: SourceCard[] }) {
           {filtered.map((s) => {
             const status = STATUS_VIEW[s.status] ?? { label: s.status, cls: "text-muted-foreground" };
             return (
-              <div key={s.uid} className="group relative flex flex-col overflow-hidden rounded-xl border bg-card transition hover:border-violet-500/50">
+              <div key={s.uid} className="group relative flex flex-col overflow-hidden rounded-xl border bg-card transition hover:border-primary/50">
                 <Link href={`/library/${s.uid}`} className="flex flex-1 flex-col">
                   <div
                     className={cn(
                       "flex h-24 items-center justify-center text-4xl",
-                      s.kind === "book" && "bg-gradient-to-br from-sky-500/20 to-violet-500/20",
+                      s.kind === "book" && "bg-gradient-to-br from-primary/15 to-primary/25",
                       s.kind === "video" && "bg-gradient-to-br from-rose-500/20 to-amber-500/20",
                       s.kind === "web" && "bg-gradient-to-br from-emerald-500/15 to-sky-500/20",
                     )}

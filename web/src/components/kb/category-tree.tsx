@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 export const CATEGORY_COLORS: Record<string, string> = {
   sky: "bg-sky-500",
-  violet: "bg-violet-500",
+  primary: "bg-primary",
   emerald: "bg-emerald-500",
   amber: "bg-amber-500",
   rose: "bg-rose-500",
