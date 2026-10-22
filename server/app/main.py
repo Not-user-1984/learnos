@@ -145,7 +145,22 @@ def create_app() -> FastAPI:
                 f"learnos-{name}", container.tools, module_tools
             )
     for path, server in app.state.mcp_servers.items():
-        sub = server.streamable_http_app(streamable_http_path=path)
+        # MCP по LAN (192.168.0.132) и из compose-сети (server) — иначе SDK-защита от
+        # DNS-rebind отвечает «Invalid Host header» на всё, кроме localhost
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        sub = server.streamable_http_app(
+            streamable_http_path=path,
+            transport_security=TransportSecuritySettings(
+                allowed_hosts=[
+                    "localhost:*",
+                    "127.0.0.1:*",
+                    "[::1]:*",
+                    "192.168.0.132:*",
+                    "server:*",
+                ]
+            ),
+        )
         app.router.routes.extend(sub.routes)
 
     return app
