@@ -27,11 +27,12 @@
 ## Ключевые потоки
 
 - **Знание рождается через диалог**: `finish_session`/`save_note` (с явным драфтом или генерацией block_writer'ом из транскрипта/переписки) → MD-файл v2 + индекс + событие BlockSaved → search индексирует, категория `suggested` ждёт подтверждения во «Входящих».
+- **Удаление материалов** (T-022): DELETE блоков/активностей/сессий без каскадов — 409 при живых зависимостях (блок в элементе курса; у активности сессии; по сессии создан блок БЗ; у источника блоки). Блок уходит целиком: индекс + версии + MD-файл + поисковая строка (событие BlockDeleted).
 - **Чат**: `POST /api/conversations/{uid}/messages` → SSE (delta/tool_start/tool_end/card/session/title/done); генерация в фоновой задаче — переживает разрыв соединения; «Стоп» через токен отмены.
 - **Обработка источника**: upload/добавление → job `process_source` (скилл) → job `summarize_chapters` (LLM по главам) → обзор источника.
 
 ## Проверки
 
-- Сервер: `cd server && uv run ruff check . && uv run ruff format --check . && uv run lint-imports && uv run pytest` (87 тестов: unit/integration/api/contract/agent).
+- Сервер: `cd server && uv run ruff check . && uv run ruff format --check . && uv run lint-imports && uv run pytest` (147 тестов: unit/integration/api/contract/agent).
 - Веб: `cd web && npm run lint && npx tsc --noEmit && npm run build`.
 - Живой LLM: `sec exec ZAI_API_KEY -- docker compose up -d`, затем `docker exec learnos-server uv run python -m app.cli smoke-llm`.
