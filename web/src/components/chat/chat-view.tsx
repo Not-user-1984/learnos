@@ -470,7 +470,7 @@ function Message({
         <p className="px-1 text-xs text-muted-foreground">
           Ты · {time}
         </p>
-        <div className="max-w-[85%] rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground">
+        <div className="user-bubble max-w-[85%] rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground">
           <Markdown content={message.content} className="[&_p]:my-0" />
         </div>
       </div>

@@ -211,6 +211,14 @@ html.parchment .prose {
 html.parchment .prose blockquote {
   font-style: italic;
 }
+/* Бабл сообщения пользователя на бумаге: светлая песочная плашка с тёмным
+   текстом вместо тёмной охры — кремовый шрифт на коричневом плохо читается. */
+html.parchment .user-bubble {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  border: 1px solid var(--border);
+}
+
 /* Инлайн-код на бумаге — «чернильная» плашка. */
 html.parchment .prose :not(pre) > code {
   background: oklch(0.86 0.045 82);
