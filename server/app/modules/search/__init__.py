@@ -25,10 +25,11 @@ class SearchModule(Module):
         return search_tools(c)
 
     def subscribe(self, bus, c) -> None:
-        from ..knowledge.events import BlockSaved, BlockUpdated
+        from ..knowledge.events import BlockDeleted, BlockSaved, BlockUpdated
         from ..library.events import SourceDeleted, SourceProcessed
 
         bus.subscribe(BlockSaved.name(), lambda e: c.search.on_block_saved(e.block_uid))
         bus.subscribe(BlockUpdated.name(), lambda e: c.search.on_block_saved(e.block_uid))
+        bus.subscribe(BlockDeleted.name(), lambda e: c.search.on_block_deleted(e.block_uid))
         bus.subscribe(SourceProcessed.name(), lambda e: c.search.reindex_chapters())
         bus.subscribe(SourceDeleted.name(), lambda e: c.search.reindex_chapters())

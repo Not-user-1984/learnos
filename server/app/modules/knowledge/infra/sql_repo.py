@@ -146,10 +146,12 @@ class BlockRepository:
         return [r[0] for r in session.execute(select(blocks.c.block_uid))]
 
     def delete(self, session: Session, uid: str) -> None:
+        """Удалить блок целиком: индекс, теги, источники, свои связи, версии."""
         session.execute(delete(blocks).where(blocks.c.block_uid == uid))
         session.execute(delete(block_tags).where(block_tags.c.block_uid == uid))
         session.execute(delete(block_sources).where(block_sources.c.block_uid == uid))
         session.execute(delete(block_links).where(block_links.c.from_uid == uid))
+        session.execute(delete(block_versions).where(block_versions.c.block_uid == uid))
 
     def tags_counts(self, session: Session) -> dict[str, int]:
         rows = session.execute(select(block_tags.c.tag, func.count()).group_by(block_tags.c.tag)).all()

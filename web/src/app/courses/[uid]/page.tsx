@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { api } from "@/lib/api";
 import type { Course } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDeleteButton } from "@/components/confirm-delete";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +21,24 @@ export default async function CoursePage({ params }: { params: Promise<{ uid: st
   return (
     <div className="h-full overflow-y-auto p-6">
       <header className="mb-6">
-        <h1 className="text-xl font-bold">{course.title}</h1>
-        <p className="text-sm text-muted-foreground">
-          {course.topic} · {course.items_done}/{course.items_count} пройдено
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold">{course.title}</h1>
+            <p className="text-sm text-muted-foreground">
+              {course.topic} · {course.items_done}/{course.items_count} пройдено
+            </p>
+          </div>
+          <ConfirmDeleteButton
+            endpoint={`/courses/${course.uid}`}
+            title="Удалить курс?"
+            name={course.title}
+            description="Курс и его элементы удалятся. Источники и блоки базы знаний останутся в библиотеке и базе знаний."
+            successMessage="Курс удалён"
+            redirectTo="/courses"
+            appearance="button"
+            label="Удалить курс"
+          />
+        </div>
         <div className="mt-3 h-2 max-w-md overflow-hidden rounded-full bg-muted">
           <div className="h-full rounded-full bg-violet-500" style={{ width: `${course.items_count ? (course.items_done / course.items_count) * 100 : 0}%` }} />
         </div>

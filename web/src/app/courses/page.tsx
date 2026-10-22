@@ -4,6 +4,7 @@ import Link from "next/link";
 import { GraduationCap } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Course } from "@/lib/types";
+import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { NewCourseButton } from "@/components/courses/new-course";
 
 export const dynamic = "force-dynamic";
@@ -25,16 +26,27 @@ export default async function CoursesPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {courses.map((c) => (
-            <Link key={c.uid} href={`/courses/${c.uid}`} className="rounded-xl border bg-card p-4 transition hover:border-violet-500/50">
-              <p className="font-medium">{c.title}</p>
-              <p className="text-sm text-muted-foreground">{c.topic}</p>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-violet-500" style={{ width: `${c.items_count ? (c.items_done / c.items_count) * 100 : 0}%` }} />
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {c.items_done}/{c.items_count} пройдено
-              </p>
-            </Link>
+            <div key={c.uid} className="group relative rounded-xl border bg-card p-4 transition hover:border-violet-500/50">
+              <Link href={`/courses/${c.uid}`} className="flex flex-col">
+                <p className="font-medium">{c.title}</p>
+                <p className="text-sm text-muted-foreground">{c.topic}</p>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-violet-500" style={{ width: `${c.items_count ? (c.items_done / c.items_count) * 100 : 0}%` }} />
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {c.items_done}/{c.items_count} пройдено
+                </p>
+              </Link>
+              <ConfirmDeleteButton
+                endpoint={`/courses/${c.uid}`}
+                title="Удалить курс?"
+                name={c.title}
+                description="Курс и его элементы удалятся. Источники и блоки базы знаний останутся в библиотеке и базе знаний."
+                successMessage="Курс удалён"
+                className="absolute right-2 top-2 opacity-0 transition group-hover:opacity-100"
+                buttonClassName="rounded-lg bg-background/60 p-1.5 text-muted-foreground backdrop-blur transition hover:text-rose-500"
+              />
+            </div>
           ))}
         </div>
       )}

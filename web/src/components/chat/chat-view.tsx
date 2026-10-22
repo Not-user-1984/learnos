@@ -14,6 +14,7 @@ import { apiPost } from "@/lib/api";
 import { Markdown } from "@/components/markdown/Markdown";
 import { CardView } from "@/components/chat/cards";
 import { TuningEmptyState } from "@/components/chat/tuning-panel";
+import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -251,6 +252,16 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
             {modeLabel(conversation.mode)}
           </span>
+          <ConfirmDeleteButton
+            endpoint={`/conversations/${conversation.uid}`}
+            title="Удалить разговор?"
+            name={title}
+            description="Сообщения разговора удалятся безвозвратно. Блоки базы знаний, созданные по нему, останутся."
+            successMessage="Разговор удалён"
+            redirectTo="/chat"
+            className="ml-auto"
+            buttonClassName="rounded-lg p-1.5 text-muted-foreground transition hover:text-rose-500"
+          />
         </header>
 
         <div ref={feedRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-6">

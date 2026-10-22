@@ -97,6 +97,10 @@ def make_router(svc) -> APIRouter:
             headers={"Content-Disposition": f'attachment; filename="{b.meta.path}.md"'},
         )
 
+    @r.delete("/blocks/{uid}")
+    def delete_block(uid: str):
+        return svc.delete_block(uid)
+
     @r.get("/blocks/{uid}/versions", response_model=list[VersionInfo])
     def versions(uid: str):
         return [VersionInfo(**v) for v in svc.versions(uid)]

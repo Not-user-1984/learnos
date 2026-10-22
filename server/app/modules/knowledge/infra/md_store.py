@@ -78,6 +78,10 @@ class MdBlockStore:
         """Перезаписать файл целиком (правка/откат)."""
         self._atomic_write(self.blocks_dir / f"{file_stem}.md", content)
 
+    def delete(self, file_stem: str) -> None:
+        """Удалить MD-файл блока (если файла уже нет — молча)."""
+        (self.blocks_dir / f"{file_stem}.md").unlink(missing_ok=True)
+
     def list_stems(self) -> list[str]:
         """Все имена блоков на диске."""
         return sorted(p.stem for p in self.blocks_dir.glob("*.md"))

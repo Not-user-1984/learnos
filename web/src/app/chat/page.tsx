@@ -4,6 +4,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { modeEmoji, modeLabel } from "@/lib/format";
 import type { ConversationItem } from "@/lib/types";
+import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { StudyButtons, StudyEmptyState } from "@/components/chat/study-buttons";
 
 export const dynamic = "force-dynamic";
@@ -25,18 +26,28 @@ export default async function ChatListPage() {
       ) : (
         <div className="flex flex-col gap-2">
           {conversations.map((c) => (
-            <Link
+            <div
               key={c.uid}
-              href={`/chat/${c.uid}`}
-              className="flex items-center gap-3 rounded-xl border bg-card p-4 transition hover:border-violet-500/50"
+              className="group relative flex items-center gap-3 rounded-xl border bg-card p-4 transition hover:border-violet-500/50"
             >
-              <span className="text-lg">{modeEmoji(c.mode)}</span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{c.title}</p>
-                <p className="text-xs text-muted-foreground">{modeLabel(c.mode)}</p>
-              </div>
-              <span className="text-xs text-muted-foreground">{new Date(c.updated_at).toLocaleString("ru-RU")}</span>
-            </Link>
+              <Link href={`/chat/${c.uid}`} className="flex min-w-0 flex-1 items-center gap-3">
+                <span className="text-lg">{modeEmoji(c.mode)}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{c.title}</p>
+                  <p className="text-xs text-muted-foreground">{modeLabel(c.mode)}</p>
+                </div>
+                <span className="text-xs text-muted-foreground">{new Date(c.updated_at).toLocaleString("ru-RU")}</span>
+              </Link>
+              <ConfirmDeleteButton
+                endpoint={`/conversations/${c.uid}`}
+                title="Удалить разговор?"
+                name={`${modeEmoji(c.mode)} ${c.title}`}
+                description="Сообщения разговора удалятся безвозвратно. Блоки базы знаний, созданные по нему, останутся."
+                successMessage="Разговор удалён"
+                className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 transition group-hover:opacity-100"
+                buttonClassName="rounded-lg bg-background/60 p-1.5 text-muted-foreground backdrop-blur transition hover:text-rose-500"
+              />
+            </div>
           ))}
         </div>
       )}

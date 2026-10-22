@@ -5,7 +5,7 @@ import logging
 
 from ...kernel.clock import Clock, now_iso
 from ...kernel.db import UnitOfWorkFactory
-from ...kernel.errors import InvalidState, NotFound
+from ...kernel.errors import Conflict, InvalidState, NotFound
 from ...kernel.ids import IdGenerator
 from .domain import allowed_events, can_finish, transcript_entry, transition
 from .events import ActivityProgressed, SessionFinished
@@ -34,6 +34,11 @@ class LearningService:
         self._clock = clock
         self._knowledge = knowledge
         self._profile = profile
+        self._chat = None  # ставится в bootstrap (отвязка разговоров при удалении активности)
+
+    def bind_chat(self, chat) -> None:
+        """Публичный сервис чата — разговоры отвязываются при удалении активности."""
+        self._chat = chat
 
     # --- активности ---
 
@@ -117,6 +122,45 @@ class LearningService:
         with self._uow() as uow:
             self._sessions.detach_activities(uow.session, activity_ids)
             self._acts.delete_ids(uow.session, activity_ids)
+
+    def delete_activity(self, ref: str | int) -> dict:
+        """Удалить активность. Запрещено, если по ней есть сессии (без каскадов, как с источниками).
+
+        Разговоры отвязываются от активности — история чата остаётся.
+
+        Raises:
+            NotFound: активности нет.
+            Conflict: у активности есть сессии.
+        """
+        with self._uow() as uow:
+            act = self._acts.get(uow.session, ref)
+            sessions_count = self._sessions.count_for_activity(uow.session, act["id"])
+            if sessions_count:
+                raise Conflict(
+                    f"у активности «{act['title']}» есть сессии ({sessions_count}) — "
+                    "сначала удалите их (блоки базы знаний не должны потерять сессию-источник)"
+                )
+        if self._chat is not None:
+            self._chat.detach_activities([act["id"]])
+        with self._uow() as uow:
+            self._acts.delete_ids(uow.session, [act["id"]])
+        return {"ok": True, "deleted": act["uid"]}
+
+    def delete_session(self, ref: int | str) -> dict:
+        """Удалить сессию. Запрещено, если по ней создан блок базы знаний.
+
+        Разговор, из которого шла сессия, остаётся (панель сессии в нём исчезнет).
+
+        Raises:
+            NotFound: сессии нет.
+            Conflict: по сессии создан блок базы знаний.
+        """
+        with self._uow() as uow:
+            s = self._get(uow.session, ref)
+            if self._knowledge is not None and self._knowledge.count_for_session(s["uid"]) > 0:
+                raise Conflict("по этой сессии создан блок базы знаний — сначала удалите блок")
+            self._sessions.delete(uow.session, s["id"])
+        return {"ok": True, "deleted": s["uid"]}
 
     # --- сессии ---
 

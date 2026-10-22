@@ -43,6 +43,10 @@ def make_router(svc) -> APIRouter:
     def get_activity(ref: str):
         return svc.get_activity(ref)
 
+    @r.delete("/activities/{ref}")
+    def delete_activity(ref: str):
+        return svc.delete_activity(ref)
+
     @r.post("/sessions")
     def start_session(body: SessionIn | None = None, course_id: int | None = None):
         if body is None:
@@ -56,6 +60,10 @@ def make_router(svc) -> APIRouter:
     @r.get("/sessions/{ref}")
     def get_session(ref):
         return svc.get_session_state(ref)
+
+    @r.delete("/sessions/{ref}")
+    def delete_session(ref: str):
+        return svc.delete_session(ref)
 
     @r.post("/sessions/{ref}/advance")
     def advance(ref: str, body: AdvanceIn):

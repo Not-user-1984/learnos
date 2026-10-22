@@ -57,6 +57,19 @@ export type ChapterCard = {
 
 export type SourceDetail = SourceCard & { chapters: ChapterCard[] };
 
+export type ActivityCard = {
+  id: number;
+  uid: string;
+  source_id: number;
+  source_uid: string;
+  title: string;
+  status: string;
+  cursor_chapter: number;
+  total_chapters: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ConversationItem = {
   uid: string;
   title: string;

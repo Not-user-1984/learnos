@@ -7,7 +7,7 @@ from typing import Any
 from ...agent.spec import AgentContext
 from ...kernel.asyncio_bridge import run_coro_sync
 from ...kernel.clock import Clock, now_iso
-from ...kernel.errors import NotFound, ValidationFailed
+from ...kernel.errors import Conflict, NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
 from ..library.domain import SourceKind  # noqa: F401 — реэкспорт для удобства слоёв выше
 from .domain import (
@@ -20,7 +20,7 @@ from .domain import (
     normalize_category_path,
     parse_markdown,
 )
-from .events import BlockSaved, BlockUpdated, CategoryConfirmed
+from .events import BlockDeleted, BlockSaved, BlockUpdated, CategoryConfirmed
 from .infra.md_store import MdBlockStore
 from .infra.sql_repo import BlockRepository, CategoryRepository
 
@@ -49,6 +49,11 @@ class KnowledgeService:
         self._clock = clock
         self._runtime = runtime
         self._profile = profile
+        self._courses = None  # ставится в bootstrap (проверка ссылки из элемента курса)
+
+    def bind_courses(self, courses) -> None:
+        """Публичный сервис курсов — для запрета удаления блока из элементов курса."""
+        self._courses = courses
 
     # --- сохранение ---
 
@@ -244,6 +249,42 @@ class KnowledgeService:
             return int(
                 uow.session.execute(select(func.count()).where(bs.c.source_uid == source_uid)).scalar_one()
             )
+
+    def count_for_session(self, session_uid: str) -> int:
+        """Число блоков, созданных по сессии (для запрета удаления сессии)."""
+        from sqlalchemy import func, select
+
+        from .infra.tables import blocks as blocks_t
+
+        with self._uow() as uow:
+            return int(
+                uow.session.execute(
+                    select(func.count()).where(blocks_t.c.session_uid == session_uid)
+                ).scalar_one()
+            )
+
+    def delete_block(self, uid: str) -> dict:
+        """Удалить блок: индекс, версии, MD-файл и поисковую строку.
+
+        Запрещено, если блок входит в элементы курса (без каскадов, как с источниками).
+
+        Raises:
+            NotFound: блока нет.
+            Conflict: на блок ссылаются элементы курса.
+        """
+        with self._uow() as uow:
+            block = self._blocks.get(uow.session, uid)
+            if self._courses is not None:
+                used = self._courses.count_items_for_block(uid)
+                if used:
+                    raise Conflict(
+                        f"блок «{block.meta.title}» входит в {used} элемент(ов) курса — "
+                        "сначала уберите его из курсов"
+                    )
+            self._blocks.delete(uow.session, uid)
+            uow.emit(BlockDeleted(block_uid=uid))
+        self._files.delete(block.meta.path)
+        return {"ok": True, "deleted": uid}
 
     # --- категории ---
 

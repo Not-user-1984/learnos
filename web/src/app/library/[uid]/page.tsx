@@ -5,7 +5,8 @@ import { notFound } from "next/navigation";
 import { BookMarked } from "lucide-react";
 import { kindEmoji } from "@/lib/format";
 import { api } from "@/lib/api";
-import type { ChapterCard, SourceDetail } from "@/lib/types";
+import type { ActivityCard, ChapterCard, SourceDetail } from "@/lib/types";
+import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { SourceActions } from "@/components/library/source-actions";
 import { ChapterHistoryButton } from "@/components/library/chapter-history";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,9 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
     notFound();
   }
   const chapters: ChapterCard[] = source.chapters ?? [];
+  const activity: ActivityCard | undefined = (
+    await api<ActivityCard[]>("/activities?status=active").catch(() => [] as ActivityCard[])
+  ).find((a) => a.source_uid === source.uid);
 
   return (
     <div className="h-full overflow-y-auto">
@@ -45,6 +49,24 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
           </div>
           <SourceActions sourceUid={source.uid} />
         </header>
+
+        {activity && (
+          <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3 text-sm">
+            <p className="font-medium">
+              Изучение идёт: глава {activity.cursor_chapter}
+              {activity.total_chapters > 0 && ` из ${activity.total_chapters}`}
+            </p>
+            <ConfirmDeleteButton
+              endpoint={`/activities/${activity.uid}`}
+              title="Прекратить изучение?"
+              description="Активность и курсор прогресса удалятся, разговоры останутся в истории. Если по активности есть сессии — удаление будет запрещено."
+              successMessage="Изучение прекращено"
+              appearance="button"
+              label="Прекратить"
+              className="ml-auto"
+            />
+          </div>
+        )}
 
         {source.summary && (
           <p className="mb-5 line-clamp-3 rounded-xl border bg-card p-3 text-sm leading-relaxed text-muted-foreground">

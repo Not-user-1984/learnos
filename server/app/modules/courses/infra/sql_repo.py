@@ -63,6 +63,12 @@ class CourseRepository:
             session.execute(select(func.count()).where(course_items.c.course_id == course_id)).scalar_one()
         )
 
+    def count_items_for_block(self, session: Session, block_uid: str) -> int:
+        """Число элементов курсов, ссылающихся на блок (для запрета удаления блока)."""
+        return int(
+            session.execute(select(func.count()).where(course_items.c.block_uid == block_uid)).scalar_one()
+        )
+
     def reorder(self, session: Session, course_id: int, item_ids: list[int]) -> None:
         for pos, item_id in enumerate(item_ids, 1):
             session.execute(

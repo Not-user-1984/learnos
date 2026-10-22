@@ -48,6 +48,16 @@ class SessionRepository:
             session.execute(select(func.count()).where(sessions.c.course_id == course_id)).scalar_one()
         )
 
+    def count_for_activity(self, session: Session, activity_id: int) -> int:
+        """Число сессий активности (для запрета удаления активности)."""
+        return int(
+            session.execute(select(func.count()).where(sessions.c.activity_id == activity_id)).scalar_one()
+        )
+
+    def delete(self, session: Session, session_id: int) -> None:
+        """Удалить сессию (блоки по ней должны быть удалены ранее — иначе запрет)."""
+        session.execute(sessions.delete().where(sessions.c.id == session_id))
+
     def update(self, session: Session, session_id: int, **values) -> None:
         session.execute(update(sessions).where(sessions.c.id == session_id).values(**values))
 

@@ -25,6 +25,13 @@ class BlockUpdated(DomainEvent):
 
 
 @dataclass(frozen=True, slots=True)
+class BlockDeleted(DomainEvent):
+    """Блок удалён (вместе с версиями, файлом и поисковой строкой)."""
+
+    block_uid: str
+
+
+@dataclass(frozen=True, slots=True)
 class CategoryConfirmed(DomainEvent):
     """Пользователь подтвердил категорию блока."""
 

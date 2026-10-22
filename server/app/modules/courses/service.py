@@ -140,6 +140,11 @@ class CoursesService:
             self._repo.remove_item(uow.session, item_id)
             return self._out(uow.session, course["id"])
 
+    def count_items_for_block(self, block_uid: str) -> int:
+        """Число элементов курсов, ссылающихся на блок (для запрета удаления блока)."""
+        with self._uow() as uow:
+            return self._repo.count_items_for_block(uow.session, block_uid)
+
     def reorder(self, ref: str | int, item_ids: list[int]) -> dict:
         """Переставить элементы (список id в новом порядке)."""
         with self._uow() as uow:

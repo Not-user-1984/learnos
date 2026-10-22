@@ -46,6 +46,10 @@ class FtsRepo:
             {"uid": uid, "title": title, "summary": summary, "body": body, "tags": tags},
         )
 
+    def delete_block(self, session: Session, uid: str) -> None:
+        """Убрать блок из blocks_fts (событие BlockDeleted)."""
+        session.execute(text("DELETE FROM blocks_fts WHERE block_uid = :uid"), {"uid": uid})
+
     def search_blocks(self, session: Session, q: str, limit: int) -> list[dict]:
         """Поиск по блокам: uid, title, summary, сниппет."""
         rows = (

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import type { BlockDetail, CategoryNode } from "@/lib/types";
 import { Markdown } from "@/components/markdown/Markdown";
+import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -197,6 +198,17 @@ export function BlockPageClient({
           <a href={`/api/kb/blocks/${block.block_uid}/raw`} className="text-violet-500 hover:underline">
             Скачать .md
           </a>
+          <ConfirmDeleteButton
+            endpoint={`/kb/blocks/${block.block_uid}`}
+            title="Удалить блок?"
+            name={block.title}
+            description="Блок исчезнет из базы знаний вместе с версиями и поисковым индексом — знания пропадут. Если блок входит в курс, удаление будет запрещено."
+            successMessage="Блок удалён"
+            redirectTo="/kb"
+            appearance="button"
+            label="Удалить блок"
+            buttonClassName="w-full justify-start border-destructive/40 text-rose-500 hover:text-rose-400"
+          />
         </div>
 
         <h2 className="mb-3 mt-6 font-medium">Версии ({versions.length})</h2>

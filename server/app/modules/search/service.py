@@ -57,6 +57,11 @@ class SearchService:
                 " ".join(block.meta.tags),
             )
 
+    def on_block_deleted(self, block_uid: str) -> None:
+        """Убрать блок из поискового индекса (событие BlockDeleted)."""
+        with self._uow() as uow:
+            self._fts.delete_block(uow.session, block_uid)
+
     def reindex_chapters(self) -> None:
         """Пересобрать индекс глав (событие SourceProcessed или вручную)."""
         with self._uow() as uow:
