@@ -1,4 +1,4 @@
-/** Страница источника: компактный обзор, главы с историей разговоров. */
+/** Страница источника: обзор на всю ширину экрана, главы с полными описаниями. */
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -12,6 +12,16 @@ import { ChapterHistoryButton } from "@/components/library/chapter-history";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
+
+/** Имя файла с подчёркиваниями → читаемое название; исходник остаётся в title. */
+function prettyTitle(title: string): string {
+  return title.replace(/_/g, " ");
+}
+
+/** Заголовок главы: если в самом названии уже есть номер — не дублируем его. */
+function chapterLabel(idx: number, title: string): string {
+  return /^\s*\d+[.)]?\s/.test(title) ? title : `${idx}. ${title}`;
+}
 
 export default async function SourcePage({ params }: { params: Promise<{ uid: string }> }) {
   const { uid } = await params;
@@ -28,13 +38,18 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6 sm:py-6">
-        <header className="mb-5 flex flex-wrap items-start gap-3">
+      <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6 sm:py-6 lg:max-w-4xl xl:max-w-6xl 2xl:max-w-7xl">
+        <header className="mb-5 flex flex-wrap items-start gap-x-3 gap-y-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/20 to-violet-500/20 text-2xl sm:h-14 sm:w-14 sm:text-3xl">
             {kindEmoji(source.kind)}
           </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold leading-snug sm:text-xl">{source.title}</h1>
+          <div className="min-w-0 flex-1 basis-56">
+            <h1
+              className="text-lg font-bold leading-snug break-words [overflow-wrap:anywhere] sm:text-xl"
+              title={source.title}
+            >
+              {prettyTitle(source.title)}
+            </h1>
             <p className="text-sm text-muted-foreground">
               {source.status === "processed" ? `обработан · ${chapters.length} гл.` : source.status}
               {source.url && (
@@ -47,7 +62,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
               )}
             </p>
           </div>
-          <SourceActions sourceUid={source.uid} />
+          <SourceActions sourceUid={source.uid} className="ml-auto" />
         </header>
 
         {activity && (
@@ -69,7 +84,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
         )}
 
         {source.summary && (
-          <p className="mb-5 line-clamp-3 rounded-xl border bg-card p-3 text-sm leading-relaxed text-muted-foreground">
+          <p className="mb-5 rounded-xl border bg-card p-3 text-sm leading-relaxed text-muted-foreground sm:p-4">
             {source.summary}
           </p>
         )}
@@ -82,20 +97,25 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
           <ol className="flex flex-col">
             {chapters.map((ch) => (
               <li key={ch.idx} className="border-b last:border-b-0">
-                <div className="flex items-start gap-2 py-3">
+                <div className="flex flex-wrap items-start gap-x-2 gap-y-2 py-3">
                   <BookMarked className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-64">
                     <div className="flex flex-wrap items-center gap-x-2">
-                      <Link href={`/library/${source.uid}/${ch.idx}`} className="font-medium hover:text-violet-500 hover:underline">
-                        {ch.idx}. {ch.title}
+                      <Link
+                        href={`/library/${source.uid}/${ch.idx}`}
+                        className="font-medium hover:text-violet-500 hover:underline"
+                      >
+                        {chapterLabel(ch.idx, ch.title)}
                       </Link>
                       {ch.has_exercises && <Badge variant="secondary">упражнения</Badge>}
                     </div>
                     {ch.summary && (
-                      <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{ch.summary}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground line-clamp-3 sm:line-clamp-none">
+                        {ch.summary}
+                      </p>
                     )}
                   </div>
-                  <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                  <span className="ml-auto flex shrink-0 flex-wrap items-center gap-1.5">
                     <ChapterHistoryButton sourceUid={source.uid} chapterIdx={ch.idx} chapterTitle={ch.title} size="icon" />
                     <Link
                       href={`/library/${source.uid}/${ch.idx}`}

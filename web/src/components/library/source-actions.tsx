@@ -1,14 +1,26 @@
 "use client";
 
-/** Действия на странице источника: активность/разбор/сессия/чтение. */
+/** Действия на странице источника: разбор/сессия (до lg — иконки без текста). */
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { GraduationCap, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { apiPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-export function SourceActions({ sourceUid, chapterIdx, chapterTitle }: { sourceUid: string; chapterIdx?: number; chapterTitle?: string }) {
+export function SourceActions({
+  sourceUid,
+  chapterIdx,
+  chapterTitle,
+  className,
+}: {
+  sourceUid: string;
+  chapterIdx?: number;
+  chapterTitle?: string;
+  className?: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -35,12 +47,25 @@ export function SourceActions({ sourceUid, chapterIdx, chapterTitle }: { sourceU
   };
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void start("quick")}>
-        ⚡ Быстрый разбор{chapterIdx ? ` гл. ${chapterIdx}` : ""}
+    <div className={cn("flex shrink-0 flex-wrap items-center gap-2", className)}>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy !== null}
+        title={chapterIdx ? `Быстрый разбор главы ${chapterIdx}` : "Быстрый разбор источника"}
+        onClick={() => void start("quick")}
+      >
+        <Zap className="h-4 w-4 text-amber-500" />
+        <span className="hidden lg:inline">Быстрый разбор</span>
       </Button>
-      <Button size="sm" disabled={busy !== null} onClick={() => void start("session")}>
-        🎓 Сессия{chapterIdx ? ` по гл. ${chapterIdx}` : ""}
+      <Button
+        size="sm"
+        disabled={busy !== null}
+        title={chapterIdx ? `Сессия по главе ${chapterIdx}` : "Сессия по источнику"}
+        onClick={() => void start("session")}
+      >
+        <GraduationCap className="h-4 w-4" />
+        <span className="hidden lg:inline">Сессия</span>
       </Button>
     </div>
   );
