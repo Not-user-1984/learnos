@@ -55,7 +55,7 @@ cd web && npm install && npm run dev                              # LEARNOS_API_
 
 ## Ключевые эндпоинты
 
-- REST: `/api/health`, `/api/conversations` (+`/{uid}/messages` SSE с `research:true` для ресёрч-запуска, `/stop`, DELETE), `/api/kb/*` (блоки/категории/входящие/версии/reindex; DELETE блока — версии+файл+индекс), `/api/sources` (+`/upload`, `/{id}/process`, главы, DELETE), `/api/activities` (+DELETE), `/api/sessions` (+advance/finish/DELETE), `/api/courses` (+`/plan`, `/from-plan`, items, DELETE), `/api/search`, `/api/export`, `/api/connectivity` (+`/check` — настройки поиска/прокси из UI)
+- REST: `/api/health`, `/api/conversations` (+`/{uid}/messages` SSE с `research:true` для ресёрч-запуска, `/stop`, DELETE), `/api/kb/*` (блоки/категории/входящие/версии/reindex; DELETE блока — версии+файл+индекс), `/api/sources` (+`/upload`, `/{id}/process`, главы, `/{ref}/file` PDF-оригинал inline, `/{ref}/outline` страницы глав по закладкам, DELETE), `/api/activities` (+DELETE), `/api/sessions` (+advance/finish/DELETE), `/api/courses` (+`/plan`, `/from-plan`, items, DELETE), `/api/search`, `/api/export`, `/api/connectivity` (+`/check` — настройки поиска/прокси из UI)
 - MCP: `/mcp` (все ~57 инструментов) и `/mcp/<module>` (knowledge, library, learning, chat, courses, profile, search, export, skills, research)
 - Чат-режимы: free / quick / session / tuning / `agent:<name>` (кастомные и встроенные, например `agent:repo_scout`); сессия-урок создаётся первым сообщением в разговоре session-режима
 - Ресёрч-инструменты агентов: `web_search` (цепочка), `academic_search` (arXiv), `youtube_search` (yt-dlp → веб), `web_read`, `github_repo`/`github_file` (idea-scout)
