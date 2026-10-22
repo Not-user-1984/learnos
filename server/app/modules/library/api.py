@@ -3,7 +3,7 @@
 from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel
 
-from .schemas import ChapterCard, JobOut, SourceCard, SourceCreate
+from .schemas import ChapterCard, JobOut, OutlineOut, SourceCard, SourceCreate
 
 
 class ProcessOut(BaseModel):
@@ -54,6 +54,21 @@ def make_router(svc) -> APIRouter:
     @r.get("/sources/{ref}/chapters", response_model=list[ChapterCard])
     def chapters(ref: str) -> list[ChapterCard]:
         return [ChapterCard(**ch) for ch in svc.list_chapters(ref)]
+
+    @r.get("/sources/{ref}/file")
+    def source_file(ref: str):
+        """Оригинальный PDF источника — встроенный просмотрщик (inline, с Range)."""
+        from fastapi.responses import FileResponse
+
+        path = svc.source_file(ref)
+        return FileResponse(
+            path, media_type="application/pdf", filename=path.name, content_disposition_type="inline"
+        )
+
+    @r.get("/sources/{ref}/outline", response_model=OutlineOut)
+    def outline(ref: str) -> OutlineOut:
+        """Стартовые страницы PDF по главам (закладки, кэш до следующей обработки)."""
+        return OutlineOut(**svc.chapter_pages(ref))
 
     @r.get("/sources/{ref}/chapters/{idx}")
     def read_chapter(ref: str, idx: int, offset: int = 0, limit: int = 12000):

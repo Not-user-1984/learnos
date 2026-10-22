@@ -50,3 +50,11 @@ class JobOut(BaseModel):
     total: int = 0
     message: str | None = None
     error: str | None = None
+
+
+class OutlineOut(BaseModel):
+    """Закладки PDF → стартовая страница каждой главы (для режима «чистый PDF»)."""
+
+    source: str
+    total_pages: int = 0
+    pages: dict[str, int] = {}

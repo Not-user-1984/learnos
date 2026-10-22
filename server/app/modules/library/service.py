@@ -8,7 +8,7 @@ from pathlib import Path
 from ...agent.spec import AgentContext
 from ...kernel.clock import Clock, now_iso
 from ...kernel.db import UnitOfWorkFactory
-from ...kernel.errors import Conflict, ValidationFailed
+from ...kernel.errors import Conflict, NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
 from .domain import SourceRules
 from .events import SourceDeleted, SourceProcessed
@@ -46,6 +46,7 @@ class LibraryService:
         self._knowledge = None  # ставится в bootstrap (публичный сервис knowledge)
         self._learning = None  # ставится в bootstrap (каскад удаления)
         self._chat = None
+        self._outline_cache: dict[int, dict] = {}  # source_id → страницы глав по закладкам PDF
 
     def bind(self, knowledge) -> None:
         """Связь с публичным сервисом базы знаний (для проверки удаления)."""
@@ -131,6 +132,7 @@ class LibraryService:
         with self._uow() as uow:
             self._sources.delete(uow.session, src["id"])
             uow.emit(SourceDeleted(source_uid=src["uid"]))
+        self._outline_cache.pop(src["id"], None)
         data_dir = Path(self._settings.data_dir)
         for sub in ("sources",):
             candidate = data_dir / sub / str(src["id"])
@@ -183,6 +185,7 @@ class LibraryService:
             source_id, kind, url = src["id"], src["kind"], src["url"]
             self._jobs.update(uow.session, job["id"], status="running", updated_at=now_iso(self._clock))
             self._chapters.delete_for_source(uow.session, source_id)
+        self._outline_cache.pop(source_id, None)  # главы пересоздаются — матчинг закладок устарел
 
         if kind == "book":
             result = self._skills.run("book-splitter", {"source_id": source_id})
@@ -387,6 +390,60 @@ class LibraryService:
             "message": f"символы {offset + 1}–{min(offset + limit, len(text))} из {len(text)}",
             "text": chunk,
         }
+
+    # --- PDF-оригинал и закладки ---
+
+    def source_file(self, ref: str | int) -> Path:
+        """Путь к оригинальному PDF источника (для встроенного просмотрщика)."""
+        with self._uow() as uow:
+            src = self._sources.get(uow.session, ref)
+        if src["kind"] != "book" or not src.get("local_path"):
+            raise NotFound(f"у источника «{src['title']}» нет PDF-оригинала")
+        path = Path(src["local_path"])
+        if not path.is_file():
+            raise NotFound(f"файл источника «{src['title']}» не найден на диске")
+        return path
+
+    def chapter_pages(self, ref: str | int) -> dict:
+        """Стартовые страницы PDF для глав книги: закладки документа (тот же TOC,
+        из которого splitter строил главы) матчятся с главами по нормализованному
+        названию; промахнувшаяся глава стартует со страницы предыдущей найденной.
+        Результат кэшируется по source_id до следующей обработки источника."""
+        import re
+
+        import fitz  # pymupdf — уже в зависимостях (book-splitter)
+
+        with self._uow() as uow:
+            src = self._sources.get(uow.session, ref)
+            chapter_list = self._chapters.list(uow.session, src["id"])
+        if src["kind"] != "book" or not src.get("local_path"):
+            raise NotFound(f"у источника «{src['title']}» нет PDF-оригинала")
+        cached = self._outline_cache.get(src["id"])
+        if cached is not None:
+            return {"source": src["uid"], **cached}
+
+        def norm(s: str) -> str:
+            return re.sub(r"\s+", " ", s).strip().lower()
+
+        try:
+            doc = fitz.open(src["local_path"])
+        except Exception as e:  # noqa: BLE001 — битый PDF не должен ронять API
+            raise ValidationFailed(f"не удалось прочитать PDF: {str(e)[:200]}") from e
+        with doc:
+            toc = doc.get_toc(simple=True)
+            # как в book-splitter: главы строились из закладок верхнего уровня
+            top = [(t, p) for lvl, t, p in toc if lvl == 1] or [(t, p) for _lvl, t, p in toc]
+            toc_pages: dict[str, int] = {}
+            for title, page in top:
+                toc_pages.setdefault(norm(title), page)
+            pages: dict[str, int] = {}
+            last = 1
+            for ch in chapter_list:
+                last = toc_pages.get(norm(ch["title"]), last)
+                pages[str(ch["idx"])] = last
+            result = {"total_pages": doc.page_count, "pages": pages}
+        self._outline_cache[src["id"]] = result
+        return {"source": src["uid"], **result}
 
     # --- upload ---
 

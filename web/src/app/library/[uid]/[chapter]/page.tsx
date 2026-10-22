@@ -7,8 +7,15 @@ import { ChapterReader } from "@/components/library/reader";
 
 export const dynamic = "force-dynamic";
 
-export default async function ChapterReaderPage({ params }: { params: Promise<{ uid: string; chapter: string }> }) {
+export default async function ChapterReaderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ uid: string; chapter: string }>;
+  searchParams?: Promise<{ mode?: string }>;
+}) {
   const { uid, chapter } = await params;
+  const sp = searchParams ? await searchParams : undefined;
   const idx = Number(chapter);
   let source: SourceDetail;
   let text: string;
@@ -32,6 +39,8 @@ export default async function ChapterReaderPage({ params }: { params: Promise<{ 
       text={text}
       prevIdx={prev?.idx ?? null}
       nextIdx={next?.idx ?? null}
+      isBook={source.kind === "book"}
+      initialMode={sp?.mode ?? null}
     />
   );
 }

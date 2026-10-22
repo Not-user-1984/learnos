@@ -1,7 +1,8 @@
 "use client";
 
 /** Читалка главы: e-book-режим — подглавы заголовками, выбор гарнитуры,
- *  выделение фрагмента → обсуждение или ресёрч в новой вкладке. */
+ *  выделение фрагмента → обсуждение или ресёрч в новой вкладке.
+ *  Для книг — режим «чистый PDF»: встроенный просмотрщик с оригинальной вёрсткой. */
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -22,12 +23,18 @@ type Props = {
   text: string;
   prevIdx: number | null;
   nextIdx: number | null;
+  /** У источника есть PDF-оригинал (kind=book) — доступен режим «чистый PDF». */
+  isBook?: boolean;
+  /** Режим из URL (?mode=pdf) — применяется один раз при монтировании. */
+  initialMode?: string | null;
 };
 
 const FONT_KEY = "learnos-reader-font";
 const FONT_EVENT = "learnos-reader-font-change";
 const FAMILY_KEY = "learnos-reader-family";
 const FAMILY_EVENT = "learnos-reader-family-change";
+const MODE_KEY = "learnos-reader-mode";
+const MODE_EVENT = "learnos-reader-mode-change";
 
 const FAMILIES = [
   { value: "sans", label: "Обычный", css: "ui-sans-serif, system-ui, sans-serif" },
@@ -48,14 +55,43 @@ function useReaderFont(): [number, (delta: number) => void] {
   return [scale, change];
 }
 
-export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, nextIdx }: Props) {
+export function ChapterReader({
+  sourceUid,
+  sourceTitle,
+  chapter,
+  text,
+  prevIdx,
+  nextIdx,
+  isBook = false,
+  initialMode = null,
+}: Props) {
   const router = useRouter();
   const [fontScale, changeFont] = useReaderFont();
   const [family, setFamily] = useStored(FAMILY_KEY, FAMILY_EVENT, "sans");
+  const [modeRaw, setMode] = useStored(MODE_KEY, MODE_EVENT, "text");
+  const mode = isBook && modeRaw === "pdf" ? "pdf" : "text";
+  const [pages, setPages] = useState<Record<string, number> | null>(null);
   const [selection, setSelection] = useState<string | null>(null);
   const [starting, setStarting] = useState<"chat" | "research" | null>(null);
   const selTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const familyCss = FAMILIES.find((f) => f.value === family)?.css ?? FAMILIES[0].css;
+
+  // ссылка «открыть PDF» ведёт в режим pdf (запоминаем выбор)
+  useEffect(() => {
+    if (initialMode === "pdf" && isBook) setMode("pdf");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // страницы глав по закладкам PDF — один запрос на сессию читалки
+  useEffect(() => {
+    if (mode !== "pdf" || pages !== null) return;
+    fetch(`/api/sources/${sourceUid}/outline`)
+      .then((r) => (r.ok ? r.json() : { pages: {} }))
+      .then((body: { pages?: Record<string, number> }) => setPages(body.pages ?? {}))
+      .catch(() => setPages({}));
+  }, [mode, pages, sourceUid]);
+
+  const pdfPage = pages?.[String(chapter.idx)] ?? 1;
 
   useEffect(() => {
     const onSelectionChange = () => {
@@ -119,24 +155,70 @@ export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, 
         </Link>
         <span className="ml-auto hidden text-sm text-muted-foreground sm:block">Глава {chapter.idx}</span>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" aria-label="Меньше шрифт" onClick={() => changeFont(-0.05)}>
-            <Icon name="text_decrease" size={16} />
-          </Button>
-          <Button variant="ghost" size="icon" aria-label="Больше шрифт" onClick={() => changeFont(0.05)}>
-            <Icon name="text_increase" size={16} />
-          </Button>
-          <select
-            aria-label="Гарнитура"
-            value={family}
-            onChange={(e) => setFamily(e.target.value)}
-            className="h-8 rounded-md border bg-background px-1.5 text-xs"
-          >
-            {FAMILIES.map((f) => (
-              <option key={f.value} value={f.value}>
-                {f.label}
-              </option>
-            ))}
-          </select>
+          {isBook && (
+            <div
+              className="flex items-center rounded-lg border bg-background p-0.5"
+              role="tablist"
+              aria-label="Режим чтения"
+            >
+              {(
+                [
+                  { value: "text", label: "Конспект", icon: "auto_stories" },
+                  { value: "pdf", label: "PDF", icon: "picture_as_pdf" },
+                ] as const
+              ).map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === m.value}
+                  onClick={() => setMode(m.value)}
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs whitespace-nowrap transition-colors ${
+                    mode === m.value
+                      ? "bg-accent font-medium text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon name={m.icon} size={14} />
+                  <span className="hidden sm:inline">{m.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {mode === "text" && (
+            <>
+              <Button variant="ghost" size="icon" aria-label="Меньше шрифт" onClick={() => changeFont(-0.05)}>
+                <Icon name="text_decrease" size={16} />
+              </Button>
+              <Button variant="ghost" size="icon" aria-label="Больше шрифт" onClick={() => changeFont(0.05)}>
+                <Icon name="text_increase" size={16} />
+              </Button>
+              <select
+                aria-label="Гарнитура"
+                value={family}
+                onChange={(e) => setFamily(e.target.value)}
+                className="h-8 rounded-md border bg-background px-1.5 text-xs"
+              >
+                {FAMILIES.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+          {mode === "pdf" && (
+            <a
+              href={`/api/sources/${sourceUid}/file`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center gap-1 rounded-md border px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              title="Встроенный просмотрщик недоступен? Откройте PDF в новой вкладке"
+            >
+              <Icon name="open_in_new" size={14} />
+              <span className="hidden sm:inline">В новой вкладке</span>
+            </a>
+          )}
           <ChapterHistoryButton sourceUid={sourceUid} chapterIdx={chapter.idx} chapterTitle={chapter.title} />
           <Button size="sm" variant="outline" disabled={starting !== null} onClick={() => void openDiscussion(null)}>
             {starting === "chat" ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="chat_bubble" size={16} className="mr-1" />}
@@ -146,35 +228,63 @@ export function ChapterReader({ sourceUid, sourceTitle, chapter, text, prevIdx, 
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <article
-          className="mx-auto max-w-2xl px-5 py-8 sm:px-8 sm:py-10"
-          style={{ fontSize: `${fontScale}rem`, lineHeight: 1.8, fontFamily: familyCss }}
-        >
-          <h1 className="mb-3 text-2xl font-bold leading-tight">
-            {chapter.idx}. {chapter.title}
-          </h1>
-          {chapter.summary && (
-            <p className="mb-8 border-l-2 border-primary/50 pl-4 text-muted-foreground">{chapter.summary}</p>
-          )}
-          <Markdown content={formatChapter(text, chapter.title)} />
-        </article>
+      {mode === "pdf" ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <iframe
+            key={`${sourceUid}-${chapter.idx}`}
+            src={`/api/sources/${sourceUid}/file#page=${pdfPage}`}
+            title={`PDF: ${chapter.title}`}
+            className="min-h-0 w-full flex-1"
+          />
+          <nav className="flex shrink-0 items-center justify-between border-t px-5 py-2.5">
+            {prevIdx ? (
+              <Link href={`/library/${sourceUid}/${prevIdx}?mode=pdf`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+                <Icon name="chevron_left" size={16} /> Глава {prevIdx}
+              </Link>
+            ) : (
+              <span />
+            )}
+            <span className="text-xs text-muted-foreground">
+              PDF · глава {chapter.idx} · страница {pdfPage}
+            </span>
+            {nextIdx && (
+              <Link href={`/library/${sourceUid}/${nextIdx}?mode=pdf`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+                Глава {nextIdx} <Icon name="chevron_right" size={16} />
+              </Link>
+            )}
+          </nav>
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <article
+            className="mx-auto max-w-2xl px-5 py-8 sm:px-8 sm:py-10"
+            style={{ fontSize: `${fontScale}rem`, lineHeight: 1.8, fontFamily: familyCss }}
+          >
+            <h1 className="mb-3 text-2xl font-bold leading-tight">
+              {chapter.idx}. {chapter.title}
+            </h1>
+            {chapter.summary && (
+              <p className="mb-8 border-l-2 border-primary/50 pl-4 text-muted-foreground">{chapter.summary}</p>
+            )}
+            <Markdown content={formatChapter(text, chapter.title)} />
+          </article>
 
-        <nav className="mx-auto flex max-w-2xl items-center justify-between border-t px-5 py-5 sm:px-8">
-          {prevIdx ? (
-            <Link href={`/library/${sourceUid}/${prevIdx}`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-              <Icon name="chevron_left" size={16} /> Глава {prevIdx}
-            </Link>
-          ) : (
-            <span />
-          )}
-          {nextIdx && (
-            <Link href={`/library/${sourceUid}/${nextIdx}`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-              Глава {nextIdx} <Icon name="chevron_right" size={16} />
-            </Link>
-          )}
-        </nav>
-      </div>
+          <nav className="mx-auto flex max-w-2xl items-center justify-between border-t px-5 py-5 sm:px-8">
+            {prevIdx ? (
+              <Link href={`/library/${sourceUid}/${prevIdx}`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+                <Icon name="chevron_left" size={16} /> Глава {prevIdx}
+              </Link>
+            ) : (
+              <span />
+            )}
+            {nextIdx && (
+              <Link href={`/library/${sourceUid}/${nextIdx}`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+                Глава {nextIdx} <Icon name="chevron_right" size={16} />
+              </Link>
+            )}
+          </nav>
+        </div>
+      )}
 
       {selection && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-20 flex justify-center px-4">

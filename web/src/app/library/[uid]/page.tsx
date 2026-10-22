@@ -124,6 +124,16 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
                     >
                       Читать
                     </Link>
+                    {source.kind === "book" && (
+                      <Link
+                        href={`/library/${source.uid}/${ch.idx}?mode=pdf`}
+                        className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-sm hover:bg-accent"
+                        title="Чистый PDF — оригинальная вёрстка"
+                      >
+                        <Icon name="picture_as_pdf" size={16} />
+                        PDF
+                      </Link>
+                    )}
                     <SourceActions sourceUid={source.uid} chapterIdx={ch.idx} chapterTitle={ch.title} />
                   </span>
                 </div>
