@@ -437,10 +437,17 @@ class LibraryService:
             for title, page in top:
                 toc_pages.setdefault(norm(title), page)
             pages: dict[str, int] = {}
-            last = 1
+            last_matched = 1
             for ch in chapter_list:
-                last = toc_pages.get(norm(ch["title"]), last)
-                pages[str(ch["idx"])] = last
+                hit = toc_pages.get(norm(ch["title"]))
+                if hit is not None:
+                    last_matched = hit
+                    pages[str(ch["idx"])] = hit
+                elif last_matched > 1:
+                    # промах по названию: глава начинается после предыдущей сматченной
+                    pages[str(ch["idx"])] = min(last_matched + 1, doc.page_count)
+                else:
+                    pages[str(ch["idx"])] = 1
             result = {"total_pages": doc.page_count, "pages": pages}
         self._outline_cache[src["id"]] = result
         return {"source": src["uid"], **result}

@@ -20,6 +20,18 @@ def _make_pdf() -> bytes:
     return buf.getvalue()
 
 
+def _make_pdf_toc(toc: list[list[int | str]]) -> bytes:
+    """Книга из 6 пустых страниц с произвольным деревом закладок."""
+    doc = fitz.open()
+    for _ in range(6):
+        doc.new_page()
+    doc.set_toc(toc)  # type: ignore[arg-type]
+    buf = io.BytesIO()
+    doc.save(buf)
+    doc.close()
+    return buf.getvalue()
+
+
 def _add_chapters(container, source_id: int, titles: list[str]) -> None:
     """Главы напрямую в БД — как их создал бы book-splitter из того же TOC."""
     from app.modules.library.infra.tables import chapters
@@ -52,7 +64,7 @@ def test_outline_matches_chapters_to_toc_pages(rest_app, client, container):
         files={"file": ("book.pdf", _make_pdf(), "application/pdf")},
         data={"title": "Книга с закладками"},
     ).json()
-    # названия как из splitter; третья «глава» не совпадает с закладками → страница предыдущей
+    # названия как из splitter; третья «глава» не совпадает с закладками → страница после предыдущей
     _add_chapters(container, src["id"], ["Глава A", "  глава  b ", "Приложение"])
 
     r = client.get(f"/api/sources/{src['uid']}/outline")
@@ -60,11 +72,56 @@ def test_outline_matches_chapters_to_toc_pages(rest_app, client, container):
     body = r.json()
     assert body["source"] == src["uid"]
     assert body["total_pages"] == 3
-    assert body["pages"] == {"1": 1, "2": 2, "3": 2}
+    assert body["pages"] == {"1": 1, "2": 2, "3": 3}
 
     # повторный вызов — из кэша, результат тот же
     again = client.get(f"/api/sources/{src['uid']}/outline").json()
     assert again["pages"] == body["pages"]
+
+
+def test_outline_without_toc_falls_back_to_first_page(rest_app, client, container):
+    """Книга без закладок: главы есть (взялись иначе), страницы неизвестны — все с 1-й."""
+    doc = fitz.open()
+    for _ in range(4):
+        doc.new_page()
+    buf = io.BytesIO()
+    doc.save(buf)
+    doc.close()
+    src = client.post(
+        "/api/sources/upload",
+        files={"file": ("flat.pdf", buf.getvalue(), "application/pdf")},
+        data={"title": "Без закладок"},
+    ).json()
+    _add_chapters(container, src["id"], ["Раз", "Два"])
+
+    body = client.get(f"/api/sources/{src['uid']}/outline").json()
+    assert body["pages"] == {"1": 1, "2": 1}
+    assert body["total_pages"] == 4
+
+
+def test_outline_nested_toc_uses_top_level(rest_app, client, container):
+    """Вложенные закладки: главы матчатся по верхнему уровню (как splitter),
+    вторые главы-разделы не перебивают страницы."""
+    pdf = _make_pdf_toc(
+        [
+            [1, "Часть I", 1],
+            [2, "Введение", 2],
+            [1, "Часть II", 4],
+            [2, "Раздел", 5],
+        ]
+    )
+    src = client.post(
+        "/api/sources/upload",
+        files={"file": ("nested.pdf", pdf, "application/pdf")},
+        data={"title": "Вложенные закладки"},
+    ).json()
+    # «Введение» существует только вторым уровнем — не должен матчиться в «Часть II»
+    _add_chapters(container, src["id"], ["Часть I", "Часть II", "Эпилог"])
+
+    body = client.get(f"/api/sources/{src['uid']}/outline").json()
+    assert body["pages"] == {"1": 1, "2": 4, "3": 5}
+    # ветка «level-1 пуст → все уровни» (живые PDF без корневых закладок) в fitz
+    # не воспроизводится (set_toc требует первую закладку уровня 1) — покрыта кодом сплиттера
 
 
 def test_source_file_not_found_cases(rest_app, client):

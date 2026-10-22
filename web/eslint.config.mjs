@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // сгенерированная статика pdf.js (минифицированный воркер)
+    "public/pdfjs/**",
   ]),
 ]);
 

@@ -15,6 +15,7 @@ import { useStored } from "@/lib/use-stored";
 import { Markdown } from "@/components/markdown/Markdown";
 import { Button } from "@/components/ui/button";
 import { ChapterHistoryButton } from "./chapter-history";
+import { PdfViewer } from "./pdf-viewer";
 
 type Props = {
   sourceUid: string;
@@ -71,6 +72,7 @@ export function ChapterReader({
   const [modeRaw, setMode] = useStored(MODE_KEY, MODE_EVENT, "text");
   const mode = isBook && modeRaw === "pdf" ? "pdf" : "text";
   const [pages, setPages] = useState<Record<string, number> | null>(null);
+  const [visiblePage, setVisiblePage] = useState<number | null>(null);
   const [selection, setSelection] = useState<string | null>(null);
   const [starting, setStarting] = useState<"chat" | "research" | null>(null);
   const selTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -208,16 +210,9 @@ export function ChapterReader({
             </>
           )}
           {mode === "pdf" && (
-            <a
-              href={`/api/sources/${sourceUid}/file`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-8 items-center gap-1 rounded-md border px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-              title="Встроенный просмотрщик недоступен? Откройте PDF в новой вкладке"
-            >
-              <Icon name="open_in_new" size={14} />
-              <span className="hidden sm:inline">В новой вкладке</span>
-            </a>
+            <span className="hidden text-xs whitespace-nowrap text-muted-foreground lg:inline">
+              PDF · глава {chapter.idx} · стр. {visiblePage ?? pdfPage}
+            </span>
           )}
           <ChapterHistoryButton sourceUid={sourceUid} chapterIdx={chapter.idx} chapterTitle={chapter.title} />
           <Button size="sm" variant="outline" disabled={starting !== null} onClick={() => void openDiscussion(null)}>
@@ -230,11 +225,10 @@ export function ChapterReader({
 
       {mode === "pdf" ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <iframe
-            key={`${sourceUid}-${chapter.idx}`}
-            src={`/api/sources/${sourceUid}/file#page=${pdfPage}`}
-            title={`PDF: ${chapter.title}`}
-            className="min-h-0 w-full flex-1"
+          <PdfViewer
+            url={`/api/sources/${sourceUid}/file`}
+            page={pdfPage}
+            onPageChange={setVisiblePage}
           />
           <nav className="flex shrink-0 items-center justify-between border-t px-5 py-2.5">
             {prevIdx ? (
@@ -245,7 +239,7 @@ export function ChapterReader({
               <span />
             )}
             <span className="text-xs text-muted-foreground">
-              PDF · глава {chapter.idx} · страница {pdfPage}
+              PDF · глава {chapter.idx} · стр. {visiblePage ?? pdfPage}
             </span>
             {nextIdx && (
               <Link href={`/library/${sourceUid}/${nextIdx}?mode=pdf`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">

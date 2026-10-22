@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "predev": "node scripts/copy-pdf-assets.mjs",
+    "prebuild": "node scripts/copy-pdf-assets.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -21,6 +23,7 @@
     "mermaid": "^12.1.0",
     "next": "16.3.8",
     "next-themes": "^0.4.6",
+    "pdfjs-dist": "^6.4.299",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",
