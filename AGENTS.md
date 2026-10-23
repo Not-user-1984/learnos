@@ -14,7 +14,7 @@
 
 ## Текущий статус (2026-10-18)
 
-Сервер — модульный монолит (14 модулей, слои domain/service/infra, единый ToolRegistry → REST + MCP `/mcp` + `/mcp/<module>`, ~58 инструментов), схема Alembic до 0007, LLM z.ai GLM, агентный рантайм с трейсами в `agent_runs` (падение инструмента не роняет агент). Веб: чат с SSE (обрыв стрима → авто-догон ответа), база знаний с автокатегоризацией, библиотека (PDF/YouTube/веб-статьи), курсы, настройка агентов/промптов, сторонние MCP; удаление любых материалов с подтверждением (блоки/активности/сессии/курсы/разговоры — 409 при живых зависимостях, единый ConfirmDeleteButton). Ресёрч: цепочка поисковых провайдеров (keyless-rescue: платный по ключу → DDG → Википедия → HN), academic_search (arXiv), youtube_search (yt-dlp → веб-фолбэк), research-режим сообщений (директива в system_extra, в чате видна только тема). Idea-scout: агент repo_scout (GitHub API, отчёты в data/ideas + Telegram). Настройки связи в UI (`/api/connectivity`): ключи Tavily/Serper, socks5-прокси, vless-ключ → xray-sidecar (socks5://xray:1080 для всего стека). Прод: Proxmox CT 132, автодеплой по git push (2 мин), тесты 147, ruff/import-linter чистые.
+Сервер — модульный монолит (14 модулей, слои domain/service/infra, единый ToolRegistry → REST + MCP `/mcp` + `/mcp/<module>`, ~59 инструментов), схема Alembic до 0007, LLM z.ai GLM, агентный рантайм с трейсами в `agent_runs` (падение инструмента не роняет агент). Веб: чат с SSE (обрыв стрима → авто-догон ответа), база знаний с автокатегоризацией, библиотека (PDF/YouTube/веб-статьи), курсы, настройка агентов/промптов, сторонние MCP; удаление любых материалов с подтверждением (блоки/активности/сессии/курсы/разговоры — 409 при живых зависимостях, единый ConfirmDeleteButton). Ресёрч: цепочка поисковых провайдеров (keyless-rescue: платный по ключу → DDG → Википедия → HN), academic_search (arXiv), youtube_search (yt-dlp → веб-фолбэк), research-режим сообщений (директива в system_extra, в чате видна только тема). Idea-scout: агент repo_scout (GitHub API, отчёты в data/ideas + Telegram). Настройки связи в UI (`/api/connectivity`): ключи Tavily/Serper, socks5-прокси, vless-ключ → xray-sidecar (socks5://xray:1080 для всего стека). Скилл torrent_fetch (Prowlarr→qBit, книги learnos-books при завершении сами в библиотеке через hook media-CT). Прод: Proxmox CT 132, автодеплой по git push (2 мин), тесты 161, ruff/import-linter чистые.
 
 Из незакрытого — смотреть живой бэклог: [task_ai/tasks/](task_ai/tasks/) (полный mypy, sqlite-vec, ключ поиска Tavily/Serper от юзера, прокси в LAN для Telegram, скилл-система T-017, остатки ресёрча T-014 Э3–Э5).
 
@@ -59,7 +59,7 @@ cd web && npm install && npm run dev                              # LEARNOS_API_
 - MCP: `/mcp` (все ~57 инструментов) и `/mcp/<module>` (knowledge, library, learning, chat, courses, profile, search, export, skills, research)
 - Чат-режимы: free / quick / session / tuning / `agent:<name>` (кастомные и встроенные, например `agent:repo_scout`); сессия-урок создаётся первым сообщением в разговоре session-режима
 - Ресёрч-инструменты агентов: `web_search` (цепочка), `academic_search` (arXiv), `youtube_search` (yt-dlp → веб), `web_read`, `github_repo`/`github_file` (idea-scout)
-- Скиллы: `server/skills/<name>/` (web-search, book-splitter, youtube-to-summary) — drop-in, видны в MCP и агентам
+- Скиллы: `server/skills/<name>/` (web-search, book-splitter, youtube-to-summary, torrent-fetch) — drop-in, видны в MCP и агентам. torrent_fetch: Prowlarr-поиск + qBit-загрузка; книги (категория learnos-books) при завершении сами падают в библиотеку — hook на media-CT (`/opt/media/scripts/learnos-qbit-hook.sh`, лог `/var/log/learnos-qbit-hook.log`), конфиг `data/torrent-fetch.json`
 
 ## Хомлаб (для фазы 2 и песочниц)
 
@@ -82,8 +82,9 @@ cd web && npm install && npm run dev                              # LEARNOS_API_
 
 ## Готовые скиллы для портирования
 
-- YouTube → транскрипт: `~/my_dev/radmipa-skills/skills/youtube-to-summary/SKILL.md` (yt-dlp субтитры, fallback Whisper)
-- Web-поиск: `~/my_dev/radmipa-skills/skills/web-search/SKILL.md` (для `research_sources`)
+- YouTube → транскрипт: `~/my_dev/radmipa-skills/skills/youtube-to-summary/SKILL.md` (yt-dlp субтитры, fallback Whisper) — портирован
+- Web-поиск: `~/my_dev/radmipa-skills/skills/web-search/SKILL.md` (для `research_sources`) — портирован
+- Torrent-загрузка: `~/my_dev/radmipa-skills/skills/torrent-fetch/` (Prowlarr+qBit+libgen) — портирован 2026-10-22 (T-029), книги сами падают в библиотеку через hook на media-CT
 
 ## Секреты
 
