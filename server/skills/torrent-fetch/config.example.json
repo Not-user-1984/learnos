@@ -1,0 +1,19 @@
+{
+  "prowlarr": {
+    "url": "http://192.168.0.131:9696",
+    "api_key": "<Prowlarr ApiKey из config.xml>"
+  },
+  "qbittorrent": {
+    "url": "http://192.168.0.131:8080",
+    "api_key": "<qBit WebUI APIKey qbt_... из qBittorrent.conf>",
+    "username": "",
+    "password": ""
+  },
+  "libgen": {
+    "enabled": true,
+    "proxy": "",
+    "mirrors": ["https://libgen.is", "https://libgen.gs"]
+  },
+  "mode": "suggest",
+  "download_dir": "~/Downloads/torrent-fetch"
+}
