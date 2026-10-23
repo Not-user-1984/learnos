@@ -143,3 +143,4 @@ def test_research_flag_directive_hidden_from_chat(client, fake_llm):
     system = fake_llm.requests[-1][1].messages[0].content
     assert "ресёрч-цикл" in system
     assert "web_search" in system
+    assert "torrent_fetch" in system  # подсказка про скилл закачек (T-029)
