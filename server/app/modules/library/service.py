@@ -260,6 +260,11 @@ class LibraryService:
         front_matter: list[str] = []
         with self._uow() as uow:
             rows = {ch["idx"]: ch for ch in self._chapters.list(uow.session, source_id)}
+            # позиционные номера — только книгам без собственной нумерации в названиях
+            # (иначе «Предисловие»=1 и «Глава 1»=1 дублируются)
+            numbered_book = any(
+                labels[e["idx"]][1] is not None for e in entries if labels[e["idx"]][0] == "chapter"
+            )
             new_idx = 0
             chapter_seq = 0
             for e in entries:
@@ -276,7 +281,8 @@ class LibraryService:
                 new_idx += 1
                 if cls == "chapter":
                     chapter_seq += 1
-                    number = number or chapter_seq
+                    if number is None and not numbered_book:
+                        number = chapter_seq
                 else:
                     number = None
                 self._chapters.update(uow.session, row["id"], idx=new_idx, number=number)

@@ -15,10 +15,11 @@ ENTRIES = [
 ]
 
 
-def _add_book_source(container, tmp_title: str = "Pro Git") -> dict:
+def _add_book_source(container, tmp_title: str = "Pro Git", entries: list[dict] | None = None) -> dict:
     """Источник-книга с PDF и главами «после сплиттера» (все top-записи, .md на диске)."""
     from app.modules.library.infra.tables import chapters, sources
 
+    book_entries = entries or ENTRIES
     data_dir = Path(container.settings.data_dir)
     src_dir = data_dir / "sources"
     with container.uow() as uow:
@@ -33,7 +34,7 @@ def _add_book_source(container, tmp_title: str = "Pro Git") -> dict:
                 updated_at="2026-10-24T00:00:00",
             )
         ).inserted_primary_key[0]
-        for e in ENTRIES:
+        for e in book_entries:
             ch_dir = src_dir / str(sid) / "chapters"
             ch_dir.mkdir(parents=True, exist_ok=True)
             path = ch_dir / f"ch_{e['idx']:02d}.md"
@@ -74,7 +75,9 @@ def test_curate_book_heuristic_drops_front_matter(client, container):
 
     rows = _chapters(container, src["id"])
     assert [(r["idx"], r["title"], r["number"]) for r in rows] == [
-        (1, "Введение", 1),  # номера в названии нет → позиционный
+        # книга с собственной нумерацией («Глава 2. …») — «Введение» без номера,
+        # чтобы не дублировать «Глава 1» с настоящей главой 1
+        (1, "Введение", None),
         (2, "Глава 2. Основы Git", 2),  # номер из названия
         (3, "Приложение A. Шпаргалка", None),  # приложение без числа
     ]
@@ -94,8 +97,28 @@ def test_curate_book_heuristic_drops_front_matter(client, container):
     assert "Pro Git" in json.loads(meta)["front_matter"]
 
 
+def test_curate_book_unnumbered_book_gets_positional_numbers(client, container):
+    """Книга без номеров в названиях (Pro Git): главы получают позиции 1, 2, …"""
+    entries = [
+        {"idx": 1, "title": "Оглавление", "start_page": 3, "page_count": 2, "snippet": ""},
+        {"idx": 2, "title": "Введение", "start_page": 5, "page_count": 9, "snippet": "о git"},
+        {"idx": 3, "title": "Основы Git", "start_page": 14, "page_count": 30, "snippet": ""},
+    ]
+    src = _add_book_source(container, entries=entries)
+    container.library._curate_book(src["id"], src["uid"], {"entries": entries})
+    rows = _chapters(container, src["id"])
+    assert [(r["idx"], r["title"], r["number"]) for r in rows] == [
+        (1, "Введение", 1),
+        (2, "Основы Git", 2),
+    ]
+
+
 def test_curate_book_llm_labels_win(client, container, fake_llm):
-    """Куратор-LLM: один вызов, классы из ответа модели применяются к всем записям."""
+    """Куратор-LLM: один вызов, классы из ответа модели применяются к всем записям.
+
+    Номера LLM не используются: только из названия книги (позиционные — если
+    в книге вообще нет своих номеров).
+    """
     from app.llm.providers.fake import FakeTurn
 
     fake_llm.queue(
@@ -116,7 +139,8 @@ def test_curate_book_llm_labels_win(client, container, fake_llm):
     src = _add_book_source(container)
     container.library._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
     rows = _chapters(container, src["id"])
-    assert [(r["idx"], r["number"]) for r in rows] == [(1, 1), (2, 2), (3, None)]
+    # «Введение» — chapter без номера (в книге есть «Глава 2» с собственным номером)
+    assert [(r["idx"], r["number"]) for r in rows] == [(1, None), (2, 2), (3, None)]
     # один вызов на книгу
     assert len(fake_llm.requests) == 1
 
@@ -149,7 +173,7 @@ def test_outline_from_db_with_sections_and_numbers(rest_app, client, container):
 
     body = client.get(f"/api/sources/{src['uid']}/outline").json()
     assert body["pages"] == {"1": 5, "2": 14, "3": 400}
-    assert body["numbers"] == {"1": 1, "2": 2}
+    assert body["numbers"] == {"2": 2}  # «Введение» в нумерованной книге без номера
     assert body["sections"]["2"] == [{"title": "Первые шаги", "page": 16}]
     assert body["total_pages"] == 403  # max(end_page) без открытия PDF
 
@@ -175,4 +199,4 @@ def test_get_source_returns_chapter_numbers(rest_app, client, container):
     container.library._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
     body = client.get(f"/api/sources/{src['uid']}").json()
     numbers = [(ch["number"], ch["title"]) for ch in body["chapters"]]
-    assert numbers == [(1, "Введение"), (2, "Глава 2. Основы Git"), (None, "Приложение A. Шпаргалка")]
+    assert numbers == [(None, "Введение"), (2, "Глава 2. Основы Git"), (None, "Приложение A. Шпаргалка")]
