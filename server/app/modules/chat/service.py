@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
 from typing import Any
@@ -171,6 +172,11 @@ class ChatService:
             activity_ids = self._learning.activity_ids_for_source(source)
         with self._uow() as uow:
             return self._convs.list(uow.session, mode=mode, q=q, activity_ids=activity_ids, chapter=chapter)
+
+    def activity_id_for_conversation(self, uid: str) -> int | None:
+        """Активность разговора (для mark_chapter_done из quick-разбора)."""
+        with self._uow() as uow:
+            return self._convs.get(uow.session, uid).get("activity_id")
 
     def detach_activities(self, activity_ids: list[int]) -> None:
         """Отвязать разговоры от активностей источника (при удалении источника история остаётся)."""
@@ -361,9 +367,12 @@ class ChatService:
                 elif chapters:
                     ch = chapters[0]
                     kp = "; ".join(ch.get("key_points") or [])
+                    label = _chapter_label(ch)
                     parts.append(
-                        f"Текущая глава {ch['idx']}. {ch['title']}: {ch.get('summary') or ''}\n"
-                        f"Ключевые пункты: {kp}"
+                        f"Текущая глава {label}: {ch.get('summary') or ''}\n"
+                        f"Ключевые пункты: {kp}\n"
+                        "Глава считается пройденной, когда пользователь подтвердил разбор "
+                        "(«дальше», «понятно», «следующая») — тогда mark_chapter_done."
                     )
             except NotFound:
                 pass
@@ -397,7 +406,7 @@ class ChatService:
                 f"Начало транскрипта: {(head.get('summary') or '')[:200] or '—'}"
             )
         toc = "\n".join(
-            f"{ch['idx']}. {ch['title']} — {(ch.get('summary') or '')[:120]}"
+            f"{ch['idx']}. {_chapter_label(ch)} — {(ch.get('summary') or '')[:120]}"
             for ch in src.get("chapters", [])[:30]
         )
         return (
@@ -560,3 +569,13 @@ def _draft_to_plain(draft) -> dict:
         "category_suggestion": draft.category_suggestion,
         "sources": [{"source": s.source, "chapter": s.chapter, "title": s.title} for s in draft.sources],
     }
+
+
+def _chapter_label(ch: dict) -> str:
+    """Читаемое имя главы: номер книги важнее позиционного idx («Глава 3. Ветвление в Git»)."""
+    title = ch.get("title") or ""
+    inner = re.sub(r"^\s*\d+[.)]?\s+", "", title)
+    number = ch.get("number")
+    if number:
+        return f"Глава {number} ({inner or title})"
+    return f"глава {ch.get('idx')}. {title}"

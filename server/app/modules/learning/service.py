@@ -322,6 +322,52 @@ class LearningService:
             "_card": block.get("_card"),
         }
 
+    def mark_chapter_done(
+        self,
+        *,
+        activity_ref: str | int | None = None,
+        chapter: int | None = None,
+        conversation_uid: str | None = None,
+    ) -> dict:
+        """Отметить главу разобранной: курсор активности двигается вперёд (не назад).
+
+        Доступен quick-разбору: без сессии-урока прогресс по книге всё равно должен
+        двигаться. Активность — по явной ссылке или из разговора (conversation_uid).
+        """
+        now = now_iso(self._clock)
+        with self._uow() as uow:
+            if activity_ref is not None:
+                act = self._acts.get(uow.session, activity_ref)
+            elif conversation_uid is not None and self._chat is not None:
+                activity_id = self._chat.activity_id_for_conversation(conversation_uid)
+                if activity_id is None:
+                    raise NotFound(f"разговор '{conversation_uid}' не привязан к активности")
+                act = self._acts.get(uow.session, activity_id)
+            else:
+                raise NotFound("активность не задана (activity или conversation)")
+            from sqlalchemy import func, select
+
+            from ..library.infra.tables import chapters as chapters_t
+
+            total = int(
+                uow.session.execute(
+                    select(func.count()).where(chapters_t.c.source_id == act["source_id"])
+                ).scalar_one()
+            )
+            target = chapter if chapter is not None and chapter > 0 else act["cursor_chapter"]
+            cursor = max(act["cursor_chapter"], target + 1)
+            status = "done" if cursor > total > 0 else act["status"]
+            self._acts.update(uow.session, act["id"], cursor_chapter=cursor, status=status, updated_at=now)
+            uow.emit(ActivityProgressed(activity_uid=act["uid"], cursor_chapter=cursor, total_chapters=total))
+        return {
+            "ok": True,
+            "activity": act["uid"],
+            "marked_chapter": target,
+            "cursor_chapter": cursor,
+            "total_chapters": total,
+            "status": status,
+        }
+
     def session_for_conversation(self, conversation_id: int) -> dict | None:
         """Активная сессия разговора (для агента session-режима)."""
         with self._uow() as uow:

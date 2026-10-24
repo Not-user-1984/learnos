@@ -54,6 +54,13 @@ class StartActivityArgs(BaseModel):
     course_id: int | None = None
 
 
+class MarkChapterDoneArgs(BaseModel):
+    """mark_chapter_done: главу разобрали — двигаем курсор активности."""
+
+    chapter: int | None = None
+    activity: str | int | None = None
+
+
 class RefArgs(BaseModel):
     """Ссылка на активность/сессию."""
 
@@ -118,6 +125,11 @@ def learning_tools(c) -> list[ToolSpec]:
     def start_activity(args: StartActivityArgs, ctx: ToolContext):
         del ctx
         return svc.start_activity(args.source, args.course_id)
+
+    def mark_chapter_done(args: MarkChapterDoneArgs, ctx: ToolContext):
+        return svc.mark_chapter_done(
+            activity_ref=args.activity, chapter=args.chapter, conversation_uid=ctx.conversation_uid
+        )
 
     def list_activities(args: RefArgs | None, ctx: ToolContext):
         del ctx, args
@@ -184,6 +196,18 @@ def learning_tools(c) -> list[ToolSpec]:
             args_model=StartActivityArgs,
             handler=start_activity,
             label="Начинаю активность",
+        ),
+        ToolSpec(
+            name="mark_chapter_done",
+            module="learning",
+            description=(
+                "Отметить главу источника разобранной: двигает курсор активности "
+                "(текущая глава разговора, если chapter не задан). Для быстрого разбора — "
+                "вызывай после разбора главы, вместе с предложением следующей."
+            ),
+            args_model=MarkChapterDoneArgs,
+            handler=mark_chapter_done,
+            label="Глава пройдена",
         ),
         ToolSpec(
             name="list_activities",

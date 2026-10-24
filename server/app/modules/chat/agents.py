@@ -63,6 +63,7 @@ quick_reviewer = AgentSpec(
             "update_block",
             "get_profile",
             "get_block",
+            "mark_chapter_done",
             "send_telegram_text",
             "send_block_to_telegram",
             "send_chapter_to_telegram",
