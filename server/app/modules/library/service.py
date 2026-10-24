@@ -298,25 +298,25 @@ class LibraryService:
         return {"curated": True, "front_matter_dropped": len(front_matter), "chapters": new_idx}
 
     def _curator_labels(self, entries: list[dict]) -> dict[int, tuple[str, int | None]] | None:
-        """Метки классов для каждой записи: LLM-куратор, при сбое — эвристика домена."""
+        """Метки классов для каждой записи: LLM-куратор, при сбое — эвристика домена.
+
+        Жёсткие правила эвристики (стоп-слова, короткие предисловия) переопределяют
+        LLM — модель иногда тащит титульные предисловия в главы. Номер главы —
+        только из названия книги; LLM классифицирует, но не нумерует.
+        """
+        from .domain import classify_toc_entry, merge_curator_labels, parse_chapter_number
+
+        heuristic = {e["idx"]: classify_toc_entry(e["title"], int(e.get("page_count") or 0)) for e in entries}
+        llm: dict[int, str] | None = None
         if self._runtime is not None:
             try:
-                labels = self._curate_with_llm(entries)
-                if labels is not None:
-                    return labels
+                llm = self._curate_with_llm(entries)
             except Exception:  # noqa: BLE001 — куратор не должен ронять job
                 log.warning("LLM-куратор структуры не сработал, фолбэк на эвристику", exc_info=True)
-        from .domain import classify_toc_entry, parse_chapter_number
+        classes = merge_curator_labels(entries, heuristic, llm)
+        return {e["idx"]: (classes[e["idx"]], parse_chapter_number(e["title"])) for e in entries}
 
-        return {
-            e["idx"]: (
-                classify_toc_entry(e["title"], int(e.get("page_count") or 0)),
-                parse_chapter_number(e["title"]),
-            )
-            for e in entries
-        }
-
-    def _curate_with_llm(self, entries: list[dict]) -> dict[int, tuple[str, int | None]] | None:
+    def _curate_with_llm(self, entries: list[dict]) -> dict[int, str] | None:
         """Один вызов structure_curator на книгу; None — если ответ не покрывает все записи."""
         from ...kernel.asyncio_bridge import run_coro_sync
         from .agents import structure_curator
@@ -328,11 +328,11 @@ class LibraryService:
         ]
         prompt = "Записи закладок книги:\n" + "\n".join(lines)
         out = run_coro_sync(self._runtime.run_structured(structure_curator, AgentContext(), prompt))
-        got = {item.idx: item for item in out.entries}
+        got = {item.idx: item.cls for item in out.entries}
         if set(got) != {e["idx"] for e in entries}:
             log.warning("куратор вернул не все записи (получено %d из %d)", len(got), len(entries))
             return None
-        return {idx: (item.cls, item.number) for idx, item in got.items()}
+        return got
 
     def _meta_for(self, session, source_id: int) -> dict:
         src = self._sources.get(session, source_id)

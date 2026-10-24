@@ -35,6 +35,20 @@ FRONT_MATTER_WORDS = (
 
 APPENDIX_WORDS = ("приложение", "appendix", "глоссарий", "glossary")
 
+# предисловия-вводные: короткие (1–2 стр.) записи с такими названиями — служебные,
+# даже если LLM-куратор решил оставить их главами («Введение» сюда НЕ входит)
+PREFACE_WORDS = (
+    "предисловие",
+    "пролог",
+    "вступление",
+    "эпилог",
+    "foreword",
+    "preface",
+    "prologue",
+    "послесловие",
+    "afterword",
+)
+
 # «Глава 3. X» / «Chapter 12: Y» / «3. Z» / «10 — T» в начале названия
 _NUMBERED_TITLE = re.compile(
     r"^(?:глава|chapter|chap\.?|раздел)\s+(\d+)|^(\d{1,3})[.)\s\u2014\u2013:-]", re.I
@@ -88,3 +102,27 @@ def classify_toc_entry(title: str, page_count: int) -> EntryClass:
     if page_count < 3:
         return "front_matter"
     return "chapter"
+
+
+def merge_curator_labels(
+    entries: list[dict], heuristic: dict[int, EntryClass], llm: dict[int, EntryClass] | None
+) -> dict[int, EntryClass]:
+    """Финальные классы: LLM + жёсткие правила эвристики поверх.
+
+    LLM понимает контекст лучше стоп-слов, но иногда тащит короткие предисловия
+    в главы. Правила эвристики, которые нельзя обойти: стоп-слова (оглавление,
+    лицензия, титул…) и короткие (1–2 стр.) предисловия/прологи/вступления —
+    всегда front_matter; длинное «Введение» остаётся главой.
+    """
+    out: dict[int, EntryClass] = {}
+    for e in entries:
+        idx, title = e["idx"], e["title"]
+        pages = int(e.get("page_count") or 0)
+        h = heuristic.get(idx, "chapter")
+        t = re.sub(r"\s+", " ", title).strip().lower()
+        hard_front = any(w in t for w in FRONT_MATTER_WORDS) or (pages < 3 and t.startswith(PREFACE_WORDS))
+        if hard_front:
+            out[idx] = "front_matter"
+            continue
+        out[idx] = llm.get(idx, h) if llm is not None else h
+    return out
