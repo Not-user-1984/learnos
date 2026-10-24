@@ -177,6 +177,260 @@ def test_arxiv_parser(monkeypatch):
     assert "2017-06-12" in first["snippet"]
 
 
+OPENALEX_JSON = {
+    "results": [
+        {
+            "display_name": "Attention Is All You Need",
+            "doi": "https://doi.org/10.48550/arXiv.1706.03762",
+            "id": "https://openalex.org/W2963403868",
+            "publication_year": 2017,
+            "cited_by_count": 118000,
+            "open_access": {"is_oa": True},
+            "authorships": [
+                {"author": {"display_name": "Ashish Vaswani"}},
+                {"author": {"display_name": "Noam Shazeer"}},
+            ],
+            "abstract_inverted_index": {"attention": [0, 4], "is": [1], "all": [2], "you": [3], "need": [5]},
+        },
+        {
+            "display_name": "BERT: Pre-training of Deep Bidirectional Transformers",
+            "doi": None,
+            "id": "https://openalex.org/W2963403870",
+            "publication_year": 2018,
+            "cited_by_count": 60000,
+            "open_access": {"is_oa": False},
+            "authorships": [],
+            "abstract_inverted_index": None,
+        },
+    ]
+}
+
+
+def test_openalex_parser(monkeypatch):
+    from app.modules.research import providers as P
+
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            return OPENALEX_JSON
+
+    monkeypatch.setattr(P.httpx, "get", lambda *a, **kw: FakeResp())
+    out = P.OpenAlexProvider().search("transformer", 5)
+    assert out["provider"] == "openalex"
+    assert out["count"] == 2
+    first = out["results"][0]
+    assert first["title"] == "Attention Is All You Need"
+    assert first["url"] == "https://doi.org/10.48550/arXiv.1706.03762"
+    assert first["snippet"] == "attention is all you attention need"
+    assert "Vaswani" in first["authors"]
+    assert first["year"] == 2017 and first["citations"] == 118000 and first["open_access"] is True
+    assert out["results"][1]["url"].startswith("https://openalex.org/")
+    assert out["results"][1]["snippet"] == ""
+
+
+def test_openalex_http_error(monkeypatch):
+    from app.modules.research import providers as P
+
+    class FakeResp:
+        status_code = 503
+
+    monkeypatch.setattr(P.httpx, "get", lambda *a, **kw: FakeResp())
+    out = P.OpenAlexProvider().search("q", 5)
+    assert out["count"] == 0 and "openalex 503" in out["error"]
+
+
+S2_JSON = {
+    "data": [
+        {
+            "title": "Attention Is All You Need",
+            "url": "https://www.semanticscholar.org/paper/1706.03762",
+            "abstract": "  The dominant sequence   transduction models.  ",
+            "year": 2017,
+            "citationCount": 90000,
+            "authors": [{"name": "Ashish Vaswani"}, {"name": "Noam Shazeer"}],
+            "openAccessPdf": {"url": "https://arxiv.org/pdf/1706.03762"},
+        },
+        {
+            "title": "A Survey of Transformers",
+            "url": "https://www.semanticscholar.org/paper/survey",
+            "abstract": None,
+            "year": 2021,
+            "citationCount": 1000,
+            "authors": [],
+            "openAccessPdf": None,
+        },
+    ]
+}
+
+
+def test_semantic_scholar_parser(monkeypatch):
+    from app.modules.research import providers as P
+
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            return S2_JSON
+
+    monkeypatch.setattr(P.httpx, "get", lambda *a, **kw: FakeResp())
+    out = P.SemanticScholarProvider().search("transformer", 5)
+    assert out["provider"] == "semantic_scholar"
+    first = out["results"][0]
+    assert first["url"] == "https://arxiv.org/pdf/1706.03762"  # открытый PDF приоритетнее
+    assert first["snippet"] == "The dominant sequence transduction models."
+    assert first["citations"] == 90000 and first["open_access"] is True
+    assert out["results"][1]["open_access"] is False
+    assert out["results"][1]["url"].endswith("/survey")
+
+
+def test_semantic_scholar_retry_on_429(monkeypatch):
+    """429 (shared pool без ключа): один ретрай с паузой, потом результат."""
+    from app.modules.research import providers as P
+
+    calls = {"n": 0}
+
+    class RateLimited:
+        status_code = 429
+
+    class Ok:
+        status_code = 200
+
+        def json(self):
+            return S2_JSON
+
+    def fake_get(*a, **kw):
+        calls["n"] += 1
+        return RateLimited() if calls["n"] == 1 else Ok()
+
+    sleeps = []
+    monkeypatch.setattr(P.httpx, "get", fake_get)
+    monkeypatch.setattr("time.sleep", lambda s: sleeps.append(s))
+    out = P.SemanticScholarProvider().search("q", 5)
+    assert calls["n"] == 2 and sleeps == [2]
+    assert out["count"] == 2
+
+
+def test_semantic_scholar_429_twice_gives_up(monkeypatch):
+    from app.modules.research import providers as P
+
+    class RateLimited:
+        status_code = 429
+
+    monkeypatch.setattr(P.httpx, "get", lambda *a, **kw: RateLimited())
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    out = P.SemanticScholarProvider().search("q", 5)
+    assert out["count"] == 0 and "429" in out["error"]
+
+
+def _academic_service(providers) -> ResearchService:
+    svc = ResearchService(SimpleNamespace(web_proxy="", search_provider="ddg"))
+    svc._academic_providers = providers  # noqa: SLF001 — тест подменяет академических провайдеров
+    return svc
+
+
+def test_academic_aggregates_and_dedups(monkeypatch):
+    """arXiv+OpenAlex+S2: дедуп по DOI/title, у каждого результата provider, смешение по кругу."""
+    arxiv = _Prov(
+        "arxiv", [{"title": "Attention Is All You Need", "url": "https://arxiv.org/abs/1706.03762"}]
+    )
+    openalex = _Prov(
+        "openalex",
+        [
+            {
+                "title": "Attention Is All You Need",  # дубликат по заголовку
+                "url": "https://doi.org/10.48550/arXiv.1706.03762",
+            },
+            {
+                "title": "Scaling Laws for Neural Language Models",
+                "url": "https://openalex.org/W1",
+                "doi": "10.1/x",
+            },
+        ],
+    )
+    s2 = _Prov(
+        "semantic_scholar",
+        [{"title": "A Survey of Transformers", "url": "https://s2/survey", "doi": "https://doi.org/10.1/x"}],
+    )  # дубликат по DOI работы openalex
+    svc = _academic_service([arxiv, openalex, s2])
+    out = svc.academic("transformer attention", 5)
+    titles = [r["title"] for r in out["results"]]
+    # круг 0: arxiv-Attention взят, openalex-Attention откинут (title-дубль), s2-Survey взят;
+    # круг 1: openalex-Scaling Laws откинут — DOI уже занят записью s2
+    assert titles == ["Attention Is All You Need", "A Survey of Transformers"]
+    assert all("provider" in r for r in out["results"])
+    assert {r["provider"] for r in out["results"]} == {"arxiv", "semantic_scholar"}
+    # сводка считает «сколько нашёл каждый» до дедупа
+    assert out["providers"]["arxiv"] == 1
+    assert out["providers"]["openalex"] == 2
+    assert out["providers"]["semantic_scholar"] == 1
+    assert "failed" not in out["providers"]
+    # верхний уровень: агрегатный провайдер + кэш по новому ключу
+    assert out["provider"] == "academic"
+
+
+def test_academic_survives_provider_crash(monkeypatch):
+    arxiv = _Prov("arxiv", [{"title": "Attention", "url": "https://arxiv.org/abs/1"}])
+    boom = _Prov("openalex", raises=True)
+    err = _Prov("semantic_scholar", error="semantic_scholar 429")
+    svc = _academic_service([arxiv, boom, err])
+    out = svc.academic("q", 5)
+    assert out["count"] == 1
+    assert out["results"][0]["provider"] == "arxiv"
+    assert "openalex упал" in " ".join(out["providers"]["failed"])
+    assert any("429" in f for f in out["providers"]["failed"])
+
+
+def test_academic_limit_applies_to_merged(monkeypatch):
+    """Лимит режет уже смешанную выдачу, а не выдачу каждого провайдера."""
+    a = _Prov("arxiv", [{"title": f"A{i}", "url": f"https://a/{i}"} for i in range(4)])
+    o = _Prov("openalex", [{"title": f"O{i}", "url": f"https://o/{i}"} for i in range(4)])
+    svc = _academic_service([a, o])
+    out = svc.academic("q", 2)  # бакет <=5 → limit 5... берём 5
+    assert out["count"] == 5
+    # чередование: arxiv и openalex идут вперемешку
+    assert [r["provider"] for r in out["results"][:4]] == ["arxiv", "openalex", "arxiv", "openalex"]
+
+
+def test_providers_view_chain_and_keys(monkeypatch):
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+    monkeypatch.delenv("SERPER_API_KEY", raising=False)
+    svc = ResearchService(SimpleNamespace(web_proxy="", search_provider="chain"))
+    view = svc.providers_view()
+    assert view["web"]["mode"] == "chain"
+    names = [p["name"] for p in view["web"]["providers"]]
+    assert names == ["tavily", "ddg", "wikipedia", "hackernews"]
+    assert any("ключ задан" in p["note"] for p in view["web"]["providers"])
+    assert [p["name"] for p in view["academic"]["providers"]] == [
+        "arxiv",
+        "openalex",
+        "semantic_scholar",
+    ]
+    assert all(p["enabled"] for p in view["academic"]["providers"])
+    assert [p["name"] for p in view["video"]["providers"]] == ["youtube"]
+
+
+def test_providers_view_explicit_provider(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("SERPER_API_KEY", raising=False)
+    svc = ResearchService(SimpleNamespace(web_proxy="", search_provider="wikipedia"))
+    view = svc.providers_view()
+    assert view["web"]["mode"] == "single"
+    enabled = {p["name"]: p["enabled"] for p in view["web"]["providers"]}
+    assert enabled == {"ddg": False, "wikipedia": True, "hackernews": False}
+
+
+def test_search_providers_tool(container):
+    """Тул search_providers зарегистрирован в research и отдаёт категории web/academic/video."""
+    from app.kernel.tools.spec import ToolContext
+
+    tool = container.tools.get("search_providers")
+    assert tool.module == "research"
+    out = container.tools.call("search_providers", {}, ToolContext())
+    assert {"web", "academic", "video"} <= set(out)
+    assert "openalex" in [p["name"] for p in out["academic"]["providers"]]
+
+
 def test_parse_repo_ref():
     import pytest
 

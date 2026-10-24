@@ -4,7 +4,8 @@
 из бытовых сетей. Поэтому:
 - web_search идёт по цепочке [платный по ключу → ddg → wikipedia → hackernews] и
   почти всегда даёт хотя бы что-то осмысленное;
-- научные статьи — отдельный AcademicProvider (arXiv API, без ключей и капч);
+- научные статьи — агрегат трёх ключлесс-API: arXiv (препринты), OpenAlex
+  (библиография), Semantic Scholar (цитирования) — см. ResearchService.academic;
 - платные (Tavily/Serper) включаются автоматически при наличии ключа в env —
   это рекомендуемый апгрейд качества выдачи (см. T-019).
 """
@@ -157,6 +158,98 @@ class AcademicProvider:
             results.append({"title": title, "url": url, "snippet": f"{published} · {summary[:180]}"})
             if len(results) >= limit:
                 break
+        return _ok(query, results, self.name)
+
+
+def reconstruct_abstract(inverted: dict | None) -> str:
+    """OpenAlex abstract_inverted_index → обычный текст (слово → позиции в тексте)."""
+    if not inverted:
+        return ""
+    positions: dict[int, str] = {}
+    for word, idxs in inverted.items():
+        for i in idxs:
+            positions[int(i)] = word
+    return " ".join(positions[i] for i in sorted(positions))
+
+
+class OpenAlexProvider:
+    """OpenAlex: открытая библиография всех научных работ, ~100k запросов/день без ключа."""
+
+    name = "openalex"
+
+    def search(self, query: str, limit: int) -> dict[str, Any]:
+        r = httpx.get(
+            "https://api.openalex.org/works",
+            params={"search": query, "per-page": min(limit, 10)},
+            headers={"User-Agent": UA},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return {"query": query, "count": 0, "results": [], "error": f"openalex {r.status_code}"}
+        results = []
+        for w in (r.json().get("results") or [])[:limit]:
+            authors = ", ".join(
+                a.get("author", {}).get("display_name", "")
+                for a in (w.get("authorships") or [])[:3]
+                if a.get("author", {}).get("display_name")
+            )
+            abstract = reconstruct_abstract(w.get("abstract_inverted_index"))
+            results.append(
+                {
+                    "title": w.get("display_name", ""),
+                    "url": w.get("doi") or w.get("id", ""),
+                    "snippet": abstract[:200],
+                    "authors": authors,
+                    "year": w.get("publication_year"),
+                    "citations": w.get("cited_by_count"),
+                    "open_access": bool((w.get("open_access") or {}).get("is_oa")),
+                }
+            )
+        return _ok(query, results, self.name)
+
+
+class SemanticScholarProvider:
+    """Semantic Scholar: статьи + метрики цитирования. Без ключа ~1 rps (shared pool):
+    429 терпим одним ретраем с паузой, дальше тихий пропуск."""
+
+    name = "semantic_scholar"
+
+    def search(self, query: str, limit: int) -> dict[str, Any]:
+        import time
+
+        params = {
+            "query": query,
+            "limit": min(limit, 10),
+            "fields": "title,authors,year,abstract,url,openAccessPdf,citationCount",
+        }
+        for attempt in range(2):
+            r = httpx.get(
+                "https://api.semanticscholar.org/graph/v1/paper/search",
+                params=params,
+                headers={"User-Agent": UA},
+                timeout=15,
+            )
+            if r.status_code == 429 and attempt == 0:
+                time.sleep(2)
+                continue
+            break
+        if r.status_code != 200:
+            return {"query": query, "count": 0, "results": [], "error": f"semantic_scholar {r.status_code}"}
+        results = []
+        for p in (r.json().get("data") or [])[:limit]:
+            pdf = (p.get("openAccessPdf") or {}).get("url") or ""
+            abstract = re.sub(r"\s+", " ", p.get("abstract") or "").strip()
+            results.append(
+                {
+                    "title": p.get("title", ""),
+                    "url": pdf or p.get("url", ""),
+                    "snippet": abstract[:200],
+                    "authors": ", ".join(a.get("name", "") for a in (p.get("authors") or [])[:3]),
+                    "year": p.get("year"),
+                    "citations": p.get("citationCount"),
+                    "open_access": bool(pdf),
+                }
+            )
         return _ok(query, results, self.name)
 
 

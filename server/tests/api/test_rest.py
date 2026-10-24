@@ -154,3 +154,16 @@ def test_conversations_crud(client):
 
     assert client.delete(f"/api/conversations/{conv['uid']}").json()["ok"] is True
     assert client.get(f"/api/conversations/{conv['uid']}").status_code == 404
+
+
+def test_research_providers_endpoint(client):
+    """GET /api/research/providers — «где агент ищет» для блока UI настроек."""
+    r = client.get("/api/research/providers")
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"web", "academic", "video"}
+    for cat in body.values():
+        assert cat["providers"], f"пустая категория {cat}"
+        assert all({"name", "enabled", "note"} <= set(p) for p in cat["providers"])
+    academic_names = [p["name"] for p in body["academic"]["providers"]]
+    assert academic_names == ["arxiv", "openalex", "semantic_scholar"]

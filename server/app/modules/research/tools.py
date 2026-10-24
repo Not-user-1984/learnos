@@ -1,4 +1,4 @@
-"""Инструменты модуля research: web_search/academic_search, web_read, github для idea-scout."""
+"""Инструменты модуля research: web_search/academic_search/search_providers, web_read, github."""
 
 from pathlib import Path
 
@@ -13,6 +13,10 @@ class SearchArgs(BaseModel):
 
     query: str = Field(max_length=300)
     limit: int = 6
+
+
+class NoArgs(BaseModel):
+    """search_providers: без аргументов."""
 
 
 class ReadArgs(BaseModel):
@@ -99,6 +103,10 @@ def research_tools(c) -> list[ToolSpec]:
         del ctx
         return svc.academic(args.query, args.limit)
 
+    def search_providers(args: NoArgs, ctx: ToolContext):
+        del ctx, args
+        return svc.providers_view()
+
     def youtube_search(args: VideoSearchArgs, ctx: ToolContext):
         del ctx
         note = ""
@@ -177,12 +185,25 @@ def research_tools(c) -> list[ToolSpec]:
             name="academic_search",
             module="research",
             description=(
-                "Научные статьи по теме (arXiv: препринты, стабильный ключлесс-API). "
+                "Научные статьи по теме: агрегат arXiv (препринты) + OpenAlex (библиография) "
+                "+ Semantic Scholar (цитирования), с дедупом. У каждой статьи поле provider "
+                "(arxiv/openalex/semantic_scholar); сводка по провайдерам и failures — в поле providers. "
                 "Для фундаментальных/математических тем даёт первоисточники лучше веба."
             ),
             args_model=SearchArgs,
             handler=academic_search,
             label="Ищу статьи",
+        ),
+        ToolSpec(
+            name="search_providers",
+            module="research",
+            description=(
+                "Где агент ищет: категории web/academic/video со списком провайдеров и их состоянием "
+                "(enabled, ключ задан / без ключа). Зови, когда пользователю важно, какие источники охвачены."
+            ),
+            args_model=NoArgs,
+            handler=search_providers,
+            label="Показываю провайдеров поиска",
         ),
         ToolSpec(
             name="youtube_search",

@@ -13,13 +13,63 @@ from dataclasses import dataclass
 import httpx
 from bs4 import BeautifulSoup
 
-from .providers import UA, AcademicProvider, build_provider
+from .providers import (
+    UA,
+    AcademicProvider,
+    OpenAlexProvider,
+    SemanticScholarProvider,
+    build_provider,
+)
 
 log = logging.getLogger("learnos.research")
 
 _TTL = 20 * 60  # кэш поиска, секунд
 _SKIP_TAGS = ("script", "style", "nav", "header", "footer", "aside", "form", "noscript", "svg", "iframe")
 _MIN_CHAPTER_CHARS = 400  # мельче — приклеиваем к соседней главе
+
+
+def _norm_doi(item: dict) -> str:
+    """Нормализованный DOI для дедупа (без схемы и префикса doi.org)."""
+    doi = str(item.get("doi") or "")
+    return doi.lower().removeprefix("https://doi.org/").removeprefix("http://doi.org/").strip()
+
+
+def _norm_title(title: str) -> str:
+    """Нормализованный заголовок: нижний регистр, без пунктуации и пробелов."""
+    return re.sub(r"[^a-zа-яё0-9]+", "", (title or "").lower())
+
+
+def _interleave(groups: list[list[dict]], limit: int) -> list[dict]:
+    """Смешать выдачи провайдеров по кругу (round-robin) с дедупом на лету:
+    дубли ловятся по нормализованному DOI, иначе по нормализованному заголовку."""
+    merged: list[dict] = []
+    seen_doi: set[str] = set()
+    seen_title: set[str] = set()
+    idx = 0
+    while len(merged) < limit:
+        took = False
+        for g in groups:
+            if idx >= len(g):
+                continue
+            took = True
+            item = g[idx]
+            doi = _norm_doi(item)
+            title_key = _norm_title(item.get("title", ""))
+            if doi:
+                if doi in seen_doi:
+                    continue
+                seen_doi.add(doi)
+            elif title_key:
+                if title_key in seen_title:
+                    continue
+                seen_title.add(title_key)
+            merged.append(item)
+            if len(merged) >= limit:
+                break
+        if not took:
+            break
+        idx += 1
+    return merged
 
 
 @dataclass
@@ -35,7 +85,7 @@ class ResearchService:
         self._settings = settings
         self._uow = uow
         self._provider = build_provider(settings)
-        self._academic = AcademicProvider()
+        self._academic_providers = [AcademicProvider(), OpenAlexProvider(), SemanticScholarProvider()]
         self._cache: dict[str, _CacheEntry] = {}
         self._locks: dict[str, threading.Lock] = {}
         self._guard = threading.Lock()
@@ -117,8 +167,73 @@ class ResearchService:
         return self._cached(f"{self._provider.name}", query, limit, self._provider.search)
 
     def academic(self, query: str, limit: int = 6) -> dict:
-        """Научные статьи (arXiv) с тем же кэшем и single-flight."""
-        return self._cached("arxiv", query, limit, self._academic.search)
+        """Научные статьи: arXiv + OpenAlex + Semantic Scholar с дедупом и смешиванием.
+
+        Падение одного провайдера не роняет остальные — попадает в providers.failed.
+        У каждой статьи поле provider; сверху сводка {"arxiv": n, "openalex": n, ...}.
+        """
+        return self._cached("academic", query, limit, self._academic_agg)
+
+    def _academic_agg(self, query: str, limit: int) -> dict:
+        groups: list[list[dict]] = []
+        counts: dict[str, int] = {}
+        failed: list[str] = []
+        for p in self._academic_providers:
+            try:
+                out = p.search(query, limit)
+            except Exception as e:  # noqa: BLE001 — один провайдер не роняет агрегацию
+                failed.append(f"{p.name}: {str(e)[:120]}")
+                out = {}
+            if out.get("error"):
+                failed.append(f"{p.name}: {out['error']}")
+            items = [dict(it, provider=p.name) for it in (out.get("results") or [])]
+            groups.append(items)
+            counts[p.name] = len(items)
+        merged = _interleave(groups, limit)
+        return {
+            "query": query,
+            "count": len(merged),
+            "results": merged,
+            "providers": counts | ({"failed": failed} if failed else {}),
+        }
+
+    def providers_view(self) -> dict:
+        """Где агент ищет: категории web/academic/video с провайдерами и их состоянием."""
+        import os
+
+        explicit = (getattr(self._settings, "search_provider", "") or "").lower()
+        tavily = bool(os.environ.get("TAVILY_API_KEY"))
+        serper = bool(os.environ.get("SERPER_API_KEY"))
+        web: list[dict] = []
+        if serper:
+            web.append({"name": "serper", "enabled": True, "note": "ключ задан — первый в цепочке"})
+        if tavily:
+            web.append({"name": "tavily", "enabled": True, "note": "ключ задан"})
+        web.extend(
+            [
+                {"name": "ddg", "enabled": True, "note": "без ключа (иногда анти-бот)"},
+                {"name": "wikipedia", "enabled": True, "note": "без ключа"},
+                {"name": "hackernews", "enabled": True, "note": "без ключа"},
+            ]
+        )
+        if explicit and explicit not in ("chain", "arxiv"):
+            # явный провайдер из настроек: цепочка не используется
+            for w in web:
+                w["enabled"] = w["name"] == explicit
+        academic = [
+            {"name": "arxiv", "enabled": True, "note": "без ключа — препринты"},
+            {"name": "openalex", "enabled": True, "note": "без ключа — библиография всех работ"},
+            {"name": "semantic_scholar", "enabled": True, "note": "без ключа — цитирования (лимит ~1 rps)"},
+        ]
+        video = [{"name": "youtube", "enabled": True, "note": "yt-dlp, без ключа; фолбэк — веб-поиск"}]
+        return {
+            "web": {
+                "mode": "single" if explicit and explicit != "chain" else "chain",
+                "providers": web,
+            },
+            "academic": {"mode": "aggregate", "providers": academic},
+            "video": {"mode": "single", "providers": video},
+        }
 
     def _cached(self, provider_key: str, query: str, limit: int, fn) -> dict:
         limit = max(1, min(10, int(limit)))

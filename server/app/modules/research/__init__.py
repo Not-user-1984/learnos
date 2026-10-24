@@ -22,7 +22,7 @@ class ResearchModule(Module):
     def routers(self, c):
         from .api import make_router
 
-        return [make_router(c)]
+        return make_router(c)
 
     def tools(self, c):
         from .tools import research_tools

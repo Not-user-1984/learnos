@@ -42,4 +42,11 @@ def make_router(c) -> APIRouter:
     def check_connectivity():
         return svc.connectivity_check()
 
-    return r
+    providers = APIRouter(prefix="/research", tags=["research"])
+
+    @providers.get("/providers")
+    def get_search_providers():
+        """Где агент ищет: web/academic/video с состоянием провайдеров (блок UI настроек)."""
+        return svc.providers_view()
+
+    return [r, providers]
