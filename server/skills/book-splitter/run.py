@@ -87,10 +87,35 @@ class _PageRenderer:
         return f"![рисунок](/api/sources/{self._uid}/images/{name})"
 
 
-def _sections_for(toc: list[tuple[int, str, int]], start: int, end: int) -> str:
-    """Секции level-2 внутри диапазона главы: [{"title", "page"}] JSON-ом."""
-    sections = [{"title": t, "page": p} for lvl, t, p in toc if lvl == 2 and start <= p < end]
+def _sections_for(toc: list[tuple[int, str, int]], start: int, end: int, level: int = 2) -> str:
+    """Секции уровня ниже глав внутри диапазона: [{"title", "page"}] JSON-ом."""
+    sections = [{"title": t, "page": p} for lvl, t, p in toc if lvl == level and start <= p < end]
     return json.dumps(sections, ensure_ascii=False)
+
+
+# часть-подобные закладки level-1: главы прячутся уровнем ниже
+_PART_RE = re.compile(r"^(часть|part|book|том)\b", re.I)
+
+
+def _top_entries(toc: list[tuple[int, str, int]]) -> tuple[list[tuple[str, int]], int]:
+    """Записи-кандидаты в главы и уровень секций.
+
+    Обычная книга: level-1 → главы, level-2 → секции. Книга с частями
+    («Часть I. …» в level-1, главы в level-2): главами становятся level-2
+    внутри частей (плюс не-частные level-1 вроде предисловия — куратор их
+    вычистит), секции — level-3.
+    """
+    top1 = [(t, p) for lvl, t, p in toc if lvl == 1]
+    if not top1:
+        return [(t, p) for _lvl, t, p in toc], 0  # без level-1: все уровни, секции не строим
+    parts = [(t, p) for t, p in top1 if _PART_RE.match(t.strip())]
+    if parts:
+        spans = [(p, (parts[i + 1][1] if i + 1 < len(parts) else 10**9)) for i, (_, p) in enumerate(parts)]
+        inside = [(t, p) for lvl, t, p in toc if lvl == 2 and any(s <= p < e for s, e in spans)]
+        if len(inside) >= 3:
+            rest = [(t, p) for t, p in top1 if not _PART_RE.match(t.strip())]
+            return sorted(rest + inside, key=lambda tp: tp[1]), 3
+    return top1, 2
 
 
 def main(source_id: int) -> dict:
@@ -111,10 +136,9 @@ def main(source_id: int) -> dict:
                 "hint": "конвертировать с закладками или добавить TOC",
             }
 
-        top = [(title, page) for level, title, page in toc if level == 1]
-        if not top:
-            top = [(title, page) for level, title, page in toc]
-            toc = []  # без level-1 секции не строим (уровни перемешаны)
+        top, section_level = _top_entries(toc)
+        if section_level == 0:
+            toc = []  # уровни перемешаны — секции не строим
 
         src_dir = DATA_DIR / "sources" / str(source_id)
         out_dir = src_dir / "chapters"
@@ -161,7 +185,7 @@ def main(source_id: int) -> dict:
 
             snippet = " ".join(paragraphs[:3])[:240]
             summary = text[:280] + ("…" if len(text) > 280 else "")
-            sections_json = _sections_for(toc, start_page, end_page)
+            sections_json = _sections_for(toc, start_page, end_page, section_level)
             conn.execute(
                 "INSERT INTO chapters(source_id, idx, title, path, tokens_est, summary,"
                 " start_page, end_page, sections_json) VALUES (?,?,?,?,?,?,?,?,?)",

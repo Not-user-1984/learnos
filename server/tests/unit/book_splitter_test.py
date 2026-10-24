@@ -107,6 +107,66 @@ def _make_book(path: Path) -> None:
     doc.close()
 
 
+def test_splitter_parts_book_takes_level2_as_chapters(splitter, tmp_path):
+    """Книга с частями (Любанович): level-1 — «Часть I/II», главы в level-2.
+
+    Главами становятся level-2 внутри частей (+ не-частные level-1 для куратора),
+    секциями — level-3; сами части главами не делаются.
+    """
+    mod, db, data_dir = splitter
+    doc = fitz.open()
+    for _ in range(12):
+        doc.new_page()
+    for i in range(12):
+        doc[i].insert_text((72, 72), f"страница {i + 1}")
+    doc.set_toc(
+        [
+            [1, "Предисловие", 2],
+            [2, "Для кого эта книга", 2],
+            [1, "Часть I. Замок", 3],
+            [2, "Глава 1. Введение", 3],
+            [3, "Тайны", 4],
+            [2, "Глава 2. Типы", 5],
+            [1, "Часть II. Инструменты", 8],
+            [2, "Глава 3. Данные", 8],
+            [3, "Тексты", 9],
+        ]
+    )
+    pdf = tmp_path / "parts.pdf"
+    doc.save(pdf)
+    doc.close()
+    db.execute(
+        "INSERT INTO sources(uid, kind, title, local_path) VALUES ('src_parts', 'book', ?, ?)",
+        ("Простой Python", str(pdf)),
+    )
+    db.commit()
+
+    result = mod.main(source_id=1)
+    assert result["ok"], result
+    titles = [e["title"] for e in result["entries"]]
+    # части исчезли; level-2 вне частей (из предисловия) тоже не главы —
+    # их текст остаётся в диапазоне не-частной level-1 записи для куратора
+    assert titles == [
+        "Предисловие",
+        "Глава 1. Введение",
+        "Глава 2. Типы",
+        "Глава 3. Данные",
+    ]
+
+    rows = {
+        r["title"]: r
+        for r in db.execute(
+            "SELECT title, start_page, end_page, sections_json FROM chapters ORDER BY idx"
+        ).fetchall()
+    }
+    db.close()
+    assert (rows["Глава 1. Введение"]["start_page"], rows["Глава 1. Введение"]["end_page"]) == (3, 4)
+    assert "Тайны" in rows["Глава 1. Введение"]["sections_json"]
+    assert "Тексты" in rows["Глава 3. Данные"]["sections_json"]
+    # части не стали главами
+    assert "Часть I. Замок" not in rows and "Часть II. Инструменты" not in rows
+
+
 def test_splitter_chapters_pages_sections_and_images(splitter, tmp_path):
     mod, db, data_dir = splitter
     pdf = tmp_path / "book.pdf"
