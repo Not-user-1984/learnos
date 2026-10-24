@@ -37,7 +37,7 @@ cd web && npm run lint && npx tsc --noEmit && npm run build
 | Модуль | Ответственность |
 |---|---|
 | `profile` | профиль пользователя: железо (машины для практики), предпочтения обучения |
-| `research` | поиск и чтение веба: цепочка провайдеров (Tavily/Serper по ключу → ddg → Википедия → HN), arXiv, youtube_search, GitHub-ридер idea-scout, настройки связи (`/api/connectivity`): ключи поиска, socks5-прокси, vless → xray-sidecar |
+| `research` | поиск и чтение веба: цепочка провайдеров (Tavily/Serper по ключу → ddg → Википедия → HN), академ-агрегат arXiv + OpenAlex + Semantic Scholar (дедуп, provider у каждой статьи), youtube_search, GitHub-ридер idea-scout, прозрачность поиска (`search_providers`: web/academic/video с enabled-статусами), настройки связи (`/api/connectivity`): ключи поиска, socks5-прокси, vless → xray-sidecar |
 | `skills` | drop-in скиллы `server/skills/<name>/` (SKILL.md + run.py), видны из MCP и агентам |
 | `knowledge` | база знаний: MD-блоки + frontmatter, категории, теги, версии, генерация блоков агентами |
 | `library` | источники (book/video/web), главы, jobs обработки, загрузка PDF; LLM-куратор `structure_curator` чистит структуру книги (мусорные закладки → описание, номера глав книги, секции, страницы) |
