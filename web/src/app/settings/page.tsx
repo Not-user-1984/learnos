@@ -76,7 +76,9 @@ export default async function SettingsPage() {
         <section className="rounded-2xl border bg-card p-6">
           <h2 className="font-medium">Прокси и поиск</h2>
           <p className="mb-5 mt-1 text-sm text-muted-foreground">
-            Ключ поиска (Tavily/Serper), socks5-прокси или vless-ключ — YouTube, веб-серчинг и Telegram работают через них без рестартов
+            Ключ поиска (Tavily/Serper), socks5-прокси или vless-ключ — YouTube, веб-серчинг и
+            Telegram работают через них без рестартов. Ниже — какие провайдеры поиска активны
+            для агента (веб, научные статьи, видео)
           </p>
           <ConnectivitySettings />
         </section>

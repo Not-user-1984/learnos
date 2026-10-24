@@ -166,6 +166,19 @@ export type Health = {
   tools: number;
 };
 
+/** Провайдеры поиска по категориям (GET /api/research/providers): где агент ищет. */
+export type SearchProvidersView = {
+  web: { mode: string; providers: SearchProviderInfo[] };
+  academic: { mode: string; providers: SearchProviderInfo[] };
+  video: { mode: string; providers: SearchProviderInfo[] };
+};
+
+export type SearchProviderInfo = {
+  name: string;
+  enabled: boolean;
+  note: string;
+};
+
 /** Карточки UI из SSE (см. ТЗ 04): один интерфейс с опциональными полями по типу. */
 /** Драфт блока для карточки-превью конспекта (preview_note). */
 export type NoteDraft = {

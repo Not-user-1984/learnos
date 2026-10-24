@@ -7,10 +7,12 @@
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, apiPost } from "@/lib/api";
+import type { SearchProvidersView } from "@/lib/types";
 
 type Connectivity = {
   search_provider: string;
@@ -29,6 +31,20 @@ const PROVIDERS = [
   { value: "serper", label: "Serper — Google-выдача (ключ, 2500 free)" },
 ];
 
+type ProviderCategory = "web" | "academic" | "video";
+
+const CATEGORY_META: Record<ProviderCategory, { label: string; icon: string; iconClass: string }> = {
+  web: { label: "Веб", icon: "public", iconClass: "text-emerald-500" },
+  academic: { label: "Научные статьи", icon: "school", iconClass: "text-sky-500" },
+  video: { label: "Видео", icon: "play_circle", iconClass: "text-rose-500" },
+};
+
+const MODE_LABEL: Record<string, string> = {
+  chain: "цепочка: первый непустый ответ",
+  single: "один провайдер",
+  aggregate: "агрегат: все сразу, с дедупом",
+};
+
 export function ConnectivitySettings() {
   const [state, setState] = useState<Connectivity | null>(null);
   const [provider, setProvider] = useState("chain");
@@ -38,6 +54,7 @@ export function ConnectivitySettings() {
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(false);
   const [check, setCheck] = useState<CheckResult | null>(null);
+  const [providers, setProviders] = useState<SearchProvidersView | null>(null);
 
   useEffect(() => {
     api<Connectivity>("/connectivity")
@@ -49,6 +66,7 @@ export function ConnectivitySettings() {
         setVlessKey(c.vless_key || "");
       })
       .catch(() => setState(null));
+    api<SearchProvidersView>("/research/providers").then(setProviders).catch(() => setProviders(null));
   }, []);
 
   const save = async () => {
@@ -162,6 +180,42 @@ export function ConnectivitySettings() {
           {checking ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : null} Проверить связь
         </Button>
       </div>
+
+      {providers && (
+        <div className="rounded-xl border bg-background/50 p-4 text-sm">
+          <p className="mb-3 font-medium">Провайдеры поиска</p>
+          <div className="flex flex-col gap-3">
+            {(Object.keys(CATEGORY_META) as ProviderCategory[]).map((cat) => {
+              const block = providers[cat];
+              if (!block) return null;
+              const meta = CATEGORY_META[cat];
+              return (
+                <div key={cat} className="flex flex-col gap-1.5">
+                  <p className="flex items-center gap-1.5 text-muted-foreground">
+                    <Icon name={meta.icon} size={16} className={meta.iconClass} /> {meta.label}
+                    {MODE_LABEL[block.mode] ? <span className="text-xs">· {MODE_LABEL[block.mode]}</span> : null}
+                  </p>
+                  <ul className="flex flex-wrap gap-1.5">
+                    {block.providers.map((p) => (
+                      <li
+                        key={p.name}
+                        className="flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs"
+                        title={p.note}
+                      >
+                        <span className="font-medium">{p.name}</span>
+                        <Badge variant={p.enabled ? "secondary" : "outline"}>
+                          {p.enabled ? "вкл" : "выкл"}
+                        </Badge>
+                        <span className="text-muted-foreground">{p.note}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {check && (
         <div className="rounded-xl border bg-background/50 p-4 text-sm">
