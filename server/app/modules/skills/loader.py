@@ -127,13 +127,17 @@ class SkillLoader:
         for pname, p in skill["params"].items():
             ann, default = _TYPES.get(str(p.get("type", "str")), (str, ...))
             if p.get("optional"):
+                # optional без дефолта получает None: аннотация X | None, чтобы MCP-клиент
+                # мог не передавать поле вовсе (иначе null ломает pydantic-валидацию)
                 default = p.get("default")
+                ann = ann | None
             fields[pname] = (ann, default)
         model = create_model(f"{name}_args", **fields) if fields else _EmptyArgs
 
         def handler(args: BaseModel, ctx: ToolContext) -> dict[str, Any]:
             del ctx
-            return self.run(name, args.model_dump())
+            # None-параметры не доходят до run.py: скиллы ждут дефолты («»), а не None
+            return self.run(name, {k: v for k, v in args.model_dump().items() if v is not None})
 
         params_brief = ", ".join(
             f"{p}:{p_['type']}" + ("?" if p_.get("optional") else "") for p, p_ in skill["params"].items()
