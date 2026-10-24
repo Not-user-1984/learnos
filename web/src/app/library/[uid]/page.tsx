@@ -18,9 +18,11 @@ function prettyTitle(title: string): string {
   return title.replace(/_/g, " ");
 }
 
-/** Заголовок главы: позиционный номер + название без собственной нумерации (иначе «3. 1. Приложения»). */
-function chapterLabel(idx: number, title: string): string {
+/** Заголовок главы: номер книги важнее позиционного («Глава 3 · Ветвление»),
+ *  без номера — позиция + название без собственной нумерации. */
+function chapterLabel(idx: number, title: string, number?: number | null): string {
   const inner = title.replace(/^\s*\d+[.)]?\s+/, "");
+  if (number) return `Глава ${number} · ${inner || title}`;
   return `${idx}. ${inner || title}`;
 }
 
@@ -106,7 +108,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
                         href={`/library/${source.uid}/${ch.idx}`}
                         className="font-medium hover:text-primary hover:underline"
                       >
-                        {chapterLabel(ch.idx, ch.title)}
+                        {chapterLabel(ch.idx, ch.title, ch.number)}
                       </Link>
                       {ch.has_exercises && <Badge variant="secondary">упражнения</Badge>}
                     </div>

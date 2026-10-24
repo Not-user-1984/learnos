@@ -69,6 +69,18 @@ export function Markdown({ content, linkTitles = {}, className = "" }: Props) {
               </code>
             );
           },
+          // картинки глав книг (/api/sources/…/images/…) — рендер по центру, в пределах колонки
+          img({ src, alt }) {
+            return (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={typeof src === "string" ? src : ""}
+                alt={alt ?? ""}
+                loading="lazy"
+                className="mx-auto my-4 h-auto max-w-full rounded-lg border"
+              />
+            );
+          },
         }}
       >
         {wikilinks(content, linkTitles)}

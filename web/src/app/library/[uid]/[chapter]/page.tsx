@@ -35,7 +35,12 @@ export default async function ChapterReaderPage({
     <ChapterReader
       sourceUid={uid}
       sourceTitle={source.title}
-      chapter={{ idx, title: ch?.title ?? `Глава ${idx}`, summary: ch?.summary ?? null }}
+      chapter={{
+        idx,
+        title: ch?.title ?? `Глава ${idx}`,
+        summary: ch?.summary ?? null,
+        number: ch?.number ?? null,
+      }}
       text={text}
       prevIdx={prev?.idx ?? null}
       nextIdx={next?.idx ?? null}

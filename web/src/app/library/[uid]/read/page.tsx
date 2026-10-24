@@ -32,7 +32,11 @@ export default async function PdfReaderPage({
     <PdfReader
       sourceUid={source.uid}
       sourceTitle={source.title}
-      chapters={(source.chapters ?? []).map((c) => ({ idx: c.idx, title: c.title }))}
+      chapters={(source.chapters ?? []).map((c) => ({
+        idx: c.idx,
+        title: c.title,
+        number: c.number ?? null,
+      }))}
       initialChapter={ch}
       initialPage={Number.isFinite(page) && page > 0 ? page : null}
     />

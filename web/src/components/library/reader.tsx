@@ -20,7 +20,7 @@ import { PdfViewer } from "./pdf-viewer";
 type Props = {
   sourceUid: string;
   sourceTitle: string;
-  chapter: { idx: number; title: string; summary: string | null };
+  chapter: { idx: number; title: string; summary: string | null; number?: number | null };
   text: string;
   prevIdx: number | null;
   nextIdx: number | null;
@@ -155,7 +155,9 @@ export function ChapterReader({
           <Icon name="chevron_left" size={16} className="shrink-0" />
           <span className="truncate">{sourceTitle}</span>
         </Link>
-        <span className="ml-auto hidden text-sm text-muted-foreground sm:block">Глава {chapter.idx}</span>
+        <span className="ml-auto hidden text-sm text-muted-foreground sm:block">
+          {chapter.number ? `Глава ${chapter.number}` : `Глава ${chapter.idx}`}
+        </span>
         <div className="flex items-center gap-1">
           {isBook && (
             <div
@@ -257,7 +259,8 @@ export function ChapterReader({
             style={{ fontSize: `${fontScale}rem`, lineHeight: 1.8, fontFamily: familyCss }}
           >
             <h1 className="mb-3 text-2xl font-bold leading-tight">
-              {chapter.idx}. {chapter.title}
+              {chapter.number ? `Глава ${chapter.number}. ` : `${chapter.idx}. `}
+              {chapter.title.replace(/^\s*\d+[.)]?\s+/, "")}
             </h1>
             {chapter.summary && (
               <p className="mb-8 border-l-2 border-primary/50 pl-4 text-muted-foreground">{chapter.summary}</p>

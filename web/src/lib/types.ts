@@ -53,6 +53,19 @@ export type ChapterCard = {
   summary: string | null;
   key_points: string[];
   has_exercises: boolean;
+  /** Номер главы из самой книги («Глава 3. …» → 3); null — приложения/без номера. */
+  number?: number | null;
+  start_page?: number | null;
+  end_page?: number | null;
+};
+
+/** Оглавление книги для PDF-ридера (из /outline). */
+export type BookOutline = {
+  source: string;
+  total_pages: number;
+  pages: Record<string, number>;
+  numbers: Record<string, number>;
+  sections: Record<string, { title: string; page: number }[]>;
 };
 
 export type SourceDetail = SourceCard & { chapters: ChapterCard[] };

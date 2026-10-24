@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useStored } from "@/lib/use-stored";
 import { PdfViewer } from "./pdf-viewer";
 
-type Chapter = { idx: number; title: string };
+type Chapter = { idx: number; title: string; number?: number | null };
 
 type Props = {
   sourceUid: string;
@@ -27,9 +27,11 @@ const BRIGHT_KEY = "learnos-pdf-brightness";
 const BRIGHT_EVENT = "learnos-pdf-brightness-change";
 
 export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, initialPage }: Props) {
-  // страницы глав из /outline: строим карту «глава → стартовая страница»;
+  // страницы/номера/секции глав из /outline: строим карты «глава → …»;
   // если page в URL не задан — после загрузки outline проматываем к началу главы
   const [starts, setStarts] = useState<Record<string, number>>({});
+  const [numbers, setNumbers] = useState<Record<string, number>>({});
+  const [sections, setSections] = useState<Record<string, { title: string; page: number }[]>>({});
   const [target, setTarget] = useState<number>(initialPage ?? 1);
   const [current, setCurrent] = useState(target);
   const [tocOpen, setTocOpen] = useState(false);
@@ -41,18 +43,26 @@ export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, in
     let cancelled = false;
     fetch(`/api/sources/${sourceUid}/outline`)
       .then((r) => (r.ok ? r.json() : { pages: {} }))
-      .then((body: { pages?: Record<string, number> }) => {
-        if (cancelled) return;
-        const pages = body.pages ?? {};
-        setStarts(pages);
-        if (initialPage === null) {
-          const s = pages[String(initialChapter)];
-          if (s && s > 1) {
-            setTarget(s);
-            setCurrent(s);
+      .then(
+        (body: {
+          pages?: Record<string, number>;
+          numbers?: Record<string, number>;
+          sections?: Record<string, { title: string; page: number }[]>;
+        }) => {
+          if (cancelled) return;
+          const pages = body.pages ?? {};
+          setStarts(pages);
+          setNumbers(body.numbers ?? {});
+          setSections(body.sections ?? {});
+          if (initialPage === null) {
+            const s = pages[String(initialChapter)];
+            if (s && s > 1) {
+              setTarget(s);
+              setCurrent(s);
+            }
           }
-        }
-      })
+        },
+      )
       .catch(() => setStarts({}));
     return () => {
       cancelled = true;
@@ -87,6 +97,17 @@ export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, in
       setTarget(s);
       setCurrent(s);
     }
+  };
+
+  const goToPage = (page: number) => {
+    setTarget(page);
+    setCurrent(page);
+  };
+
+  /** Подпись главы: номер книги («Глава 3 · Ветвление») или позиция. */
+  const chapterName = (c: Chapter): string => {
+    const n = c.number ?? numbers[String(c.idx)];
+    return n ? `Глава ${n} · ${c.title}` : `${c.idx}. ${c.title}`;
   };
 
   const chIdxs = chapters.map((c) => c.idx);
@@ -156,18 +177,30 @@ export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, in
         {prevChapter !== undefined ? (
           <Button variant="outline" size="sm" className="max-w-[40%]" onClick={() => goToChapter(prevChapter)}>
             <Icon name="chevron_left" size={16} className="shrink-0" />
-            <span className="truncate">Глава {prevChapter}</span>
+            <span className="truncate">
+              {(() => {
+                const c = chapters.find((ch) => ch.idx === prevChapter);
+                return c ? chapterName(c) : `Глава ${prevChapter}`;
+              })()}
+            </span>
           </Button>
         ) : (
           <span />
         )}
         <span className="truncate text-xs text-muted-foreground">
-          глава {currentChapter}
-          {chapters.find((c) => c.idx === currentChapter) && ` · ${chapters.find((c) => c.idx === currentChapter)!.title}`}
+          {(() => {
+            const c = chapters.find((ch) => ch.idx === currentChapter);
+            return c ? chapterName(c) : `глава ${currentChapter}`;
+          })()}
         </span>
         {nextChapter !== undefined ? (
           <Button variant="outline" size="sm" className="max-w-[40%]" onClick={() => goToChapter(nextChapter)}>
-            <span className="truncate">Глава {nextChapter}</span>
+            <span className="truncate">
+              {(() => {
+                const c = chapters.find((ch) => ch.idx === nextChapter);
+                return c ? chapterName(c) : `Глава ${nextChapter}`;
+              })()}
+            </span>
             <Icon name="chevron_right" size={16} className="shrink-0" />
           </Button>
         ) : (
@@ -195,22 +228,44 @@ export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, in
               {chapters.map((c) => {
                 const s = starts[String(c.idx)];
                 const active = c.idx === currentChapter;
+                const secs = sections[String(c.idx)] ?? [];
                 return (
-                  <button
-                    key={c.idx}
-                    type="button"
-                    onClick={() => {
-                      goToChapter(c.idx);
-                      setTocOpen(false);
-                    }}
-                    className={cn(
-                      "flex w-full items-baseline gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent",
-                      active && "bg-accent/60 font-medium",
+                  <div key={c.idx} className="mb-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        goToChapter(c.idx);
+                        setTocOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-baseline gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent",
+                        active && "bg-accent/60 font-medium",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{chapterName(c)}</span>
+                      {s !== null && <span className="shrink-0 text-xs text-muted-foreground">с. {s}</span>}
+                    </button>
+                    {secs.length > 0 && (
+                      <ul className="mb-1 ml-4 border-l pl-1">
+                        {secs.map((sec, i) => (
+                          <li key={i}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (sec.page) goToPage(sec.page);
+                                setTocOpen(false);
+                              }}
+                              className="flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                              title={sec.title}
+                            >
+                              <span className="min-w-0 flex-1 truncate">{sec.title}</span>
+                              <span className="shrink-0">{sec.page || ""}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{c.title}</span>
-                    {s !== null && <span className="shrink-0 text-xs text-muted-foreground">с. {s}</span>}
-                  </button>
+                  </div>
                 );
               })}
               {chapters.length === 0 && <p className="p-3 text-sm text-muted-foreground">Главы не обработаны</p>}
