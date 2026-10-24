@@ -357,6 +357,13 @@ class ChatService:
                         f"(курсор на главе {act['cursor_chapter']}/{act['total_chapters']})"
                     )
                 parts.append(self._source_brief(src))
+                src_lang = (src.get("meta") or {}).get("lang")
+                if src_lang and src_lang != "ru":
+                    lang_names = {"en": "английский"}
+                    parts.append(
+                        f"Язык материала: {lang_names.get(src_lang, src_lang)}. Общение, разборы "
+                        "и объяснения — всегда на русском; оригинальные цитаты приводи с переводом."
+                    )
                 chapter_idx = conv.get("chapter_idx") or act["cursor_chapter"]
                 chapters = [ch for ch in src.get("chapters", []) if ch["idx"] == chapter_idx]
                 if src["kind"] == "video":

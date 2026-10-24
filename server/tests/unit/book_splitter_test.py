@@ -228,3 +228,99 @@ def test_splitter_reprocess_cleans_old_output(splitter, tmp_path):
     assert not ghosts.exists()
     assert not stale_img.exists()
     assert len(list(chapters_dir.glob("ch_*.md"))) == 5
+
+
+def test_detect_language_thresholds(splitter):
+    """ru/en по доле кириллицы: русский техтекст с англ. терминами — ru, англ. — en, мало букв — None."""
+    mod, _db, _data = splitter
+    ru_tech = ("Контейнеры docker и поды kubernetes в кластере. " * 8) + "docker pull image"
+    en_text = "The transformer attention mechanism processes tokens. " * 8
+    assert mod.detect_language(ru_tech) == "ru"
+    assert mod.detect_language(en_text) == "en"
+    assert mod.detect_language("short text") is None
+
+
+def _make_en_book(path: Path) -> None:
+    """Англоязычная книжка: введение + глава (для meta.lang=en)."""
+    doc = fitz.open()
+    for _ in range(6):
+        doc.new_page()
+
+    def text(page_no: int, s: str) -> None:
+        doc[page_no].insert_text((72, 72), s)
+
+    text(0, "Deep Learning Book")
+    for i in range(1, 3):
+        text(i, f"Introduction part {i}. The chapter covers neural networks and gradients.")
+    text(3, "Chapter 1. Basics")
+    for i in range(4, 6):
+        text(i, f"Chapter text page {i}. Backpropagation computes gradients of the loss.")
+    doc.set_toc([[1, "Introduction", 2], [1, "Chapter 1. Basics", 4]])
+    doc.save(path)
+    doc.close()
+
+
+def _make_ru_book(path: Path) -> None:
+    """Русскоязычная книжка с достаточным объёмом текста (для meta.lang=ru).
+
+    Кириллицу пишем через insert_htmlbox: дефолтный шрифт insert_text — Latin-1,
+    русские буквы превращаются в точки при извлечении.
+    """
+    doc = fitz.open()
+    for _ in range(6):
+        doc.new_page()
+
+    def block(page_no: int, parts: list[str]) -> None:
+        html = "<p>" + "</p><p>".join(parts) + "</p>"
+        doc[page_no].insert_htmlbox(fitz.Rect(60, 60, 530, 300), html)
+
+    intro = [
+        "Введение. Контейнеры docker изолируют приложения",
+        "и их зависимости от операционной системы хоста,",
+        "что упрощает сборку и запуск сервисов в кластере.",
+    ]
+    chapter = [
+        "Образ собирается слоями из файловой системы,",
+        "а контейнер запускается из образа за доли секунды.",
+        "Такой подход ускоряет разработку и деплой приложений.",
+    ]
+    block(1, intro)
+    block(2, intro)
+    block(3, ["Глава 1. Образы"])
+    block(4, chapter)
+    block(5, chapter)
+    doc.set_toc([[1, "Введение", 2], [1, "Глава 1. Образы", 4]])
+    doc.save(path)
+    doc.close()
+
+
+def test_splitter_writes_source_lang_meta(splitter, tmp_path):
+    """Сплиттер определяет язык книги и пишет в sources.meta_json.lang (en- и ru-книги)."""
+    mod, db, _data = splitter
+    pdf = tmp_path / "en.pdf"
+    _make_en_book(pdf)
+    db.execute(
+        "INSERT INTO sources(uid, kind, title, local_path) VALUES ('src_en', 'book', ?, ?)",
+        ("Deep Learning (EN)", str(pdf)),
+    )
+    db.commit()
+    result = mod.main(source_id=1)
+    assert result["ok"] and result["lang"] == "en"
+    row = db.execute("SELECT meta_json FROM sources WHERE id = 1").fetchone()
+    import json as _json
+
+    assert _json.loads(row["meta_json"])["lang"] == "en"
+
+    # русская книга → ru
+    pdf_ru = tmp_path / "ru.pdf"
+    _make_ru_book(pdf_ru)
+    db.execute(
+        "INSERT INTO sources(uid, kind, title, local_path) VALUES ('src_ru', 'book', ?, ?)",
+        ("Практика контейнеров (RU)", str(pdf_ru)),
+    )
+    db.commit()
+    result_ru = mod.main(source_id=2)
+    assert result_ru["ok"] and result_ru["lang"] == "ru"
+    row_ru = db.execute("SELECT meta_json FROM sources WHERE id = 2").fetchone()
+    assert _json.loads(row_ru["meta_json"])["lang"] == "ru"
+    db.close()

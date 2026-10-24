@@ -96,6 +96,21 @@ def _sections_for(toc: list[tuple[int, str, int]], start: int, end: int, level: 
 # часть-подобные закладки level-1: главы прячутся уровнем ниже
 _PART_RE = re.compile(r"^(часть|part|book|том)\b", re.I)
 
+# буквы для определения языка (нижний регистр)
+_CYR_RE = re.compile(r"[а-яё]")
+_LAT_RE = re.compile(r"[a-z]")
+
+
+def detect_language(text: str, min_letters: int = 200) -> str | None:
+    """ru/en по доле кириллицы среди букв: русский технический текст содержит
+    английские термины, поэтому порог ru невысокий. Мало букв — не определяем."""
+    sample = text.lower()
+    cyr = len(_CYR_RE.findall(sample))
+    lat = len(_LAT_RE.findall(sample))
+    if cyr + lat < min_letters:
+        return None
+    return "ru" if cyr / (cyr + lat) >= 0.3 else "en"
+
 
 def _top_entries(toc: list[tuple[int, str, int]]) -> tuple[list[tuple[str, int]], int]:
     """Записи-кандидаты в главы и уровень секций.
@@ -153,6 +168,7 @@ def main(source_id: int) -> dict:
 
         chapters = []
         entries = []  # вход куратора структуры: все top-записи закладок как есть
+        chapter_texts: list[str] = []  # для определения языка книги
         for idx, (title, start_page) in enumerate(top, start=1):
             end_page = top[idx][1] if idx < len(top) else doc.page_count + 1
             pages = range(start_page - 1, min(end_page - 1, doc.page_count))
@@ -180,6 +196,7 @@ def main(source_id: int) -> dict:
             if text_items and text_items[0].startswith("\n\n"):
                 text_items[0] = text_items[0][2:]
             text = _clean("".join(text_items))
+            chapter_texts.append(text)
             chapter_path = out_dir / f"ch_{idx:02d}.md"
             chapter_path.write_text(f"# {title}\n\n{text}\n", encoding="utf-8")
 
@@ -219,13 +236,22 @@ def main(source_id: int) -> dict:
                 }
             )
 
-        conn.execute("UPDATE sources SET status = 'processed' WHERE id = ?", (source_id,))
+        # язык книги: сэмпл из середины первых глав (без титула/оглавления достаточно букв)
+        lang = detect_language("\n".join(chapter_texts[:5]))
+        meta = json.loads(src["meta_json"] or "{}")
+        if lang:
+            meta["lang"] = lang
+        conn.execute(
+            "UPDATE sources SET status = 'processed', meta_json = ? WHERE id = ?",
+            (json.dumps(meta, ensure_ascii=False), source_id),
+        )
         conn.commit()
         return {
             "ok": True,
             "source_id": source_id,
             "uid": src["uid"],
             "title": src["title"],
+            "lang": lang,
             "pages": doc.page_count,
             "chapters": chapters,
             "entries": entries,
