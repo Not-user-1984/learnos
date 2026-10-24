@@ -1,6 +1,44 @@
-"""Домен библиотеки: виды источников, статусы обработки, правила."""
+"""Домен библиотеки: виды источников, статусы обработки, правила, структура книги."""
+
+import re
 
 SourceKind = str  # book | video | web
+
+# класс записи TOC: содержательная глава / служебный мусор / приложение
+EntryClass = str  # chapter | front_matter | appendix
+
+# стоп-слова служебных страниц (тайтл нормализуется: lower, пробелы сжаты)
+FRONT_MATTER_WORDS = (
+    "оглавление",
+    "содержание",
+    "contents",
+    "index",
+    "указатель",
+    "лицензия",
+    "licence",
+    "license",
+    "посвящение",
+    "dedication",
+    "титул",
+    "титульный лист",
+    "cover",
+    "обложка",
+    "колофон",
+    "copyright",
+    "выходные данные",
+    "благодарности",
+    "acknowledgments",
+    "acknowledgements",
+    "об авторе",
+    "about the author",
+)
+
+APPENDIX_WORDS = ("приложение", "appendix", "глоссарий", "glossary")
+
+# «Глава 3. X» / «Chapter 12: Y» / «3. Z» / «10 — T» в начале названия
+_NUMBERED_TITLE = re.compile(
+    r"^(?:глава|chapter|chap\.?|раздел)\s+(\d+)|^(\d{1,3})[.)\s\u2014\u2013:-]", re.I
+)
 
 
 class SourceRules:
@@ -22,3 +60,31 @@ class SourceRules:
         if k in {"article", "web", "статья"}:
             return "web"
         raise ValueError(f"неизвестный вид источника: {kind}")
+
+
+def parse_chapter_number(title: str) -> int | None:
+    """Номер главы из её названия: «Глава 3. Ветвление» → 3, «10. Git изнутри» → 10, «Введение» → None."""
+    m = _NUMBERED_TITLE.match(title.strip())
+    if not m:
+        return None
+    raw = m.group(1) or m.group(2)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def classify_toc_entry(title: str, page_count: int) -> EntryClass:
+    """Эвристика-фолбэк куратора структуры (без LLM).
+
+    front_matter — служебные страницы по стоп-словам и записи короче 3 страниц
+    (кроме приложений: короткое приложение остаётся приложением).
+    """
+    t = re.sub(r"\s+", " ", title).strip().lower()
+    if t.startswith(APPENDIX_WORDS):
+        return "appendix"
+    if any(w in t for w in FRONT_MATTER_WORDS):
+        return "front_matter"
+    if page_count < 3:
+        return "front_matter"
+    return "chapter"

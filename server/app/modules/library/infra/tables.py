@@ -41,6 +41,11 @@ chapters = Table(
     Column("summary", Text),
     Column("key_points_json", Text, nullable=False, server_default="[]"),
     Column("has_exercises", Integer, nullable=False, server_default="0"),
+    # навигация по книге: номер главы из самой книги, границы PDF-страниц, секции level-2
+    Column("number", Integer, nullable=True),
+    Column("start_page", Integer, nullable=True),
+    Column("end_page", Integer, nullable=True),
+    Column("sections_json", Text, nullable=False, server_default="[]"),
     UniqueConstraint("source_id", "idx", name="uq_chapters_source_idx"),
 )
 Index("ix_chapters_source_id", chapters.c.source_id)

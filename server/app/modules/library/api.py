@@ -67,8 +67,16 @@ def make_router(svc) -> APIRouter:
 
     @r.get("/sources/{ref}/outline", response_model=OutlineOut)
     def outline(ref: str) -> OutlineOut:
-        """Стартовые страницы PDF по главам (закладки, кэш до следующей обработки)."""
+        """Оглавление книги: стартовые страницы, номера глав, секции (из БД, для старых — матч закладок)."""
         return OutlineOut(**svc.chapter_pages(ref))
+
+    @r.get("/sources/{ref}/images/{name}")
+    def source_image(ref: str, name: str):
+        """Картинка главы (рендер сплиттера) — только basename из images/ источника."""
+        from fastapi.responses import FileResponse
+
+        path = svc.source_image(ref, name)
+        return FileResponse(path, media_type="image/png", content_disposition_type="inline")
 
     @r.get("/sources/{ref}/chapters/{idx}")
     def read_chapter(ref: str, idx: int, offset: int = 0, limit: int = 12000):

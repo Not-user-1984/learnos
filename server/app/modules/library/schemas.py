@@ -37,6 +37,9 @@ class ChapterCard(BaseModel):
     summary: str | None = None
     key_points: list[str] = []
     has_exercises: bool = False
+    number: int | None = None
+    start_page: int | None = None
+    end_page: int | None = None
 
 
 class JobOut(BaseModel):
@@ -44,7 +47,7 @@ class JobOut(BaseModel):
 
     id: int
     kind: str
-    target: str | None
+    target: str | None = None
     status: str
     progress: int = 0
     total: int = 0
@@ -52,9 +55,18 @@ class JobOut(BaseModel):
     error: str | None = None
 
 
+class OutlineSection(BaseModel):
+    """Секция level-2 внутри главы (закладка PDF)."""
+
+    title: str
+    page: int
+
+
 class OutlineOut(BaseModel):
-    """Закладки PDF → стартовая страница каждой главы (для режима «чистый PDF»)."""
+    """Оглавление книги для PDF-ридера: страницы/номера глав и их секции."""
 
     source: str
     total_pages: int = 0
     pages: dict[str, int] = {}
+    numbers: dict[str, int] = {}
+    sections: dict[str, list[OutlineSection]] = {}

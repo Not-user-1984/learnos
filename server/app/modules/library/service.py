@@ -97,7 +97,20 @@ class LibraryService:
         with self._uow() as uow:
             src = self._sources.get(uow.session, ref)
             src["chapters"] = [
-                {k: ch[k] for k in ("idx", "title", "tokens_est", "summary", "key_points", "has_exercises")}
+                {
+                    k: ch[k]
+                    for k in (
+                        "idx",
+                        "title",
+                        "tokens_est",
+                        "summary",
+                        "key_points",
+                        "has_exercises",
+                        "number",
+                        "start_page",
+                        "end_page",
+                    )
+                }
                 for ch in self._chapters.list(uow.session, src["id"])
             ]
             return src
@@ -189,6 +202,9 @@ class LibraryService:
 
         if kind == "book":
             result = self._skills.run("book-splitter", {"source_id": source_id})
+            if result.get("ok"):
+                # куратор структуры: LLM-классификация top-записей → чистка мусора, номера глав
+                result = {**result, **self._curate_book(source_id, src_uid, result)}
         elif kind == "video" and url:
             result = self._run_video(src, url)
         elif kind == "web" and url:
@@ -224,6 +240,103 @@ class LibraryService:
                 uow.session, job["id"], status="failed", error=str(result.get("error"))[:500], updated_at=now
             )
         return {"error": result.get("error"), "job_id": job["id"]}
+
+    # --- куратор структуры книги (Э1) ---
+
+    def _curate_book(self, source_id: int, src_uid: str, splitter_result: dict) -> dict:
+        """Классифицировать top-записи закладок: chapter/front_matter/appendix.
+
+        LLM-куратор (structure_curator, один вызов на книгу); любая ошибка — эвристика.
+        front_matter удаляется (текст кратко уходит в meta источника для обзора),
+        главы перенумеровываются подряд, chapter получает number из названия книги.
+        Падение куратора не роняет обработку: без классификации записи остаются как есть.
+        """
+        entries = splitter_result.get("entries") or []
+        if not entries:
+            return {"curated": False}
+        labels = self._curator_labels(entries)
+        if labels is None:
+            return {"curated": False}
+        front_matter: list[str] = []
+        with self._uow() as uow:
+            rows = {ch["idx"]: ch for ch in self._chapters.list(uow.session, source_id)}
+            new_idx = 0
+            chapter_seq = 0
+            for e in entries:
+                cls, number = labels[e["idx"]]
+                row = rows.get(e["idx"])
+                if row is None:
+                    continue
+                if cls == "front_matter":
+                    Path(row["path"]).unlink(missing_ok=True)
+                    self._chapters.delete(uow.session, row["id"])
+                    if e.get("snippet"):
+                        front_matter.append(f"{e['title']}: {e['snippet']}")
+                    continue
+                new_idx += 1
+                if cls == "chapter":
+                    chapter_seq += 1
+                    number = number or chapter_seq
+                else:
+                    number = None
+                self._chapters.update(uow.session, row["id"], idx=new_idx, number=number)
+            if front_matter and new_idx:
+                meta = self._meta_for(uow.session, source_id)
+                meta["front_matter"] = "\n\n".join(front_matter)[:2000]
+                self._sources.update(
+                    uow.session,
+                    source_id,
+                    meta_json=json.dumps(meta, ensure_ascii=False),
+                    updated_at=now_iso(self._clock),
+                )
+        log.info(
+            "куратор %s: глав %d, служебных страниц удалено %d",
+            src_uid,
+            new_idx,
+            len(front_matter),
+        )
+        return {"curated": True, "front_matter_dropped": len(front_matter), "chapters": new_idx}
+
+    def _curator_labels(self, entries: list[dict]) -> dict[int, tuple[str, int | None]] | None:
+        """Метки классов для каждой записи: LLM-куратор, при сбое — эвристика домена."""
+        if self._runtime is not None:
+            try:
+                labels = self._curate_with_llm(entries)
+                if labels is not None:
+                    return labels
+            except Exception:  # noqa: BLE001 — куратор не должен ронять job
+                log.warning("LLM-куратор структуры не сработал, фолбэк на эвристику", exc_info=True)
+        from .domain import classify_toc_entry, parse_chapter_number
+
+        return {
+            e["idx"]: (
+                classify_toc_entry(e["title"], int(e.get("page_count") or 0)),
+                parse_chapter_number(e["title"]),
+            )
+            for e in entries
+        }
+
+    def _curate_with_llm(self, entries: list[dict]) -> dict[int, tuple[str, int | None]] | None:
+        """Один вызов structure_curator на книгу; None — если ответ не покрывает все записи."""
+        from ...kernel.asyncio_bridge import run_coro_sync
+        from .agents import structure_curator
+
+        lines = [
+            f"{e['idx']}. «{e['title']}» — стр. {e.get('start_page')}, "
+            f"{e.get('page_count')} стр.; начало текста: {(e.get('snippet') or '—')[:200]}"
+            for e in entries
+        ]
+        prompt = "Записи закладок книги:\n" + "\n".join(lines)
+        out = run_coro_sync(self._runtime.run_structured(structure_curator, AgentContext(), prompt))
+        got = {item.idx: item for item in out.entries}
+        if set(got) != {e["idx"] for e in entries}:
+            log.warning("куратор вернул не все записи (получено %d из %d)", len(got), len(entries))
+            return None
+        return {idx: (item.cls, item.number) for idx, item in got.items()}
+
+    def _meta_for(self, session, source_id: int) -> dict:
+        src = self._sources.get(session, source_id)
+        return dict(src.get("meta") or {})
 
     def _run_video(self, src: dict, url: str) -> dict:
         """YouTube → транскрипт-скилл → одна глава."""
@@ -334,15 +447,26 @@ class LibraryService:
                 self._jobs.update(uow.session, job["id"], progress=done, updated_at=now_iso(self._clock))
 
         now = now_iso(self._clock)
-        overview = self._generate_overview(src["title"], summaries)
+        overview = self._generate_overview(
+            src["title"], summaries, front_matter=(src.get("meta") or {}).get("front_matter") or ""
+        )
         with self._uow() as uow:
             self._sources.update(uow.session, src["id"], summary=overview, updated_at=now)
             self._jobs.update(uow.session, job["id"], status="done", progress=done, updated_at=now)
         return {"ok": True, "chapters": done}
 
-    def _generate_overview(self, title: str, chapter_summaries: list[str]) -> str:
-        """Цельный обзор книги из конспектов глав (source_overviewer); фолбэк — склейка."""
+    def _generate_overview(self, title: str, chapter_summaries: list[str], front_matter: str = "") -> str:
+        """Цельный обзор книги из конспектов глав (source_overviewer); фолбэк — склейка.
+
+        front_matter — краткий текст служебных страниц (титул/лицензия/предисловия),
+        вырезанных куратором: даёт обзорщику контекст «о книге».
+        """
         joined = "\n".join(chapter_summaries)
+        front_block = (
+            f"\n\nСлужебные страницы книги (титул/лицензия/отзывы):\n{front_matter[:1200]}"
+            if front_matter
+            else ""
+        )
         if self._runtime is not None:
             try:
                 from ...kernel.asyncio_bridge import run_coro_sync
@@ -351,7 +475,7 @@ class LibraryService:
                 ctx = AgentContext()
                 out = run_coro_sync(
                     self._runtime.run_structured(
-                        source_overviewer, ctx, f"Книга: {title}\n\nКонспекты глав:\n{joined}"
+                        source_overviewer, ctx, f"Книга: {title}{front_block}\n\nКонспекты глав:\n{joined}"
                     )
                 )
                 if out.summary.strip():
@@ -367,7 +491,20 @@ class LibraryService:
         with self._uow() as uow:
             src = self._sources.get(uow.session, ref)
             return [
-                {k: ch[k] for k in ("idx", "title", "tokens_est", "summary", "key_points", "has_exercises")}
+                {
+                    k: ch[k]
+                    for k in (
+                        "idx",
+                        "title",
+                        "tokens_est",
+                        "summary",
+                        "key_points",
+                        "has_exercises",
+                        "number",
+                        "start_page",
+                        "end_page",
+                    )
+                }
                 for ch in self._chapters.list(uow.session, src["id"])
             ]
 
@@ -405,25 +542,44 @@ class LibraryService:
         return path
 
     def chapter_pages(self, ref: str | int) -> dict:
-        """Стартовые страницы PDF для глав книги: закладки документа (тот же TOC,
-        из которого splitter строил главы) матчятся с главами по нормализованному
-        названию; промахнувшаяся глава стартует со страницы предыдущей найденной.
-        Результат кэшируется по source_id до следующей обработки источника."""
-        import re
+        """Оглавление для PDF-ридера: стартовые страницы, номера глав, секции level-2.
 
-        import fitz  # pymupdf — уже в зависимостях (book-splitter)
-
+        Новый ингест пишет границы страниц сплиттером — отдаём из БД. Старые источники
+        (без start_page) — матч закладок по нормализованному названию, промах —
+        страница предыдущей главы +1. Результат кэшируется по source_id до reprocess.
+        """
         with self._uow() as uow:
             src = self._sources.get(uow.session, ref)
             chapter_list = self._chapters.list(uow.session, src["id"])
-        if src["kind"] != "book" or not src.get("local_path"):
+        if src["kind"] != "book":
+            raise NotFound(f"у источника «{src['title']}» нет PDF-оригинала")
+        from_db = [ch for ch in chapter_list if ch.get("start_page")]
+        if not from_db and not src.get("local_path"):
+            # старый ингест без страниц в БД: страницы можно достать только из закладок PDF
             raise NotFound(f"у источника «{src['title']}» нет PDF-оригинала")
         cached = self._outline_cache.get(src["id"])
         if cached is not None:
             return {"source": src["uid"], **cached}
 
-        def norm(s: str) -> str:
-            return re.sub(r"\s+", " ", s).strip().lower()
+        result: dict = {"total_pages": 0, "pages": {}, "numbers": {}, "sections": {}}
+        if from_db:
+            for ch in chapter_list:
+                key = str(ch["idx"])
+                if ch.get("start_page"):
+                    result["pages"][key] = int(ch["start_page"])
+                if ch.get("number"):
+                    result["numbers"][key] = int(ch["number"])
+                if ch.get("sections"):
+                    result["sections"][key] = ch["sections"]
+            result["total_pages"] = max((int(ch.get("end_page") or 0) for ch in chapter_list), default=0)
+        else:
+            result = self._outline_by_toc_match(src, chapter_list)
+        self._outline_cache[src["id"]] = result
+        return {"source": src["uid"], **result}
+
+    def _outline_by_toc_match(self, src: dict, chapter_list: list[dict]) -> dict:
+        """Фолбэк для старых источников: страницы по матчу названий с закладками PDF."""
+        import fitz  # pymupdf — уже в зависимостях (book-splitter)
 
         try:
             doc = fitz.open(src["local_path"])
@@ -435,22 +591,38 @@ class LibraryService:
             top = [(t, p) for lvl, t, p in toc if lvl == 1] or [(t, p) for _lvl, t, p in toc]
             toc_pages: dict[str, int] = {}
             for title, page in top:
-                toc_pages.setdefault(norm(title), page)
-            pages: dict[str, int] = {}
+                toc_pages.setdefault(_norm_title(title), page)
+            result: dict = {"total_pages": doc.page_count, "pages": {}, "numbers": {}, "sections": {}}
             last_matched = 1
             for ch in chapter_list:
-                hit = toc_pages.get(norm(ch["title"]))
+                hit = toc_pages.get(_norm_title(ch["title"]))
                 if hit is not None:
                     last_matched = hit
-                    pages[str(ch["idx"])] = hit
+                    result["pages"][str(ch["idx"])] = hit
                 elif last_matched > 1:
                     # промах по названию: глава начинается после предыдущей сматченной
-                    pages[str(ch["idx"])] = min(last_matched + 1, doc.page_count)
+                    result["pages"][str(ch["idx"])] = min(last_matched + 1, doc.page_count)
                 else:
-                    pages[str(ch["idx"])] = 1
-            result = {"total_pages": doc.page_count, "pages": pages}
-        self._outline_cache[src["id"]] = result
-        return {"source": src["uid"], **result}
+                    result["pages"][str(ch["idx"])] = 1
+                if ch.get("number"):
+                    result["numbers"][str(ch["idx"])] = int(ch["number"])
+        return result
+
+    def source_image(self, ref: str | int, name: str) -> Path:
+        """Картинка главы источника: только basename из data/sources/<id>/images/.
+
+        Raises:
+            NotFound: файла нет или имя пытается выйти за каталог (path traversal).
+        """
+        with self._uow() as uow:
+            src = self._sources.get(uow.session, ref)
+        safe = Path(name).name
+        if not safe or safe != name or safe.startswith("."):
+            raise NotFound(f"картинка «{name}» не найдена")
+        path = Path(self._settings.data_dir) / "sources" / str(src["id"]) / "images" / safe
+        if not path.is_file():
+            raise NotFound(f"картинка «{safe}» не найдена")
+        return path
 
     # --- upload ---
 
@@ -487,3 +659,10 @@ class LibraryService:
     def research_sources(self, topic: str, limit: int = 8) -> dict:
         """Веб-поиск кандидатов-источников (скилл web-search)."""
         return self._skills.run("web-search", {"query": f"лучшие книги и курсы: {topic}", "limit": limit})
+
+
+def _norm_title(s: str) -> str:
+    """Нормализация названия для матча закладок с главами."""
+    import re
+
+    return re.sub(r"\s+", " ", s).strip().lower()

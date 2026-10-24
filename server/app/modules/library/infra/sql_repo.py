@@ -79,6 +79,15 @@ class ChapterRepository:
     def update(self, session: Session, chapter_id: int, **values) -> None:
         session.execute(update(chapters).where(chapters.c.id == chapter_id).values(**values))
 
+    def get_by_idx(self, session: Session, source_id: int, idx: int) -> dict | None:
+        row = session.execute(
+            select(chapters).where(chapters.c.source_id == source_id, chapters.c.idx == idx)
+        ).first()
+        return _chapter_dict(row) if row else None
+
+    def delete(self, session: Session, chapter_id: int) -> None:
+        session.execute(delete(chapters).where(chapters.c.id == chapter_id))
+
     def delete_for_source(self, session: Session, source_id: int) -> None:
         session.execute(delete(chapters).where(chapters.c.source_id == source_id))
 
@@ -142,6 +151,10 @@ def _chapter_dict(r) -> dict:
         "summary": r.summary,
         "key_points": json.loads(r.key_points_json or "[]"),
         "has_exercises": bool(r.has_exercises),
+        "number": r.number,
+        "start_page": r.start_page,
+        "end_page": r.end_page,
+        "sections": json.loads(r.sections_json or "[]"),
     }
 
 
