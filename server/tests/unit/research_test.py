@@ -443,6 +443,18 @@ def test_parse_repo_ref():
         parse_repo_ref("https://gitlab.com/o/r")
 
 
+def test_academic_providers_pick_up_proxy():
+    """OpenAlex/S2 идут через настроенный прокси (S2 режет датацентровые IP), arXiv — напрямую."""
+    svc = ResearchService(SimpleNamespace(web_proxy="socks5://xray:1080", search_provider="chain"))
+    arxiv, openalex, s2 = svc._academic_providers  # noqa: SLF001 — проверка сборки сервиса
+    assert getattr(openalex, "_proxy", None) == "socks5://xray:1080"
+    assert getattr(s2, "_proxy", None) == "socks5://xray:1080"
+    assert not hasattr(arxiv, "_proxy") or arxiv._proxy is None  # noqa: SLF001
+    # прокси сменился — пересборка подхватывает новый
+    svc._settings = SimpleNamespace(web_proxy="", search_provider="chain")
+    assert svc._build_academic()[1]._proxy is None  # noqa: SLF001
+
+
 def test_vless_to_config_reality():
     from app.modules.research.connectivity import vless_to_config
 

@@ -85,10 +85,16 @@ class ResearchService:
         self._settings = settings
         self._uow = uow
         self._provider = build_provider(settings)
-        self._academic_providers = [AcademicProvider(), OpenAlexProvider(), SemanticScholarProvider()]
+        self._academic_providers = self._build_academic()
         self._cache: dict[str, _CacheEntry] = {}
         self._locks: dict[str, threading.Lock] = {}
         self._guard = threading.Lock()
+
+    def _build_academic(self) -> list:
+        """Академ-провайдеры: arXiv напрямую, OpenAlex/S2 — через настроенный прокси
+        (Semantic Scholar режет датацентровые IP; xray-прокси их обходит)."""
+        proxy = getattr(self._settings, "web_proxy", "") or ""
+        return [AcademicProvider(), OpenAlexProvider(proxy), SemanticScholarProvider(proxy)]
 
     # --- настройки связи (UI: поиск/прокси/vless) ---
 
@@ -101,6 +107,7 @@ class ResearchService:
         values = load_connectivity(self._uow)
         applied = apply_to_settings(self._settings, values)
         self._provider = build_provider(self._settings)
+        self._academic_providers = self._build_academic()  # прокси мог смениться
         with self._guard:
             self._cache.clear()  # сменился провайдер — кэш неактуален
         return applied

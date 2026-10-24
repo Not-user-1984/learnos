@@ -177,12 +177,16 @@ class OpenAlexProvider:
 
     name = "openalex"
 
+    def __init__(self, proxy: str = "") -> None:
+        self._proxy = proxy or None
+
     def search(self, query: str, limit: int) -> dict[str, Any]:
         r = httpx.get(
             "https://api.openalex.org/works",
             params={"search": query, "per-page": min(limit, 10)},
             headers={"User-Agent": UA},
             timeout=15,
+            proxy=self._proxy,
         )
         if r.status_code != 200:
             return {"query": query, "count": 0, "results": [], "error": f"openalex {r.status_code}"}
@@ -214,6 +218,9 @@ class SemanticScholarProvider:
 
     name = "semantic_scholar"
 
+    def __init__(self, proxy: str = "") -> None:
+        self._proxy = proxy or None
+
     def search(self, query: str, limit: int) -> dict[str, Any]:
         import time
 
@@ -228,6 +235,7 @@ class SemanticScholarProvider:
                 params=params,
                 headers={"User-Agent": UA},
                 timeout=15,
+                proxy=self._proxy,
             )
             if r.status_code == 429 and attempt == 0:
                 time.sleep(2)
