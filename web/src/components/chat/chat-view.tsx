@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import type { ChatMessage, ConversationDetail, SseEvent } from "@/lib/types";
 import { useSearchParams } from "next/navigation";
 import { streamChat } from "@/lib/chat/stream";
-import { apiPost } from "@/lib/api";
+import { apiPost, apiUpload } from "@/lib/api";
 import { Markdown } from "@/components/markdown/Markdown";
 import { CardView } from "@/components/chat/cards";
 import { TuningEmptyState } from "@/components/chat/tuning-panel";
@@ -34,6 +34,9 @@ type ToolChip = {
 const SESSION_STEPS = ["theory", "check", "practice", "debrief", "done"];
 const STEP_LABELS: Record<string, string> = { theory: "Теория", check: "Вопросы", practice: "Практика", debrief: "Разбор", done: "Готово" };
 
+/** Вложение композера: PDF уже загружен в Библиотеку, уйдёт с следующим сообщением. */
+type PendingAttachment = { uid: string; title: string };
+
 /** Во время стриминга незакрытый ```-блок (недописанная mermaid-схема или код)
  *  не отдаём в рендер — обрубки ломают парсеры и мигают. */
 function trimOpenFence(text: string): string {
@@ -54,9 +57,12 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   const [title, setTitle] = useState(conversation.title);
   const [reconnecting, setReconnecting] = useState(false);
   const [courseBusy, setCourseBusy] = useState(false);
+  const [attachment, setAttachment] = useState<PendingAttachment | null>(null);
+  const [uploading, setUploading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const lastSentRef = useRef("");
   const aliveRef = useRef(true);
+  const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialSentRef = useRef(false);
@@ -77,7 +83,18 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     if (!content.trim() || streaming) return;
     lastSentRef.current = content;
     setInput("");
-    setMessages((m) => [...m, { id: -Date.now(), role: "user", content, cards: [], created_at: new Date().toISOString() }]);
+    const attached = attachment;
+    setAttachment(null);
+    setMessages((m) => [
+      ...m,
+      {
+        id: -Date.now(),
+        role: "user",
+        content,
+        cards: attached ? [{ type: "attachment", title: attached.title, source_uid: attached.uid }] : [],
+        created_at: new Date().toISOString(),
+      },
+    ]);
     setStreaming(true);
     setStreamText("");
     setChips([]);
@@ -149,7 +166,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           setChips([]);
           break;
       }
-    }, controller.signal, opts?.research).catch((e) => {
+    }, controller.signal, { research: opts?.research, attachments: attached ? [attached.uid] : undefined }).catch((e) => {
       streamFail = e;
     });
 
@@ -216,6 +233,22 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
       await fetch(`/api/conversations/${conversation.uid}/stop`, { method: "POST" });
     } catch {
       // игнорируем
+    }
+  };
+
+  // Вложение PDF: грузится в Библиотеку сразу (существующий /sources/upload),
+  // уйдёт со следующим сообщением — агент получит готовый source_uid.
+  const pickPdf = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const src = await apiUpload<{ uid: string; title: string }>("/sources/upload", file);
+      setAttachment({ uid: src.uid, title: src.title || file.name });
+      toast.success("PDF загружен — уйдёт со следующим сообщением");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "не удалось загрузить PDF");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -355,32 +388,69 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           </div>
         )}
         <div className="border-t p-3">
-          <div className="mx-auto flex max-w-3xl items-end gap-2">
-            <Button variant="ghost" size="icon" aria-label="Прикрепить" onClick={() => toast.info("Загрузка PDF — на странице Библиотеки")}>
-              <Icon name="attach_file" size={16} />
-            </Button>
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void send(input);
-                }
-              }}
-              placeholder="Сообщение… (Enter — отправить, Shift+Enter — перенос)"
-              className="max-h-40 min-h-10 resize-none"
-              rows={1}
-            />
-            {streaming ? (
-              <Button variant="destructive" size="icon" aria-label="Стоп" onClick={stop}>
-                <Icon name="stop_circle" size={16} />
-              </Button>
-            ) : (
-              <Button size="icon" aria-label="Отправить" disabled={!input.trim()} onClick={() => void send(input)}>
-                <Icon name="send" size={16} />
-              </Button>
+          <div className="mx-auto max-w-3xl">
+            {attachment && (
+              <div className="mb-2 flex justify-end">
+                <div className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-1.5 text-sm">
+                  <Icon name="picture_as_pdf" size={16} className="shrink-0 text-primary" />
+                  <span className="max-w-64 truncate">{attachment.title}</span>
+                  <button
+                    aria-label="Убрать вложение"
+                    className="shrink-0 text-muted-foreground transition hover:text-foreground"
+                    onClick={() => setAttachment(null)}
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+              </div>
             )}
+            <div className="flex items-end gap-2">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                hidden
+                onChange={(e) => {
+                  void pickPdf(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Прикрепить PDF"
+                disabled={uploading}
+                onClick={() => fileRef.current?.click()}
+              >
+                {uploading ? (
+                  <Icon name="progress_activity" size={16} className="animate-spin" />
+                ) : (
+                  <Icon name="attach_file" size={16} />
+                )}
+              </Button>
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void send(input);
+                  }
+                }}
+                placeholder="Сообщение… (Enter — отправить, Shift+Enter — перенос)"
+                className="max-h-40 min-h-10 resize-none"
+                rows={1}
+              />
+              {streaming ? (
+                <Button variant="destructive" size="icon" aria-label="Стоп" onClick={stop}>
+                  <Icon name="stop_circle" size={16} />
+                </Button>
+              ) : (
+                <Button size="icon" aria-label="Отправить" disabled={!input.trim()} onClick={() => void send(input)}>
+                  <Icon name="send" size={16} />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -465,6 +535,7 @@ function Message({
 }) {
   const time = new Date(message.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
   if (message.role === "user") {
+    const attached = (message.cards ?? []).filter((c) => c.type === "attachment");
     return (
       <div className="flex flex-col items-end gap-1.5">
         <p className="px-1 text-xs text-muted-foreground">
@@ -473,6 +544,12 @@ function Message({
         <div className="user-bubble max-w-[85%] rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground">
           <Markdown content={message.content} className="[&_p]:my-0" />
         </div>
+        {attached.map((c, i) => (
+          <div key={i} className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-1.5 text-sm">
+            <Icon name="picture_as_pdf" size={16} className="shrink-0 text-primary" />
+            <span className="max-w-64 truncate">{c.title}</span>
+          </div>
+        ))}
       </div>
     );
   }

@@ -1,7 +1,7 @@
 ---
 id: T-036
 title: Умный вход: претрекер контента + вложения + карточки предложений
-status: idea   # берётся после T-035
+status: active   # ждёт ревью ZCode
 priority: high
 from: T-034 (этап B)
 created: 2026-10-28
@@ -37,16 +37,64 @@ created: 2026-10-28
 
 ## Критерии готовности
 
-- [ ] api-тест: сообщение с YouTube-ссылкой → в system_extra агенту попадает
+- [x] api-тест: сообщение с YouTube-ссылкой → в system_extra агенту попадает
       заметка с распознанным типом и доступными действиями.
-- [ ] api-тест: сообщение с attachments=[pdf] → источник создан, агенту пришёл
+- [x] api-тест: сообщение с attachments=[pdf] → источник создан, агенту пришёл
       source_uid, ответ не падает.
-- [ ] Веб: PDF вкладывается в композере, чип вложения, отправка с вложением
+- [x] Веб: PDF вкладывается в композере, чип вложения, отправка с вложением
       работает; карточка предложения отображается и кнопка «Да» отправляет ответ.
-- [ ] Проверки зелёные; коммиты в ветке; после готовности — «ждёт ревью ZCode».
+- [x] Проверки зелёные; коммиты в ветке; после готовности — «ждёт ревью ZCode».
 
 ## Заметки
 
 - Претрекер — чистая функция над текстом сообщения (unit-тест без БД).
 - Веб-статьи: pretrecker распознаёт URL, добавление источника kind=web делает
   агент — вкладка «Статья (скоро)» в upload-dialog умирает в T-039.
+
+### Реализация (ждёт ревью ZCode, ветка t-034-orchestrator)
+
+**Что/где:**
+
+- Претрекер: `server/app/modules/chat/domain.py` — `detect_content()`/`content_note()`,
+  regex YouTube (watch/shorts/live/youtu.be), arXiv (только с префиксом `arXiv:` или
+  arxiv.org/abs — «голый» 2401.12345 не матчится, ложные срабатывания на версии/даты),
+  DOI, произвольный URL с дедупом (YouTube-ссылка не дублируется generic-URL).
+  Подключён в `ChatService.stream_reply` (service.py) — заметка уходит в system_extra,
+  content не меняется.
+- Attachments: `MessageIn.attachments: list[{source_uid}]` (schemas.py); PDF грузится
+  клиентом через существующий `/api/sources/upload` ДО отправки, сервер только
+  резолвит uid (`_resolve_attachments` в service.py): заметка агенту в system_extra
+  («Пользователь приложил PDF …, uid=…, действия: process_source, главы, разбор») +
+  карточки `{type: attachment}` в cards_json user-сообщения. Несуществующий uid —
+  NotFound до сохранения сообщения (SSE error, агент не запускается).
+- Карточка `action_offer`: инструмент `offer_action(title, description)` в
+  `chat/tools.py` (паттерн note_draft — `_card` из инструмента, рантайм стримит);
+  веб — `ActionOfferCardView` в `web/src/components/chat/cards.tsx`, «Да»/«Нет»
+  отправляют обычное сообщение («Да — делай: …»). Промпт root: раздел
+  «Распознанный контент и предложения» — предложить карточкой до выполнения.
+- Скиллы: `_skill_tool_names()` в `chat/agents.py` — на регистрации агентов имена
+  берём из SkillLoader (`c.skills.info()`), т.к. ToolRegistry в wire-фазе ещё пуст.
+  free_chat и root получили run_skill/list_skills + все скиллы (torrent_fetch,
+  web-search, book-splitter, youtube-to-summary) — RESEARCH_DIRECTIVE больше
+  не обещает недоступное.
+- Веб: композер чата (`chat-view.tsx`) — кнопка скрепки принимает PDF, чип вложения
+  до отправки, отправка с `attachments`; чипы вложений в user-сообщениях (живой и
+  из истории); `streamChat` принимает opts `{research, attachments}`.
+
+**Тесты:** `tests/unit/pretreck_test.py` (7), `tests/api/test_smart_input.py` (5:
+заметка агенту, attachment+карточка, SSE-error на битый uid, скиллы, offer_action
+в стриме и БД). Полный прогон: 227 passed, ruff/format/lint-imports чистые,
+web lint/tsc/build зелёные.
+
+**Осознанные решения:**
+
+- Вложение одно за раз (PDF): несколько файлов — после T-039, модель сообщений
+  готова (attachments — список).
+- Вложение без текста не отправляется (content обязателен по MessageIn).
+- Кнопки action_offer шлют фиксированный текст («Да — делай: «title»»), без
+  серверного state: агент видит свой offer в истории tool-вызовов.
+- Скилл web-search (дефис) попадает агентам рядом с инструментом web_search
+  (поиск-цепочка) — дублирование имени осознанно, убирается при чистке скилла
+  в T-037.
+
+**Хэши коммитов:** см. ветку t-034-orchestrator (после пуша дополняется).

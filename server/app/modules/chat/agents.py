@@ -1,5 +1,6 @@
 """Агенты-тьюторы чата: free_chat, quick_reviewer, session_tutor (заголовки делаются ролью fast)."""
 
+from dataclasses import replace
 from pathlib import Path
 
 from ...agent.registry import AgentRegistry
@@ -37,6 +38,7 @@ free_chat = AgentSpec(
             "send_telegram_text",
             "send_block_to_telegram",
             "send_chapter_to_telegram",
+            "offer_action",
         }
     ),
     max_steps=30,
@@ -136,11 +138,21 @@ root = AgentSpec(
 )
 
 
+def _skill_tool_names(skills) -> frozenset[str]:
+    """Инструменты скиллов: run_skill/list_skills + каждый скилл как отдельный инструмент.
+
+    Скиллы живут на диске (server/skills/*), поэтому имена берём из SkillLoader
+    на регистрации агентов — реестр инструментов в этот момент ещё пуст.
+    """
+    return frozenset({"run_skill", "list_skills"} | {s["name"] for s in skills.info()})
+
+
 def register_agents(c) -> None:
-    """Зарегистрировать тьюторов чата."""
+    """Зарегистрировать тьюторов чата; free_chat и root получают скиллы (T-036)."""
     registry: AgentRegistry = c.agent_registry
-    registry.register(free_chat)
+    skill_tools = _skill_tool_names(c.skills) if c.skills is not None else frozenset()
+    registry.register(replace(free_chat, tools=free_chat.tools | skill_tools))
     registry.register(quick_reviewer)
     registry.register(session_tutor)
     registry.register(repo_scout)
-    registry.register(root)
+    registry.register(replace(root, tools=root.tools | skill_tools))

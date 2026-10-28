@@ -233,6 +233,9 @@ export interface Card {
   // note_draft (превью конспекта)
   preview_id?: number;
   draft?: NoteDraft;
+  // action_offer (предложение действия) / attachment (вложение сообщения)
+  description?: string;
+  source_uid?: string;
 }
 
 /** SSE-события чата. */
