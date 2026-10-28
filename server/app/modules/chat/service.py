@@ -11,7 +11,7 @@ from ...agent.runtime import AgentRuntime
 from ...agent.spec import AgentContext, AgentSpec, CancellationToken
 from ...kernel.asyncio_bridge import run_coro_sync
 from ...kernel.clock import Clock, now_iso
-from ...kernel.errors import NotFound, ValidationFailed
+from ...kernel.errors import Conflict, NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
 from ...llm.router import ModelRouter
 from ...llm.types import Message
@@ -133,6 +133,7 @@ class ChatService:
         library,
         knowledge,
         profile,
+        recorder,
         ids: IdGenerator,
         clock: Clock,
         settings,
@@ -148,6 +149,7 @@ class ChatService:
         self._library = library
         self._knowledge = knowledge
         self._profile = profile
+        self._recorder = recorder  # agent_runs: живые запуски и следы прерываний
         self._ids = ids
         self._clock = clock
         self._settings = settings
@@ -188,12 +190,13 @@ class ChatService:
             return self._convs.get(uow.session, uid)
 
     def get_conversation(self, uid: str) -> dict:
-        """Разговор + сообщения + сессия (если есть, любым режимом) + сценарий."""
+        """Разговор + сообщения + сессия (если есть, любым режимом) + сценарий + состояние агента."""
         with self._uow() as uow:
             conv = self._convs.get(uow.session, uid)
             conv["messages"] = self._msgs.list(uow.session, conv["id"])
             conv["session"] = self._learning.session_for_conversation(conv["id"])
             conv["scenario"] = self._scenario(conv, self._activity_source_kind(conv))
+            conv["agent_state"] = self._agent_state(uid, conv["messages"])
             return conv
 
     def list_conversations(
@@ -255,7 +258,7 @@ class ChatService:
 
         Генерация продолжает работу при разрыве соединения: события копятся в task,
         ответ сохраняется в БД независимо от читателя.
-        research=True — сообщение запускает ресэрч-цикл: директива уходит агенту
+        research=True — сообщение запускает ресёрч-цикл: директива уходит агенту
         в system_extra (пользователь видит только свою тему), лимит шагов выше.
         attachments — uid источников (PDF), загруженных до отправки: заметка о них
         уходит агенту в system_extra, карточки-вложения — в user-сообщение.
@@ -282,38 +285,84 @@ class ChatService:
 
         # сессия: режим session создаёт её первым сообщением; интент «session» —
         # то же для root-разговора (кнопка «Сессия» у главы). Сессия, созданная
-        # агентом по ходу (start_session), подтягывается ниже по tool_end.
+        # агентом по ходу (start_session), подтягивается ниже по tool_end.
         session = self._learning.session_for_conversation(conv["id"])
         if session is None and (conv["mode"] == "session" or intent == "session"):
             session = self._create_session_for(conv)
         if session:
             yield _session_event(session)
 
+        # conv прочитан до вставки user-сообщения: добавляем его сами, иначе первый
+        # запрос разговора уйдёт без единого user-сообщения (z.ai отвечает 1214)
+        history = await self._build_history(conv) + [Message(role="user", content=content)]
+        extra_notes = []
+        if intent:
+            extra_notes.append(INTENT_DIRECTIVES[intent])
+        if attach_note:
+            extra_notes.append(attach_note)
+        async for ev in self._reply_stream(conv, session, content, history, extra_notes, research=research):
+            yield ev
+
+    def resume(self, uid: str) -> AsyncIterator[SseEvent]:
+        """Дописать ответ после сбоя: генерация заново по последнему user-сообщению.
+
+        User-сообщение не дублируется — оно уже в истории. Проверки конфликта
+        бросаются до первого события (клиент получает 409, а не SSE-error) и
+        повторяются в потоке на случай гонки. Ресёрч-флаг и интент исходного
+        сообщения не восстанавливаются: это перезапуск ответа, не реплей.
+        """
+        conv = self.get_conversation(uid)
+        self._check_resume(conv)
+        return self._resume_stream(conv)
+
+    def _check_resume(self, conv: dict) -> None:
+        last = conv["messages"][-1] if conv["messages"] else None
+        if last is None or last["role"] != "user":
+            raise Conflict("нет сообщения без ответа — продолжать нечего")
+        if conv["uid"] in self._running or self._recorder.active_runs(conv["uid"]):
+            raise Conflict("агент уже работает")
+
+    async def _resume_stream(self, conv: dict) -> AsyncIterator[SseEvent]:
+        self._check_resume(conv)
+        last_user = next(m for m in reversed(conv["messages"]) if m["role"] == "user")
+        session = self._learning.session_for_conversation(conv["id"])
+        if session:
+            yield _session_event(session)
+        # история уже заканчивается незакрытым user-сообщением
+        history = await self._build_history(conv)
+        async for ev in self._reply_stream(conv, session, last_user["content"], history, []):
+            yield ev
+
+    async def _reply_stream(
+        self,
+        conv: dict,
+        session: dict | None,
+        content: str,
+        history: list[Message],
+        extra_notes: list[str],
+        research: bool = False,
+    ) -> AsyncIterator[SseEvent]:
+        """Общий цикл генерации ответа (сообщение и resume): контекст, агент, сохранение."""
+        uid = conv["uid"]
         agent_name = _agent_for_mode(self._agents, conv["mode"])
         spec: AgentSpec = self._agents.get(agent_name)
         system_extra = self._context_block(conv, session)
         # претрекер контента: заметка о ссылках/ID в сообщении — агенту, без LLM
-        for note in filter(None, [content_note(content), attach_note]):
+        for note in filter(None, [content_note(content), *extra_notes]):
             system_extra = f"{system_extra}\n\n{note}".strip()
-        if intent:
-            system_extra = f"{system_extra}\n\n{INTENT_DIRECTIVES[intent]}".strip()
         if research:
             spec = replace(spec, max_steps=RESEARCH_MAX_STEPS)
             system_extra = f"{system_extra}\n\n{RESEARCH_DIRECTIVE}".strip()
-        # conv прочитан до вставки user-сообщения: добавляем его сами, иначе первый
-        # запрос разговора уйдёт без единого user-сообщения (z.ai отвечает 1214)
-        history = await self._build_history(conv) + [Message(role="user", content=content)]
-        ctx = AgentContext(
-            conversation_uid=uid,
-            session_uid=session["session_uid"] if session else None,
-            system_extra=system_extra,
-            cancellation=self._running.get(uid),
-        )
         if uid in self._running:
             raise ValidationFailed("для этого разговора уже идёт генерация")
         token = CancellationToken()
         self._running[uid] = token
-        ctx.cancellation = token
+        ctx = AgentContext(
+            conversation_uid=uid,
+            session_uid=session["session_uid"] if session else None,
+            system_extra=system_extra,
+            cancellation=token,
+        )
 
         text_parts: list[str] = []
         cards: list[dict] = []
@@ -369,6 +418,24 @@ class ChatService:
             yield SseEvent("done", {"message_id": assistant_id})
         finally:
             self._running.pop(uid, None)
+
+    def _agent_state(self, uid: str, messages: list[dict]) -> dict:
+        """Правда о генерации для клиента: агент работает / генерация прервана.
+
+        working — есть живые запуски (root и субагенты несут conversation_uid запуска);
+        interrupted — последнее user-сообщение без ответа и есть свежие следы
+        прерванных запусков (рестарт процесса помечает их на старте).
+        """
+        runs = self._recorder.active_runs(uid)
+        working = bool(runs)
+        last = messages[-1] if messages else None
+        interrupted = (
+            not working
+            and last is not None
+            and last["role"] == "user"
+            and self._recorder.has_recent_interrupted(uid)
+        )
+        return {"working": working, "runs": runs, "interrupted": interrupted}
 
     def stop(self, uid: str) -> dict:
         """Прервать текущую генерацию разговора."""

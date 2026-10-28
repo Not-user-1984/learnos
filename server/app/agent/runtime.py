@@ -110,6 +110,10 @@ class RunRecorder(Protocol):
         """Дописать агрегаты и итоговый статус запуска."""
         ...
 
+    def progress(self, run_id: int, *, steps: int, tool_calls: int) -> None:
+        """Живые агрегаты по ходу запуска (статус остаётся running)."""
+        ...
+
 
 class NullRecorder:
     """Заглушка трейсинга для тестов."""
@@ -118,6 +122,9 @@ class NullRecorder:
         return 0
 
     def finish(self, run_id: int, **kwargs: Any) -> None:
+        pass
+
+    def progress(self, run_id: int, **kwargs: Any) -> None:
         pass
 
 
@@ -191,6 +198,8 @@ class AgentRuntime:
                 messages.append(Message(role="assistant", content=assistant_text, tool_calls=tuple(calls)))
                 for call in calls:
                     tool_calls += 1
+                    # живые агрегаты: badge «агент работает · шаг N» читает их из agent_runs
+                    self._recorder.progress(run_id, steps=steps, tool_calls=tool_calls)
                     known = call.name in self._names(live)
                     base_label = self._tools.get(call.name).label if known else call.name
                     label = base_label(call.arguments) if callable(base_label) else base_label

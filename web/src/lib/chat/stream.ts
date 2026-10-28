@@ -4,10 +4,7 @@
 
 import type { SseEvent } from "@/lib/types";
 
-/** Прочитать SSE-поток ответа агента; onEvent вызывается на каждое событие.
- *  research=true — сообщение запускает ресёрч-цикл (директива уйдёт агенту, в чате видна только тема);
- *  attachments — uid источников (PDF), загруженных до отправки через /api/sources/upload;
- *  intent — сценарий входа (review/study/…): директиву агенту собирает сервер. */
+/** Прочитать SSE-поток ответа агента; onEvent вызывается на каждое событие. */
 export async function streamChat(
   conversationUid: string,
   content: string,
@@ -27,6 +24,16 @@ export async function streamChat(
     }),
     signal,
   });
+  await readSse(res, onEvent);
+}
+
+/** Продолжить прерванную генерацию: ответ заново по последнему user-сообщению (без его дубля). */
+export async function streamResume(conversationUid: string, onEvent: (ev: SseEvent) => void, signal?: AbortSignal): Promise<void> {
+  const res = await fetch(`/api/conversations/${conversationUid}/resume`, { method: "POST", signal });
+  await readSse(res, onEvent);
+}
+
+async function readSse(res: Response, onEvent: (ev: SseEvent) => void): Promise<void> {
   if (!res.ok || !res.body) {
     onEvent({ event: "error", data: { error: "http", message: `HTTP ${res.status}` } });
     return;

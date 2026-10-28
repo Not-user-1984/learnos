@@ -110,6 +110,21 @@ export type SessionState = {
   config: Record<string, unknown>;
 } | null;
 
+/** Живой запуск агента из agent_runs (root или субагент). */
+export type AgentRunInfo = {
+  agent: string;
+  steps: number;
+  tool_calls: number;
+  started_at: string;
+};
+
+/** Правда о генерации разговора (T-041): агент работает / генерация прервана. */
+export type AgentState = {
+  working: boolean;
+  runs: AgentRunInfo[];
+  interrupted: boolean;
+};
+
 export type ConversationDetail = {
   uid: string;
   title: string;
@@ -120,6 +135,7 @@ export type ConversationDetail = {
   focus_block_uid: string | null;
   messages: ChatMessage[];
   session: SessionState;
+  agent_state?: AgentState | null;
 };
 
 export type CourseItem = {

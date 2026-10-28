@@ -51,6 +51,13 @@ async def lifespan(app: FastAPI):
     container = app.state.container
     migrate_db(container)
 
+    # генерации прошлого процесса погибли вместе с ним: зависшие running честно
+    # помечаем interrupted — клиент видит баннер «генерация прервана» и может продолжить
+    if container.run_recorder is not None:
+        stale = container.run_recorder.interrupt_stale_running()
+        if stale:
+            log.info("зависших running-запусков помечено interrupted: %d", stale)
+
     from .modules.search.infra.fts import ensure_fts
 
     with container.uow() as uow:

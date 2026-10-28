@@ -7,9 +7,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
-import type { ChatMessage, ConversationDetail, SseEvent } from "@/lib/types";
+import type { AgentState, ChatMessage, ConversationDetail, SseEvent } from "@/lib/types";
 import { useSearchParams } from "next/navigation";
-import { streamChat } from "@/lib/chat/stream";
+import { streamChat, streamResume } from "@/lib/chat/stream";
 import { apiPost, apiUpload } from "@/lib/api";
 import { Markdown } from "@/components/markdown/Markdown";
 import { CardView } from "@/components/chat/cards";
@@ -56,12 +56,12 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   const [input, setInput] = useState("");
   const [title, setTitle] = useState(conversation.title);
   const [reconnecting, setReconnecting] = useState(false);
+  const [agentState, setAgentState] = useState<AgentState | null>(conversation.agent_state ?? null);
   const [courseBusy, setCourseBusy] = useState(false);
   const [attachment, setAttachment] = useState<PendingAttachment | null>(null);
   const [uploading, setUploading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const lastSentRef = useRef("");
-  const aliveRef = useRef(true);
   const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -69,32 +69,24 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   const feedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
   }, [messages, streamText, liveCards]);
 
-  const send = async (content: string, opts?: { research?: boolean; intent?: string }) => {
-    if (!content.trim() || streaming) return;
-    lastSentRef.current = content;
-    setInput("");
-    const attached = attachment;
-    setAttachment(null);
-    setMessages((m) => [
-      ...m,
-      {
-        id: -Date.now(),
-        role: "user",
-        content,
-        cards: attached ? [{ type: "attachment", title: attached.title, source_uid: attached.uid }] : [],
-        created_at: new Date().toISOString(),
-      },
-    ]);
+  const refresh = async (): Promise<ConversationDetail | null> => {
+    try {
+      return await fetch(`/api/conversations/${conversation.uid}`).then((r) => r.json() as Promise<ConversationDetail>);
+    } catch {
+      return null; // сеть/прокси недоступны (например, веб перекатывается деплоем)
+    }
+  };
+  const applyFresh = (fresh: ConversationDetail) => {
+    setMessages(fresh.messages ?? []);
+    if (fresh.title) setTitle(fresh.title);
+    if (fresh.session) setSession(fresh.session);
+  };
+
+  /** Общий прогон SSE-стрима (сообщение и resume): события → состояние ленты. */
+  const runStream = async (start: (onEvent: (ev: SseEvent) => void, signal: AbortSignal) => Promise<void>) => {
     setStreaming(true);
     setStreamText("");
     setChips([]);
@@ -102,14 +94,13 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     setStreamError(null);
     const controller = new AbortController();
     abortRef.current = controller;
-    const baseCount = messages.length;
 
     let assistantText = "";
     let cards: ChatMessage["cards"] = [];
     let gotDone = false;
     let gotError = false;
     let streamFail: unknown = null;
-    await streamChat(conversation.uid, content, (ev: SseEvent) => {
+    await start((ev: SseEvent) => {
       switch (ev.event) {
         case "delta":
           assistantText += ev.data.text;
@@ -179,58 +170,87 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           setChips([]);
           break;
       }
-    }, controller.signal, {
-      research: opts?.research,
-      intent: opts?.intent,
-      attachments: attached ? [attached.uid] : undefined,
-    }).catch((e) => {
+    }, controller.signal).catch((e) => {
       streamFail = e;
     });
 
     const userStopped = streamFail instanceof DOMException && streamFail.name === "AbortError";
-    const refresh = async (): Promise<ConversationDetail | null> => {
-      try {
-        return await fetch(`/api/conversations/${conversation.uid}`).then((r) => r.json() as Promise<ConversationDetail>);
-      } catch {
-        return null; // сеть/прокси недоступны (например, веб перекатывается деплоем)
-      }
-    };
-    const applyFresh = (fresh: ConversationDetail) => {
-      setMessages(fresh.messages ?? []);
-      if (fresh.title) setTitle(fresh.title);
-      if (fresh.session) setSession(fresh.session);
-    };
-
     if (!gotDone && !gotError && !userStopped) {
-      // стрим оборвался без финала (деплой перезапустил веб, сеть моргнула):
-      // ядро продолжает писать ответ в БД — догоняем его опросом
+      // стрим оборвался без финала (деплой перезапустил веб, сеть моргнула): ядро
+      // продолжает писать ответ в БД — поллинг agent_state подхватит его, лимита
+      // времени нет (длинные автономные цепочки длятся 10+ минут)
       setReconnecting(true);
-      const deadline = Date.now() + 180_000;
-      let caught = false;
-      while (Date.now() < deadline && aliveRef.current && !abortRef.current?.signal.aborted) {
-        const fresh = await refresh();
-        const list = fresh?.messages;
-        const last = list?.[list.length - 1];
-        if (list && list.length > baseCount + 1 && last?.role === "assistant") {
-          applyFresh(fresh);
-          caught = true;
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 3000));
-      }
-      setReconnecting(false);
-      if (!caught && aliveRef.current) {
-        setStreamError("Связь прервалась и ответ не был дописан");
-      }
     } else {
       // штатное завершение: перечитываем разговор, чтобы подтянуть id и карточки
       const fresh = await refresh();
       if (fresh?.messages?.length) applyFresh(fresh);
     }
     setStreaming(false);
-    setReconnecting(false);
     abortRef.current = null;
   };
+
+  const send = async (content: string, opts?: { research?: boolean; intent?: string }) => {
+    if (!content.trim() || streaming) return;
+    lastSentRef.current = content;
+    setInput("");
+    const attached = attachment;
+    setAttachment(null);
+    setMessages((m) => [
+      ...m,
+      {
+        id: -Date.now(),
+        role: "user",
+        content,
+        cards: attached ? [{ type: "attachment", title: attached.title, source_uid: attached.uid }] : [],
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    setAgentState(null);
+    await runStream((onEvent, signal) =>
+      streamChat(conversation.uid, content, onEvent, signal, {
+        research: opts?.research,
+        intent: opts?.intent,
+        attachments: attached ? [attached.uid] : undefined,
+      }),
+    );
+  };
+
+  // «Продолжить» после прерывания: генерация заново по последнему user-сообщению
+  const resumeGeneration = () => {
+    if (streaming) return;
+    setAgentState(null);
+    setReconnecting(false);
+    void runStream((onEvent, signal) => streamResume(conversation.uid, onEvent, signal));
+  };
+
+  // Правда о генерации: пока последнее сообщение без ответа (свой стрим оборвался
+  // или генерация идёт независимо от вкладки) — опрашиваем detail каждые 5 с без
+  // лимита времени: ответ появился — подхватываем; работает — бейдж; прерван — баннер
+  const lastMessage = messages[messages.length - 1];
+  useEffect(() => {
+    if (streaming || !lastMessage || lastMessage.role !== "user") return;
+    let cancelled = false;
+    const tick = async () => {
+      const fresh = await refresh();
+      if (cancelled || !fresh) return;
+      const list = fresh.messages ?? [];
+      if (list.length && list[list.length - 1]?.role === "assistant") {
+        applyFresh(fresh);
+        setAgentState(null);
+        setReconnecting(false);
+        return;
+      }
+      setAgentState(fresh.agent_state ?? null);
+      if (fresh.agent_state?.interrupted && !fresh.agent_state.working) setReconnecting(false);
+    };
+    void tick();
+    const id = setInterval(() => void tick(), 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMessage?.id, streaming]);
 
   // ?initial=… — отправляем автоматически один раз (цитата из читалки, тема ресэрча,
   // сценарные входы); ?intent=… — код сценария, ?research=1 — ресэрч-цикл:
@@ -316,6 +336,36 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           />
         </header>
 
+        {/* живой статус агента: бейдж работы (поллинг detail) или баннер прерывания с «Продолжить» */}
+        {!streaming && (agentState?.working || agentState?.interrupted || reconnecting) && (
+          <div className="flex flex-col gap-1.5 border-b px-4 py-2">
+            {agentState?.working && (
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Icon name="progress_activity" size={15} className="animate-spin shrink-0" />
+                <span>
+                  агент работает:{" "}
+                  {agentState.runs.map((r) => `${r.agent}${r.steps ? ` · шаг ${r.steps}` : ""}`).join(" / ")}
+                </span>
+                {reconnecting && <span className="text-amber-600 dark:text-amber-400">· связь прервалась, догоняю ответ…</span>}
+              </p>
+            )}
+            {!agentState?.working && reconnecting && (
+              <p className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                <Icon name="progress_activity" size={15} className="animate-spin" /> связь прервалась — догоняю ответ агента…
+              </p>
+            )}
+            {agentState?.interrupted && !agentState.working && (
+              <div className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm">
+                <Icon name="restart_alt" size={16} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                <span className="flex-1">Генерация прервана — сервер перезапускался. Ответ можно дописать.</span>
+                <Button size="sm" variant="outline" onClick={resumeGeneration}>
+                  Продолжить
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div ref={feedRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto flex max-w-3xl flex-col gap-7 py-2">
             {messages.length === 0 && (conversation.mode === "root" || conversation.mode === "free") && <EmptyHint />}
@@ -340,11 +390,6 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
                 ) : (
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Icon name="progress_activity" size={16} className="animate-spin" /> агент думает…
-                  </p>
-                )}
-                {reconnecting && (
-                  <p className="mt-2 flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                    <Icon name="progress_activity" size={16} className="animate-spin" /> связь прервалась — догоняю ответ агента…
                   </p>
                 )}
               </div>

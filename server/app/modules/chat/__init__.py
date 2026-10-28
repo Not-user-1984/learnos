@@ -25,6 +25,7 @@ class ChatModule(Module):
             library=c.library,
             knowledge=c.knowledge,
             profile=c.profile,
+            recorder=c.run_recorder,
             ids=c.ids,
             clock=c.clock,
             settings=c.settings,
