@@ -24,6 +24,9 @@ services:
     volumes:
       - ./data:/data
       - ./kb:/kb
+      # рабочая копия деплоя — read-only для аудитора (ступень 1); git-ветки (ступень 2)
+      # требуют rw и uv в образе — включим отдельно, пока read-only
+      - ./:/repo:ro
     ports:
       - "8765:8765"
     extra_hosts:
