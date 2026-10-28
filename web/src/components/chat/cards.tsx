@@ -1,6 +1,6 @@
 "use client";
 
-/** Карточки UI в чате: команда, вопрос, оценка, блок, job, превью конспекта. */
+/** Карточки UI в чате: команда, вопрос, оценка, блок, job, превью конспекта, предложение действия. */
 
 import { useState } from "react";
 import Link from "next/link";
@@ -40,9 +40,38 @@ export function CardView({
       return <PromptChangeCardView card={card} />;
     case "note_draft":
       return <NoteDraftCardView card={card} onInsert={onInsert} onSend={onSend} />;
+    case "action_offer":
+      return <ActionOfferCardView card={card} onSend={onSend} />;
     default:
       return null;
   }
+}
+
+/** Предложение действия (T-036): заголовок + описание, решение — обычным сообщением. */
+function ActionOfferCardView({ card, onSend }: { card: Card; onSend?: (t: string) => void }) {
+  return (
+    <div className="rounded-xl border border-primary/40 bg-primary/5 p-4">
+      <p className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-primary">
+        <Icon name="task_alt" size={14} /> Предложение
+      </p>
+      <p className="font-medium">{card.title}</p>
+      {card.description && <p className="mt-1 text-sm text-muted-foreground">{card.description}</p>}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {onSend ? (
+          <>
+            <Button size="sm" onClick={() => onSend(`Да — делай: «${card.title}»`)}>
+              <Icon name="check" size={16} className="mr-1" /> Да
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onSend(`Нет, не надо: «${card.title}»`)}>
+              <Icon name="close" size={16} className="mr-1" /> Нет
+            </Button>
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground">агент предлагает — кнопки появятся после ответа</span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function CommandCardView({ card, onInsert }: { card: Card; onInsert?: (t: string) => void }) {
