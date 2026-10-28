@@ -11,6 +11,7 @@ import type { AgentState, ChatMessage, ConversationDetail, SseEvent } from "@/li
 import { useSearchParams } from "next/navigation";
 import { streamChat, streamResume } from "@/lib/chat/stream";
 import { apiPost, apiUpload } from "@/lib/api";
+import { ChatCat } from "@/components/chat/chat-cat";
 import { Markdown } from "@/components/markdown/Markdown";
 import { CardView } from "@/components/chat/cards";
 import { TuningEmptyState } from "@/components/chat/tuning-panel";
@@ -366,35 +367,39 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           </div>
         )}
 
-        <div ref={feedRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
-          <div className="mx-auto flex max-w-3xl flex-col gap-7 py-2">
-            {messages.length === 0 && (conversation.mode === "root" || conversation.mode === "free") && <EmptyHint />}
-            {messages.length === 0 && conversation.mode === "tuning" && <TuningEmptyState />}
-            {messages.map((m) => (
-              <Message key={m.id} message={m} onInsert={streaming ? undefined : setInput} onSend={streaming ? undefined : send} />
-            ))}
-            {streaming && (
-              <div>
-                {chips.map((chip) => (
-                  <ToolChipView key={chip.call_id} chip={chip} />
-                ))}
-                {liveCards.map((c, i) => (
-                  <div key={i} className="mb-3">
-                    <CardView card={c} onInsert={streaming ? undefined : setInput} onSend={streaming ? undefined : send} />
-                  </div>
-                ))}
-                {streamText ? (
-                  <div className="rounded-2xl bg-muted px-4 py-3">
-                    <Markdown content={trimOpenFence(streamText)} />
-                  </div>
-                ) : (
-                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Icon name="progress_activity" size={16} className="animate-spin" /> агент думает…
-                  </p>
-                )}
-              </div>
-            )}
+        {/* лента + кот-питомец на полке у нижней границы: оверлей не мешает кликам */}
+        <div className="relative min-h-0 flex-1">
+          <div ref={feedRef} className="h-full overflow-y-auto px-4 py-6">
+            <div className="mx-auto flex max-w-3xl flex-col gap-7 py-2">
+              {messages.length === 0 && (conversation.mode === "root" || conversation.mode === "free") && <EmptyHint />}
+              {messages.length === 0 && conversation.mode === "tuning" && <TuningEmptyState />}
+              {messages.map((m) => (
+                <Message key={m.id} message={m} onInsert={streaming ? undefined : setInput} onSend={streaming ? undefined : send} />
+              ))}
+              {streaming && (
+                <div>
+                  {chips.map((chip) => (
+                    <ToolChipView key={chip.call_id} chip={chip} />
+                  ))}
+                  {liveCards.map((c, i) => (
+                    <div key={i} className="mb-3">
+                      <CardView card={c} onInsert={streaming ? undefined : setInput} onSend={streaming ? undefined : send} />
+                    </div>
+                  ))}
+                  {streamText ? (
+                    <div className="rounded-2xl bg-muted px-4 py-3">
+                      <Markdown content={trimOpenFence(streamText)} />
+                    </div>
+                  ) : (
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Icon name="progress_activity" size={16} className="animate-spin" /> агент думает…
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
+          <ChatCat />
         </div>
 
         {streamError && (
