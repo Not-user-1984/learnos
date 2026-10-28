@@ -30,6 +30,7 @@ class AgentContext:
     conversation_uid: str | None = None
     session_uid: str | None = None  # активная сессия разговора: advance работает без явного id
     parent_run_id: int | None = None
+    depth: int = 0  # вложенность субагентов: 0 — корневой запуск, ограничена в run_agent
     variables: dict[str, Any] = field(default_factory=dict)  # подстановки Jinja в промпт
     cancellation: "CancellationToken | None" = None
 

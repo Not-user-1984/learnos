@@ -5,9 +5,11 @@ import logging
 import time
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
+import anyio
 from jinja2 import Environment, StrictUndefined
 from pydantic import BaseModel
 
@@ -75,15 +77,28 @@ class AgentEvent:
 
 
 class RunRecorder(Protocol):
-    """Порт записи трейсов запусков агентов (реализация — в БД)."""
+    """Порт записи трейсов запусков агентов (реализация — в БД).
 
-    def record(
+    Строка запуска появляется в начале (start) — её id сразу доступен субагентам
+    как parent_run_id; агрегаты и статус дописываются в конце (finish).
+    """
+
+    def start(
         self,
         *,
         agent: str,
         provider: str,
         model: str,
         conversation_uid: str | None,
+        parent_run_id: int | None = None,
+    ) -> int:
+        """Записать начало запуска в agent_runs и вернуть его id."""
+        ...
+
+    def finish(
+        self,
+        run_id: int,
+        *,
         status: str,
         steps: int,
         tool_calls: int,
@@ -91,17 +106,19 @@ class RunRecorder(Protocol):
         output_tokens: int,
         duration_ms: int,
         error: str | None,
-        parent_run_id: int | None = None,
-    ) -> int:
-        """Записать один запуск в agent_runs и вернуть его id."""
+    ) -> None:
+        """Дописать агрегаты и итоговый статус запуска."""
         ...
 
 
 class NullRecorder:
     """Заглушка трейсинга для тестов."""
 
-    def record(self, **kwargs: Any) -> int:
+    def start(self, **kwargs: Any) -> int:
         return 0
+
+    def finish(self, run_id: int, **kwargs: Any) -> None:
+        pass
 
 
 class AgentRuntime:
@@ -120,6 +137,13 @@ class AgentRuntime:
         started = time.monotonic()
         steps = tool_calls = input_tokens = output_tokens = 0
         status, error_text = "ok", None
+        run_id = self._recorder.start(
+            agent=spec.name,
+            provider=getattr(provider, "name", "?"),
+            model=model,
+            conversation_uid=ctx.conversation_uid,
+            parent_run_id=ctx.parent_run_id,
+        )
         try:
             messages: list[Message] = [Message(role="system", content=_system_prompt(spec, ctx)), *history]
             schemas = self._schemas_for(spec)
@@ -161,15 +185,11 @@ class AgentRuntime:
                     )
                     if known:
                         try:
-                            result = self._tools.call(
-                                call.name,
-                                call.arguments,
-                                ToolContext(
-                                    channel="agent",
-                                    conversation_uid=ctx.conversation_uid,
-                                    session_uid=ctx.session_uid,
-                                    agent_name=spec.name,
-                                ),
+                            # офлоад: инструмент синхронный, долгий (сеть, субагент)
+                            # не должен блокировать event loop сервера
+                            call_ctx = self._tool_ctx(spec, ctx, run_id)
+                            result = await anyio.to_thread.run_sync(
+                                partial(self._tools.call, call.name, call.arguments, call_ctx)
                             )
                         except Exception as e:  # noqa: BLE001 — падение инструмента не должно ронять агент
                             log.warning("tool %s failed: %s", call.name, e)
@@ -215,11 +235,8 @@ class AgentRuntime:
             log.exception("agent %s failed", spec.name)
             yield AgentEvent(type="error", text=str(e))
         finally:
-            self._recorder.record(
-                agent=spec.name,
-                provider=getattr(provider, "name", "?"),
-                model=model,
-                conversation_uid=ctx.conversation_uid,
+            self._recorder.finish(
+                run_id,
                 status=status,
                 steps=steps,
                 tool_calls=tool_calls,
@@ -227,8 +244,20 @@ class AgentRuntime:
                 output_tokens=output_tokens,
                 duration_ms=int((time.monotonic() - started) * 1000),
                 error=error_text,
-                parent_run_id=ctx.parent_run_id,
             )
+
+    @staticmethod
+    def _tool_ctx(spec: AgentSpec, ctx: AgentContext, run_id: int) -> ToolContext:
+        """Контекст вызова инструмента: run_id/depth/cancellation — для оркестрации субагентов."""
+        return ToolContext(
+            channel="agent",
+            conversation_uid=ctx.conversation_uid,
+            session_uid=ctx.session_uid,
+            agent_name=spec.name,
+            run_id=run_id,
+            depth=ctx.depth,
+            cancellation=ctx.cancellation,
+        )
 
     def _names(self, spec: AgentSpec) -> set[str]:
         return set(spec.tools)
@@ -244,6 +273,13 @@ class AgentRuntime:
         provider, model = self._router.resolve(spec.model_role)
         started = time.monotonic()
         status, error_text = "ok", None
+        run_id = self._recorder.start(
+            agent=spec.name,
+            provider=getattr(provider, "name", "?"),
+            model=model,
+            conversation_uid=ctx.conversation_uid,
+            parent_run_id=ctx.parent_run_id,
+        )
         try:
             return await structured_output(
                 provider,
@@ -259,11 +295,8 @@ class AgentRuntime:
             status, error_text = "error", str(e)
             raise
         finally:
-            self._recorder.record(
-                agent=spec.name,
-                provider=getattr(provider, "name", "?"),
-                model=model,
-                conversation_uid=ctx.conversation_uid,
+            self._recorder.finish(
+                run_id,
                 status=status,
                 steps=1,
                 tool_calls=0,
@@ -271,5 +304,4 @@ class AgentRuntime:
                 output_tokens=0,
                 duration_ms=int((time.monotonic() - started) * 1000),
                 error=error_text,
-                parent_run_id=ctx.parent_run_id,
             )

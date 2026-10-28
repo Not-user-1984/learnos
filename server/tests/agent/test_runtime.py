@@ -33,9 +33,13 @@ class ListRecorder:
     def __init__(self) -> None:
         self.runs: list[dict] = []
 
-    def record(self, **kwargs) -> int:
-        self.runs.append(kwargs)
+    def start(self, **kwargs) -> int:
+        run = {"status": "running", "steps": 0, "tool_calls": 0, **kwargs}
+        self.runs.append(run)
         return len(self.runs)
+
+    def finish(self, run_id: int, **kwargs) -> None:
+        self.runs[run_id - 1].update(kwargs)
 
 
 def make_tools() -> ToolRegistry:
@@ -254,7 +258,7 @@ async def test_recorder_captures_cancelled_status(tmp_path):
 
 
 def test_null_recorder_returns_zero():
-    assert NullRecorder().record(agent="x", provider="p", model="m", status="ok") == 0
+    assert NullRecorder().start(agent="x", provider="p", model="m") == 0
 
 
 # --- промпт: StrictUndefined ---

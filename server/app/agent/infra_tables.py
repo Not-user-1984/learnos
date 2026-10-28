@@ -19,5 +19,6 @@ agent_runs_table = Table(
     Column("output_tokens", Integer),
     Column("duration_ms", Integer),
     Column("error", Text),
+    Column("parent_run_id", Integer),  # трейс родителя: связывает субагентов с оркестратором
     Column("created_at", Text, nullable=False),
 )
