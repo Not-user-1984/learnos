@@ -68,6 +68,7 @@ class Container:
     profile: object | None = None
     research: object | None = None
     skills: object | None = None
+    skills_service: object | None = None
     knowledge: object | None = None
     library: object | None = None
     job_worker: object | None = None
@@ -108,7 +109,9 @@ def build_container(settings: Settings | None = None, *, fake_llm=None) -> Conta
     )
     from .agent.recorder import DbRunRecorder
 
-    container.agent_runtime = AgentRuntime(router, container.tools, DbRunRecorder(uow))
+    container.agent_runtime = AgentRuntime(
+        router, container.tools, DbRunRecorder(uow), container.agent_registry
+    )
 
     for module in MODULES:
         module.wire(container)

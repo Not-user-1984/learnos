@@ -121,13 +121,26 @@ class NullRecorder:
         pass
 
 
+class AgentRegistryLike(Protocol):
+    """Порт реестра агентов: актуальный spec по имени (для горячей перезагрузки)."""
+
+    def get(self, name: str) -> AgentSpec: ...
+
+
 class AgentRuntime:
     """Исполняет агента: собирает запрос, стримит ответ, вызывает инструменты, повторяет до финала."""
 
-    def __init__(self, router: ModelRouter, tools: ToolRegistry, recorder: RunRecorder | None = None) -> None:
+    def __init__(
+        self,
+        router: ModelRouter,
+        tools: ToolRegistry,
+        recorder: RunRecorder | None = None,
+        agent_registry: "AgentRegistryLike | None" = None,
+    ) -> None:
         self._router = router
         self._tools = tools
         self._recorder = recorder or NullRecorder()
+        self._agent_registry = agent_registry  # живой spec: скиллы, сохранённые агентом, видны сразу
 
     async def run(
         self, spec: AgentSpec, ctx: AgentContext, history: Sequence[Message]
@@ -146,12 +159,13 @@ class AgentRuntime:
         )
         try:
             messages: list[Message] = [Message(role="system", content=_system_prompt(spec, ctx)), *history]
-            schemas = self._schemas_for(spec)
 
             for _step in range(spec.max_steps):
                 if ctx.cancellation:
                     ctx.cancellation.raise_if_cancelled()
                 steps += 1
+                live = self._live_spec(spec)
+                schemas = self._schemas_for(live)
                 assistant_text = ""
                 calls = []
                 async for event in provider.stream(
@@ -177,7 +191,7 @@ class AgentRuntime:
                 messages.append(Message(role="assistant", content=assistant_text, tool_calls=tuple(calls)))
                 for call in calls:
                     tool_calls += 1
-                    known = call.name in self._names(spec)
+                    known = call.name in self._names(live)
                     base_label = self._tools.get(call.name).label if known else call.name
                     label = base_label(call.arguments) if callable(base_label) else base_label
                     yield AgentEvent(
@@ -258,6 +272,15 @@ class AgentRuntime:
             depth=ctx.depth,
             cancellation=ctx.cancellation,
         )
+
+    def _live_spec(self, spec: AgentSpec) -> AgentSpec:
+        """Актуальный spec агента: реестр мог расширить инструменты (save_skill в этом же запуске)."""
+        if self._agent_registry is None:
+            return spec
+        try:
+            return self._agent_registry.get(spec.name)
+        except KeyError:
+            return spec  # агента сняли из реестра во время запуска — работаем по снятой копии
 
     def _names(self, spec: AgentSpec) -> set[str]:
         return set(spec.tools)

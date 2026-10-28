@@ -49,6 +49,11 @@ def make_router(svc) -> APIRouter:
     def reset(agent: str):
         return svc.reset_prompt(agent)
 
+    @r.post("/skills/{name}/reset")
+    def reset_skill(name: str):
+        """Снять override builtin-скилла — вернуть файлы из кода (бэкап перед снятием)."""
+        return svc.reset_skill(name)
+
     # --- конструктор кастомных агентов ---
 
     @r.get("/tools")

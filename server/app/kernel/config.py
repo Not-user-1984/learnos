@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     telegram_token: str = ""  # LEARNOS_TELEGRAM_TOKEN
     telegram_chat_id: str = "490168997"  # личный чат Дмитрия
     telegram_proxy: str = ""  # например socks5://host.docker.internal:7890
+    # Песочница агентских скиллов (T-037): subprocess-таймаут run.py в секундах
+    skill_exec_timeout: int = 120
     # Ресёрч (модуль research): провайдер поиска и прокси для внешних запросов
     search_provider: str = "chain"  # цепочка [платный по ключу → ddg → wikipedia → hn]; см. T-019
     web_proxy: str = ""  # например socks5://192.168.0.10:1080 (vpn-gw) — если регион блокирует

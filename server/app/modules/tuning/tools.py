@@ -1,8 +1,9 @@
 """Инструменты tuning для агента-настройщика промптов."""
 
 from dataclasses import asdict as _asdict
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...kernel.tools.spec import ToolContext, ToolSpec
 
@@ -25,6 +26,16 @@ class StageChangeArgs(BaseModel):
     summary: str
 
 
+class ProposeChangeArgs(BaseModel):
+    """Черновик правки промпта или builtin-скилла (подтверждение — карточкой у человека)."""
+
+    kind: Literal["prompt", "skill"] = "prompt"
+    target: str = Field(description="Агент (kind=prompt) или builtin-скилл (kind=skill)")
+    new_content: str
+    summary: str
+    file: str = Field(default="run.py", description="kind=skill: run.py | SKILL.md")
+
+
 class ChangeIdArgs(BaseModel):
     """Ссылка на черновик правки."""
 
@@ -45,6 +56,13 @@ def tuning_tools(c) -> list[ToolSpec]:
 
     def propose_prompt_change(args: StageChangeArgs, ctx: ToolContext) -> dict:
         return svc.stage_change(args.agent, args.new_content, args.summary, ctx.conversation_uid)
+
+    def propose_change(args: ProposeChangeArgs, ctx: ToolContext) -> dict:
+        if args.kind == "skill":
+            return svc.stage_skill_change(
+                args.target, args.file, args.new_content, args.summary, ctx.conversation_uid
+            )
+        return svc.stage_change(args.target, args.new_content, args.summary, ctx.conversation_uid)
 
     def discard_prompt_change(args: ChangeIdArgs, ctx: ToolContext) -> dict:
         del ctx
@@ -72,11 +90,26 @@ def tuning_tools(c) -> list[ToolSpec]:
             module="tuning",
             description=(
                 "Предложить правку промпта: полный новый текст + описание. "
-                "Применяется только после «Применить» в карточке у пользователя."
+                "Применяется только после «Применить» в карточке у пользователя. "
+                "То же, что propose_change(kind='prompt')."
             ),
             args_model=StageChangeArgs,
             handler=propose_prompt_change,
             label="Готовлю правку промпта",
+        ),
+        ToolSpec(
+            name="propose_change",
+            module="tuning",
+            description=(
+                "Предложить правку карточкой с диффом: kind=prompt — промпт агента "
+                "(target — имя агента, полный новый текст); kind=skill — builtin-скилл "
+                "(target — имя скилла, file — run.py | SKILL.md). "
+                "Применяется только после «Применить» у пользователя; свои агентские "
+                "скиллы правятся свободно через save_skill."
+            ),
+            args_model=ProposeChangeArgs,
+            handler=propose_change,
+            label="Готовлю правку",
         ),
         ToolSpec(
             name="discard_prompt_change",

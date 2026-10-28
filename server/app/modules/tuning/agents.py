@@ -22,6 +22,7 @@ prompt_tuner = AgentSpec(
             "list_agent_prompts",
             "read_agent_prompt",
             "propose_prompt_change",
+            "propose_change",
             "discard_prompt_change",
             "send_telegram_text",
         }
