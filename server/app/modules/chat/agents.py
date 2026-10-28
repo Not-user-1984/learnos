@@ -124,6 +124,17 @@ repo_scout = AgentSpec(
     max_steps=30,
 )
 
+root = AgentSpec(
+    name="root",
+    description=(
+        "Корневой агент-оркестратор: сам отвечает на простое и ведёт разговор, "
+        "сложные задачи передаёт специалистам через run_agent (каталог — list_agents)."
+    ),
+    prompt_path=AGENTS_DIR / "root" / "prompt.md",
+    tools=free_chat.tools | {"run_agent", "list_agents"},
+    max_steps=30,
+)
+
 
 def register_agents(c) -> None:
     """Зарегистрировать тьюторов чата."""
@@ -132,3 +143,4 @@ def register_agents(c) -> None:
     registry.register(quick_reviewer)
     registry.register(session_tutor)
     registry.register(repo_scout)
+    registry.register(root)

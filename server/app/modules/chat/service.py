@@ -34,6 +34,7 @@ AGENT_BY_MODE = {
     "quick": "quick_reviewer",
     "session": "session_tutor",
     "tuning": "prompt_tuner",
+    "root": "root",
 }
 
 # Ресёрч как состояние чата: директива видна только агенту (в system_extra),
@@ -121,7 +122,7 @@ class ChatService:
 
     def create_conversation(
         self,
-        mode: str = "free",
+        mode: str = "root",
         activity: str | int | None = None,
         chapter: int | None = None,
         focus_block: str | None = None,

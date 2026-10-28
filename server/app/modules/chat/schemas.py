@@ -2,13 +2,13 @@
 
 from pydantic import BaseModel, Field
 
-MODES = {"free", "quick", "session", "tuning"}
+MODES = {"free", "quick", "session", "tuning", "root"}
 
 
 class ConversationCreate(BaseModel):
     """Новый разговор."""
 
-    mode: str = "free"
+    mode: str = "root"
     activity: str | int | None = None
     chapter: int | None = None
     focus_block: str | None = None
