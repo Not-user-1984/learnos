@@ -6,6 +6,7 @@ import remarkAlerts from "remark-github-blockquote-alert";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
+import { ActionLink } from "./ActionLink";
 import { CodeBlock } from "./CodeBlock";
 
 type Props = {
@@ -36,6 +37,10 @@ export function Markdown({ content, linkTitles = {}, className = "" }: Props) {
         remarkPlugins={[remarkGfm, remarkAlerts, remarkMath]}
         rehypePlugins={[rehypeKatex]}
         components={{
+          // http(s)-ссылки: обычные остаются ссылками, YouTube/PDF получают меню действий
+          a({ href, children }) {
+            return <ActionLink href={href}>{children}</ActionLink>;
+          },
           pre({ children }) {
             // достаём текст и язык из вложенного <code class="language-x">
             const raw: unknown = Array.isArray(children) ? children[0] : children;
