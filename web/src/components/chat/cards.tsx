@@ -38,6 +38,8 @@ export function CardView({
       return <BlockCardView card={card} />;
     case "prompt_change":
       return <PromptChangeCardView card={card} />;
+    case "git_change":
+      return <GitChangeCardView card={card} />;
     case "note_draft":
       return <NoteDraftCardView card={card} onInsert={onInsert} onSend={onSend} />;
     case "action_offer":
@@ -335,6 +337,90 @@ function NoteDraftCardView({
           правки можно писать словами — «это уберём», «это дополним», соберу новое превью
         </span>
       </div>
+    </div>
+  );
+}
+
+/** Ветка агента (T-038): просмотр диффа и отклонение; применение — за человеком. */
+function GitChangeCardView({ card }: { card: Card }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [rejected, setRejected] = useState(false);
+
+  const reject = async () => {
+    if (!card.branch || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/revision/branch/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch: card.branch }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      setRejected(true);
+      toast.success(`Ветка ${card.branch} удалена`);
+    } catch {
+      toast.error("Не удалось удалить ветку");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-violet-500/40 bg-violet-500/5 p-4">
+      <p className="mb-1 flex items-center gap-2 text-sm font-medium">
+        <Icon name="fork_right" size={16} className="text-violet-500" /> Ветка агента:{" "}
+        <code className="font-mono">{card.branch}</code>
+        {card.commit && <span className="text-muted-foreground">· {card.commit}</span>}
+      </p>
+      {card.summary && <p className="mb-2 text-sm text-muted-foreground">{card.summary}</p>}
+      {(card.files ?? []).length > 0 && (
+        <ul className="mb-2 space-y-0.5 font-mono text-xs text-muted-foreground">
+          {(card.files ?? []).map((f) => (
+            <li key={f}>{f}</li>
+          ))}
+        </ul>
+      )}
+      {card.diffstat && <pre className="overflow-x-auto rounded-lg border bg-card p-2 text-xs">{card.diffstat}</pre>}
+      {open && (card.diff ?? []).length > 0 && (
+        <div className="mt-2 max-h-64 overflow-auto rounded-lg border bg-zinc-950 font-mono text-xs leading-5">
+          {(card.diff ?? []).slice(0, 300).map((d, i) => (
+            <div
+              key={i}
+              className={
+                d.op === "+"
+                  ? "bg-emerald-500/15 px-2 text-emerald-300"
+                  : d.op === "-"
+                    ? "bg-rose-500/15 px-2 text-rose-300"
+                    : "px-2 text-zinc-500"
+              }
+            >
+              {d.op === "@" ? d.line : `${d.op} ${d.line}`}
+            </div>
+          ))}
+        </div>
+      )}
+      {rejected ? (
+        <p className="mt-2 text-sm text-muted-foreground">отклонено — ветка и worktree удалены</p>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setOpen(!open)}>
+            <Icon name={open ? "visibility_off" : "visibility"} size={16} className="mr-1" />
+            {open ? "Скрыть дифф" : "Посмотреть"}
+          </Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void reject()}>
+            {busy ? (
+              <Icon name="progress_activity" size={16} className="mr-1 animate-spin" />
+            ) : (
+              <Icon name="close" size={16} className="mr-1" />
+            )}
+            Отклонить
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            применение и пуш — за человеком (git merge в рабочей копии)
+          </span>
+        </div>
+      )}
     </div>
   );
 }

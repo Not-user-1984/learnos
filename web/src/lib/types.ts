@@ -234,6 +234,11 @@ export interface Card {
   agent?: string;
   file?: string;
   diff?: { op: string; line: string }[];
+  // git_change (ветка агента, ступень 2 ревизии T-038)
+  branch?: string;
+  commit?: string;
+  files?: string[];
+  diffstat?: string;
   // note_draft (превью конспекта)
   preview_id?: number;
   draft?: NoteDraft;

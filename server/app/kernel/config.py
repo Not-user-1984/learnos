@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     telegram_proxy: str = ""  # например socks5://host.docker.internal:7890
     # Песочница агентских скиллов (T-037): subprocess-таймаут run.py в секундах
     skill_exec_timeout: int = 120
+    # Ревизия кода агентом-аудитором (T-038): корень git-репо (на проде — рабочая копия
+    # deploy'я); пусто — инструменты ревизии отвечают «не настроено»
+    repo_root: str = ""
+    # Дневной бюджет подготовленных агентом веток agent/* (ступень 2 ревизии)
+    git_branch_budget: int = 3
     # Ресёрч (модуль research): провайдер поиска и прокси для внешних запросов
     search_provider: str = "chain"  # цепочка [платный по ключу → ddg → wikipedia → hn]; см. T-019
     web_proxy: str = ""  # например socks5://192.168.0.10:1080 (vpn-gw) — если регион блокирует
