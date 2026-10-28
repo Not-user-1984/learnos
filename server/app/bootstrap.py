@@ -26,6 +26,7 @@ from .modules.messenger import MessengerModule
 from .modules.profile import ProfileModule
 from .modules.research import ResearchModule
 from .modules.review import ReviewModule
+from .modules.revision import RevisionModule
 from .modules.search import SearchModule
 from .modules.skills import SkillsModule
 from .modules.tuning import TuningModule
@@ -48,6 +49,7 @@ MODULES = [
     MessengerModule(),
     TuningModule(),
     McpExtModule(),
+    RevisionModule(),
 ]
 
 
@@ -81,6 +83,7 @@ class Container:
     messenger: object | None = None
     tuning: object | None = None
     mcpext: object | None = None
+    revision: object | None = None
 
 
 def build_container(settings: Settings | None = None, *, fake_llm=None) -> Container:

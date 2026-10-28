@@ -17,6 +17,10 @@ services:
       LEARNOS_TELEGRAM_TOKEN: ${LEARNOS_TELEGRAM_TOKEN:-}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       SERPER_API_KEY: ${SERPER_API_KEY:-}
+      # ревизия кода агентом-аудитором (T-038): git-рабочая копия, видимая из контейнера;
+      # пусто — инструменты ревизии отвечают «не настроено». Рабочую копию смонтировать
+      # в volumes (rw — git worktree пишет в её .git), например: ../:/repo
+      LEARNOS_REPO_ROOT: ${LEARNOS_REPO_ROOT:-}
     volumes:
       - ./data:/data
       - ./kb:/kb

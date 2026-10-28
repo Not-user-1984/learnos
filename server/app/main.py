@@ -139,6 +139,7 @@ def create_app() -> FastAPI:
         "search",
         "export",
         "skills",
+        "revision",
     ):
         module_tools = container.tools.by_module(name)
         if module_tools:
