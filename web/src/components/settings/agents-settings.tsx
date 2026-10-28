@@ -159,12 +159,10 @@ export function AgentsSettings() {
   const tuneInChat = async (a: PromptInfo) => {
     try {
       const conv = await apiPost<{ uid: string }>("/conversations", {
-        mode: "tuning",
         title: `Настройка: ${a.agent}`,
       });
-      router.push(
-        `/chat/${conv.uid}?initial=${encodeURIComponent(`Настрой агента ${a.agent}: опиши правку — например, «${a.custom ? "сделай тон мягче" : "отвечай короче"}».`)}`,
-      );
+      // имя агента — видимый текст; сценарий «tune» сервер превращает в директиву
+      router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(`Настрой агента ${a.agent}`)}&intent=tune`);
     } catch {
       toast.error("не удалось открыть настройку");
     }

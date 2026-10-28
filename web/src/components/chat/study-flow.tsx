@@ -1,6 +1,8 @@
 "use client";
 
-/** Мастер изучения: «Изучить книгу» (PDF → карта глав → старт) и «Обсудить видео» (YouTube). */
+/** Мастер изучения: «Изучить книгу» (PDF → карта глав → «разобрать с агентом»)
+ *  и «Обсудить видео» (YouTube). Разговор всегда root — формат (разбор или
+ *  сессия-урок) выбирает корневой агент по интенту «study». */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -19,7 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type Step = "pick" | "processing" | "ready";
 type Job = { id: number; status: string; progress: number; total: number; error?: string | null };
@@ -50,7 +51,6 @@ export function StudyFlowDialog({
   const [chapters, setChapters] = useState<ChapterCard[]>([]);
   const [sourceTitle, setSourceTitle] = useState("");
   const [sourceKind, setSourceKind] = useState<"book" | "video">("book");
-  const [mode, setMode] = useState<"quick" | "session">("quick");
   const [videoUrl, setVideoUrl] = useState("");
   const [library, setLibrary] = useState<SourceCard[]>([]);
   const [busy, setBusy] = useState(false);
@@ -193,21 +193,15 @@ export function StudyFlowDialog({
       const isVideo = sourceKind === "video";
       const act = await apiPost<{ uid: string }>("/activities", { source: sourceUid });
       const conv = await apiPost<{ uid: string }>("/conversations", {
-        mode,
         activity: act.uid,
         chapter: 1,
         title: `${isVideo ? "Видео" : "Изучение"}: ${sourceTitle}`,
       });
-      const first =
-        mode === "session"
-          ? isVideo
-            ? "Начни сессию по видео: теория по ключевым понятиям, коротко."
-            : "Начни сессию по главе 1: теория по первым понятиям, коротко."
-          : isVideo
-            ? "Разбери видео целиком: главное за 30 секунд, ключевые понятия, что применимо мне, 1–2 вопроса на подумать."
-            : "Начнём изучение с главы 1.";
       onOpenChange(false);
-      router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(first)}`);
+      // видимый текст — только намерение пользователя; сценарий «study» сервер
+      // превращает в директиву агенту (формат разбора выберет корневой агент)
+      const first = isVideo ? "Начнём разбор видео" : "Начнём изучение с главы 1";
+      router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(first)}&intent=study`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "не удалось начать");
     } finally {
@@ -333,19 +327,8 @@ export function StudyFlowDialog({
                   </div>
                 ))}
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <ToggleGroup
-                  value={[mode]}
-                  onValueChange={(v: unknown) => {
-                    const arr = Array.isArray(v) ? v : [];
-                    const val = arr.length > 0 ? String(arr[arr.length - 1]) : null;
-                    if (val === "quick" || val === "session") setMode(val);
-                  }}
-                >
-                  <ToggleGroupItem value="quick"><Icon name="bolt" size={16} /> Быстрый разбор</ToggleGroupItem>
-                  <ToggleGroupItem value="session"><Icon name="school" size={16} /> Сессия-урок</ToggleGroupItem>
-                </ToggleGroup>
-                <Button className="ml-auto" disabled={busy} onClick={startStudying}>
+              <div className="flex justify-end">
+                <Button disabled={busy} onClick={startStudying}>
                   {busy ? (
                     <Icon name="progress_activity" size={16} className="mr-1 animate-spin" />
                   ) : sourceKind === "video" ? (
@@ -353,7 +336,7 @@ export function StudyFlowDialog({
                   ) : (
                     <Icon name="auto_stories" size={16} className="mr-1" />
                   )}
-                  Начать{sourceKind === "book" && chapters.length > 1 ? " с главы 1" : ""}
+                  Разобрать с агентом
                 </Button>
               </div>
             </div>

@@ -79,7 +79,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
   }, [messages, streamText, liveCards]);
 
-  const send = async (content: string, opts?: { research?: boolean }) => {
+  const send = async (content: string, opts?: { research?: boolean; intent?: string }) => {
     if (!content.trim() || streaming) return;
     lastSentRef.current = content;
     setInput("");
@@ -144,7 +144,20 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           setLiveCards([...cards]);
           break;
         case "session":
-          setSession((s) => (s ? { ...s, state: ev.data.state, allowed_events: ev.data.allowed_events } : s));
+          // панель сессии живёт по данным события: в root-разговоре сессия может
+          // появиться первым же событием (интент «session»), без GET разговора
+          setSession((s) =>
+            s
+              ? { ...s, state: ev.data.state, allowed_events: ev.data.allowed_events }
+              : {
+                  session_uid: ev.data.session_uid ?? "",
+                  state: ev.data.state,
+                  status: "active",
+                  allowed_events: ev.data.allowed_events,
+                  chapter_idx: ev.data.chapter_idx ?? null,
+                  config: {},
+                },
+          );
           break;
         case "title":
           setTitle(ev.data.title);
@@ -166,7 +179,11 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           setChips([]);
           break;
       }
-    }, controller.signal, { research: opts?.research, attachments: attached ? [attached.uid] : undefined }).catch((e) => {
+    }, controller.signal, {
+      research: opts?.research,
+      intent: opts?.intent,
+      attachments: attached ? [attached.uid] : undefined,
+    }).catch((e) => {
       streamFail = e;
     });
 
@@ -215,14 +232,16 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     abortRef.current = null;
   };
 
-  // ?initial=… — отправляем автоматически один раз (цитата из читалки, тема ресёрча);
-  // ?research=1 — тема запускает ресёрч-цикл: директива уйдёт агенту, в чате видна только тема
+  // ?initial=… — отправляем автоматически один раз (цитата из читалки, тема ресэрча,
+  // сценарные входы); ?intent=… — код сценария, ?research=1 — ресэрч-цикл:
+  // директивы уйдут агенту через system_extra, в чате виден только текст
   useEffect(() => {
     const initial = searchParams.get("initial");
     const research = searchParams.get("research") === "1";
+    const intent = searchParams.get("intent") ?? undefined;
     if (initial && !initialSentRef.current && conversation.messages.length === 0) {
       initialSentRef.current = true;
-      void send(initial, { research });
+      void send(initial, { research, intent });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -283,7 +302,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
         <header className="flex items-center gap-2 border-b px-4 py-3">
           <h1 className="truncate font-semibold">{title}</h1>
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            {modeLabel(conversation.mode)}
+            {conversation.scenario || modeLabel(conversation.mode)}
           </span>
           <ConfirmDeleteButton
             endpoint={`/conversations/${conversation.uid}`}
@@ -299,7 +318,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
 
         <div ref={feedRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto flex max-w-3xl flex-col gap-7 py-2">
-            {messages.length === 0 && conversation.mode === "free" && <EmptyHint mode={conversation.mode} />}
+            {messages.length === 0 && (conversation.mode === "root" || conversation.mode === "free") && <EmptyHint />}
             {messages.length === 0 && conversation.mode === "tuning" && <TuningEmptyState />}
             {messages.map((m) => (
               <Message key={m.id} message={m} onInsert={streaming ? undefined : setInput} onSend={streaming ? undefined : send} />
@@ -351,7 +370,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
             </div>
           </div>
         )}
-        {conversation.mode === "session" && !streaming && session && session.state !== "done" && (
+        {session && !streaming && session.state !== "done" && (
           <div className="mx-auto mb-1 flex max-w-3xl flex-wrap gap-2 px-4">
             <button
               onClick={() => void send("Фейнман: запусти проверку — задай следующий вопрос по пройденному (карточкой ask).")}
@@ -361,7 +380,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
             </button>
           </div>
         )}
-        {(conversation.mode === "quick" || conversation.mode === "free") && !streaming && (
+        {["root", "free", "quick"].includes(conversation.mode) && !streaming && (
           <div className="mx-auto mb-1 flex max-w-3xl flex-wrap gap-2 px-4">
             <button
               onClick={() => void send("Закрепим материал нашего разговора: задай вопросы по ключевым понятиям, по одному за раз.")}
@@ -455,7 +474,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
         </div>
       </div>
 
-      {conversation.mode === "session" && session && (
+      {session && (
         <>
           {/* планшет: панель сессии прячется в кнопку с прогрессом в шапке */}
           <SessionPanelDialog session={session} />
@@ -606,8 +625,7 @@ export function ChatViewWithInitial(props: { conversation: ConversationDetail })
   );
 }
 
-function EmptyHint({ mode }: { mode: string }) {
-  if (mode !== "free") return null;
+function EmptyHint() {
   return (
     <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
       Спроси что угодно. Агент ищет по базе знаний, правит блоки по просьбе («добавь в блок про поды…») и сохраняет конспекты по слову «сохрани».

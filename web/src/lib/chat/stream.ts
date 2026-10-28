@@ -6,13 +6,14 @@ import type { SseEvent } from "@/lib/types";
 
 /** Прочитать SSE-поток ответа агента; onEvent вызывается на каждое событие.
  *  research=true — сообщение запускает ресёрч-цикл (директива уйдёт агенту, в чате видна только тема);
- *  attachments — uid источников (PDF), загруженных до отправки через /api/sources/upload. */
+ *  attachments — uid источников (PDF), загруженных до отправки через /api/sources/upload;
+ *  intent — сценарий входа (review/study/…): директиву агенту собирает сервер. */
 export async function streamChat(
   conversationUid: string,
   content: string,
   onEvent: (ev: SseEvent) => void,
   signal?: AbortSignal,
-  opts?: { research?: boolean; attachments?: string[] },
+  opts?: { research?: boolean; intent?: string; attachments?: string[] },
 ): Promise<void> {
   // относительный путь: Next проксирует /api на ядро
   const res = await fetch(`/api/conversations/${conversationUid}/messages`, {
@@ -21,6 +22,7 @@ export async function streamChat(
     body: JSON.stringify({
       content,
       research: opts?.research ?? false,
+      intent: opts?.intent ?? null,
       attachments: (opts?.attachments ?? []).map((source_uid) => ({ source_uid })),
     }),
     signal,

@@ -1,6 +1,8 @@
 "use client";
 
-/** Действия на странице источника: разбор/сессия (до lg — иконки без текста). */
+/** Действия на странице источника: разбор/сессия (до lg — иконки без текста).
+ *  Разговор всегда root: сценарий уходит серверу интентом (review/session),
+ *  сессию по интенту сервер создаёт сам и привязывает к разговору. */
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -24,21 +26,20 @@ export function SourceActions({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
 
-  const start = async (mode: "quick" | "session") => {
-    setBusy(mode);
+  const start = async (intent: "review" | "session") => {
+    setBusy(intent);
     try {
       const act = await apiPost<{ uid: string }>("/activities", { source: sourceUid });
       const conv = await apiPost<{ uid: string }>("/conversations", {
-        mode,
         activity: act.uid,
         chapter: chapterIdx ?? null,
-        title: chapterTitle ? `${mode === "quick" ? "Разбор" : "Сессия"}: ${chapterTitle}` : undefined,
+        title: chapterTitle ? `${intent === "session" ? "Сессия" : "Разбор"}: ${chapterTitle}` : undefined,
       });
       const first =
-        mode === "session"
-          ? `Начни сессию${chapterIdx ? ` по главе ${chapterIdx}` : ""}: теория по первым понятиям, коротко.`
-          : `Начнём быстрый разбор${chapterIdx ? ` главы ${chapterIdx}` : ""}: главное и ключевые понятия.`;
-      router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(first)}`);
+        intent === "session"
+          ? `Начнём сессию${chapterIdx ? ` по главе ${chapterIdx}` : ""}`
+          : `Начнём быстрый разбор${chapterIdx ? ` главы ${chapterIdx}` : ""}`;
+      router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(first)}&intent=${intent}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ошибка");
     } finally {
@@ -53,9 +54,9 @@ export function SourceActions({
         variant="outline"
         disabled={busy !== null}
         title={chapterIdx ? `Быстрый разбор главы ${chapterIdx}` : "Быстрый разбор источника"}
-        onClick={() => void start("quick")}
+        onClick={() => void start("review")}
       >
-        <Icon name="bolt" size={16} className="text-amber-500" />
+        {busy === "review" ? <Icon name="progress_activity" size={16} className="animate-spin" /> : <Icon name="bolt" size={16} className="text-amber-500" />}
         <span className="hidden lg:inline">Быстрый разбор</span>
       </Button>
       <Button
@@ -64,7 +65,7 @@ export function SourceActions({
         title={chapterIdx ? `Сессия по главе ${chapterIdx}` : "Сессия по источнику"}
         onClick={() => void start("session")}
       >
-        <Icon name="school" size={16} />
+        {busy === "session" ? <Icon name="progress_activity" size={16} className="animate-spin" /> : <Icon name="school" size={16} />}
         <span className="hidden lg:inline">Сессия</span>
       </Button>
     </div>

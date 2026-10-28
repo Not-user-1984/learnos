@@ -72,9 +72,6 @@ export function AddSourceButton() {
           <TabsList>
             <TabsTrigger value="pdf">PDF</TabsTrigger>
             <TabsTrigger value="youtube">YouTube</TabsTrigger>
-            <TabsTrigger value="web" disabled>
-              Статья (скоро)
-            </TabsTrigger>
           </TabsList>
           <TabsContent value="pdf" className="flex flex-col gap-3 pt-3">
             <Input placeholder="Название (необязательно)" value={title} onChange={(e) => setTitle(e.target.value)} />

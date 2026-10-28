@@ -5,6 +5,7 @@ export function kindIcon(kind: string): string {
 }
 
 export const MODE_LABEL: Record<string, string> = {
+  root: "разговор",
   free: "свободный",
   quick: "быстрый разбор",
   session: "сессия-урок",
@@ -18,5 +19,6 @@ export function modeLabel(mode: string): string {
 
 export function modeIcon(mode: string): string {
   if (mode.startsWith("agent:")) return "smart_toy";
+  if (mode === "root") return "hub";
   return mode === "quick" ? "bolt" : mode === "session" ? "school" : mode === "tuning" ? "tune" : "chat";
 }

@@ -74,7 +74,7 @@ export function ChapterHistoryButton({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{c.title}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    {modeLabel(c.mode)} ·{" "}
+                    {c.scenario || modeLabel(c.mode)} ·{" "}
                     {new Date(c.updated_at).toLocaleString("ru-RU", {
                       day: "numeric",
                       month: "short",
