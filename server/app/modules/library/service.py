@@ -4,17 +4,30 @@ import json
 import logging
 import shutil
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+import httpx
 
 from ...agent.spec import AgentContext
 from ...kernel.clock import Clock, now_iso
 from ...kernel.db import UnitOfWorkFactory
-from ...kernel.errors import Conflict, NotFound, ValidationFailed
+from ...kernel.errors import Conflict, ExternalServiceError, NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
 from .domain import SourceRules
 from .events import SourceDeleted, SourceProcessed
 from .infra.sql_repo import ChapterRepository, JobRepository, SourceRepository
 
 log = logging.getLogger("learnos.library")
+
+# скачивание PDF по ссылке (from-url): браузерный UA (трекеры режут роботов),
+# лимит размера и таймаут на соединение/чанк стрима
+URL_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126 Safari/537.36"
+)
+MAX_URL_PDF_BYTES = 200 * 1024 * 1024
+URL_TIMEOUT = httpx.Timeout(connect=15, read=90, write=10, pool=15)
+_PDF_MAGIC_PROBE = 1024  # байт достаточно, чтобы увидеть %PDF- в начале ответа
 
 
 class LibraryService:
@@ -665,6 +678,94 @@ class LibraryService:
     def research_sources(self, topic: str, limit: int = 8) -> dict:
         """Веб-поиск кандидатов-источников (скилл web-search)."""
         return self._skills.run("web-search", {"query": f"лучшие книги и курсы: {topic}", "limit": limit})
+
+    # --- добавление по ссылке (меню действий над ссылкой в чате) ---
+
+    def from_url(self, url: str) -> dict:
+        """Добавить материал по ссылке одним действием; обработка — асинхронным job.
+
+        YouTube-ролик → video-источник с транскриптом; PDF (расширение .pdf или
+        content-type/magic-байты ответа) → скачивание и upload-путь книг; прочий
+        URL → web-статья. Ответ сразу: uid, kind и job обработки.
+        """
+        from .domain import is_youtube_url
+
+        parts = urlsplit(url)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            raise ValidationFailed("нужна http(s)-ссылка на видео, PDF или статью")
+        if is_youtube_url(url):
+            return self._start_url_source("video", url)
+        data = self._probe_pdf(url)
+        if data is not None:
+            name = Path(unquote(parts.path)).name or "book"
+            if not name.lower().endswith(".pdf"):
+                name = f"{name}.pdf"
+            out = self.upload_pdf(name, data)
+            return {
+                "ok": True,
+                "uid": out["uid"],
+                "kind": out["kind"],
+                "title": out["title"],
+                "job_id": out["job_id"],
+                "processing": True,
+            }
+        return self._start_url_source("web", url)
+
+    def _start_url_source(self, kind: str, url: str) -> dict:
+        """Создать video/web-источник по ссылке и поставить job обработки."""
+        source = self.add_source(kind, title=url, url=url)
+        proc = self.process_source(source["uid"])
+        return {
+            "ok": True,
+            "uid": source["uid"],
+            "kind": kind,
+            "title": url,
+            "job_id": proc.get("job_id"),
+            "processing": bool(proc.get("ok")),
+        }
+
+    def _probe_pdf(self, url: str) -> bytes | None:
+        """GET по ссылке: байты PDF или None, если ответ не похож на книгу.
+
+        Решение по расширению .pdf, content-type и magic-байтам %PDF- в первом
+        килобайте (трекеры отдают файлы без расширения и с битым content-type).
+        """
+        from .domain import is_pdf_url
+
+        proxy = (getattr(self._settings, "web_proxy", "") or "") or None
+        chunks: list[bytes] = []
+        size = 0
+        looks_pdf = is_pdf_url(url)
+        try:
+            with httpx.stream(
+                "GET",
+                url,
+                headers={"User-Agent": URL_UA},
+                timeout=URL_TIMEOUT,
+                follow_redirects=True,
+                proxy=proxy,
+            ) as r:
+                r.raise_for_status()
+                looks_pdf = looks_pdf or (r.headers.get("content-type") or "").lower().startswith(
+                    "application/pdf"
+                )
+                for chunk in r.iter_bytes(64 * 1024):
+                    if not looks_pdf:
+                        looks_pdf = chunk.lstrip()[:1024].startswith(b"%PDF-")
+                    size += len(chunk)
+                    if size > MAX_URL_PDF_BYTES:
+                        raise ValidationFailed(
+                            f"файл больше {MAX_URL_PDF_BYTES // (1024 * 1024)} МБ — "
+                            "скачай вручную и загрузи через загрузку PDF"
+                        )
+                    chunks.append(chunk)
+                    if not looks_pdf and size >= _PDF_MAGIC_PROBE:
+                        return None
+        except httpx.HTTPError as e:
+            raise ExternalServiceError(f"не удалось скачать {url}: {str(e)[:200]}") from e
+        if size == 0:
+            raise ExternalServiceError(f"по ссылке {url} пришёл пустой ответ")
+        return b"".join(chunks) if looks_pdf else None
 
 
 def _norm_title(s: str) -> str:
