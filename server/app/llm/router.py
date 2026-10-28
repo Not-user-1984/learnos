@@ -42,13 +42,40 @@ class LLMConfig:
         return cls(providers=raw.get("providers") or {}, roles=roles)
 
 
+def _collect_api_keys(spec: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Пул ключей провайдера: значения env из api_key_envs (пустые пропущены, дубли сняты,
+    порядок сохранён); fallback — одиночный api_key_env. Возвращает (ключи, отсутствующие env)."""
+    env_names: list[str] = []
+    for name in spec.get("api_key_envs") or []:
+        if name and name not in env_names:
+            env_names.append(name)
+    if not env_names and spec.get("api_key_env"):
+        env_names = [spec["api_key_env"]]
+    keys: list[str] = []
+    missing: list[str] = []
+    for name in env_names:
+        value = os.environ.get(name)
+        if value:
+            keys.append(value)
+        else:
+            missing.append(name)
+    return keys, missing
+
+
 class ModelRouter:
     """Выдаёт провайдера и модель по роли; провайдеры создаются лениво и переиспользуются."""
 
-    def __init__(self, config: LLMConfig, *, force_provider: LLMProvider | None = None) -> None:
+    def __init__(
+        self,
+        config: LLMConfig,
+        *,
+        force_provider: LLMProvider | None = None,
+        key_cooldown_seconds: float = 600.0,
+    ) -> None:
         self._config = config
         self._providers: dict[str, LLMProvider] = {}
         self._force = force_provider
+        self._key_cooldown_seconds = key_cooldown_seconds
 
     def resolve(self, role: str) -> tuple[LLMProvider, str]:
         """Роль → (провайдер, модель). LLMError(not_configured), если роли/ключа нет."""
@@ -64,39 +91,54 @@ class ModelRouter:
 
     def _get_provider(self, name: str, spec: dict[str, Any]) -> LLMProvider:
         if name not in self._providers:
-            api_key = None
-            env_name = spec.get("api_key_env")
-            if env_name:
-                api_key = os.environ.get(env_name)
-                if not api_key:
-                    raise LLMError(f"нет переменной {env_name} — LLM недоступен", code="not_configured")
+            keys, missing = _collect_api_keys(spec)
+            if missing and not keys:
+                raise LLMError(
+                    f"нет ни одного ключа из {', '.join(missing)} — LLM недоступен", code="not_configured"
+                )
             caps = ProviderCapabilities(**(spec.get("capabilities") or {}))
             ptype = spec.get("type", "openai_compat")
             if ptype == "fake":
                 self._providers[name] = FakeLLMProvider()
             else:
-                self._providers[name] = OpenAICompatProvider(name, spec["base_url"], api_key, caps)
+                self._providers[name] = OpenAICompatProvider(
+                    name, spec["base_url"], keys, caps, cooldown_seconds=self._key_cooldown_seconds
+                )
         return self._providers[name]
 
     def status(self) -> dict[str, Any]:
-        """Сводка для /api/health: настроена ли роль chat и чем."""
+        """Сводка для /api/health: настроена ли роль chat, чем и сколько ключей в пуле."""
         binding = self._config.roles.get("chat")
         if binding is None:
-            return {"configured": False, "provider": None, "model": None, "reason": "роль chat не настроена"}
+            return {
+                "configured": False,
+                "provider": None,
+                "model": None,
+                "keys": 0,
+                "reason": "роль chat не настроена",
+            }
         spec = self._config.providers.get(binding.provider) or {}
         if not spec.get("enabled", True):
             return {
                 "configured": False,
                 "provider": binding.provider,
                 "model": binding.model,
+                "keys": 0,
                 "reason": "провайдер выключен",
             }
-        env_name = spec.get("api_key_env")
-        if env_name and not os.environ.get(env_name):
+        keys, missing = _collect_api_keys(spec)
+        if missing and not keys:
             return {
                 "configured": False,
                 "provider": binding.provider,
                 "model": binding.model,
-                "reason": f"нет {env_name}",
+                "keys": 0,
+                "reason": f"нет ключей ({', '.join(missing)})",
             }
-        return {"configured": True, "provider": binding.provider, "model": binding.model, "reason": None}
+        return {
+            "configured": True,
+            "provider": binding.provider,
+            "model": binding.model,
+            "keys": len(keys),
+            "reason": None,
+        }

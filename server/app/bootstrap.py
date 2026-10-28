@@ -96,7 +96,11 @@ def build_container(settings: Settings | None = None, *, fake_llm=None) -> Conta
     uow = UnitOfWorkFactory(session_factory, bus, publisher="app")
 
     llm_config = LLMConfig.load(settings.llm_config)
-    router = ModelRouter(llm_config, force_provider=fake_llm) if fake_llm else ModelRouter(llm_config)
+    router = (
+        ModelRouter(llm_config, force_provider=fake_llm)
+        if fake_llm
+        else ModelRouter(llm_config, key_cooldown_seconds=settings.llm_key_cooldown)
+    )
 
     container = Container(
         settings=settings,

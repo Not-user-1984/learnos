@@ -41,6 +41,10 @@ docker compose build
 # web: http://localhost:3000 · REST: http://localhost:8765/api · MCP: http://localhost:8765/mcp
 ```
 
+Дополнительные ключи GLM опциональны: `ZAI_API_KEY_2..4` образуют цепочку фейловера — при ошибке
+квоты ключ уходит в cooldown (~10 мин, `LEARNOS_LLM_KEY_COOLDOWN`) и запрос идёт следующим;
+порядок цепочки = `api_key_envs` в `server/config/llm.yaml`, пустые env пропускаются.
+
 **Локально (разработка):**
 
 ```bash

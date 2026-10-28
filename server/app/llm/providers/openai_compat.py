@@ -3,8 +3,9 @@
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
-from typing import Any
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any, TypeVar
 
 import openai
 
@@ -13,13 +14,18 @@ from ..types import LLMEvent, LLMRequest, LLMResponse, ProviderCapabilities, Too
 
 log = logging.getLogger("learnos.llm.openai_compat")
 
-_RETRYABLE = {"rate_limit", "timeout", "unavailable"}
+_RETRYABLE = {"timeout", "unavailable"}
+# ошибки, уводящие ключ в cooldown с ротацией на следующий ключ цепочки
+_ROTATABLE = {"rate_limit", "auth"}
 _ATTEMPTS = 2
+_QUOTA_MARKERS = ("quota", "insufficient", "превышен лимит")
+
+T = TypeVar("T")
 
 
 def _map_error(e: Exception) -> LLMError:
     """Перевод исключений SDK в LLMError с кодом."""
-    if isinstance(e, openai.AuthenticationError):
+    if isinstance(e, (openai.AuthenticationError, openai.PermissionDeniedError)):
         return LLMError("ключ API не принят провайдером", code="auth")
     if isinstance(e, openai.RateLimitError):
         return LLMError("превышен лимит запросов", code="rate_limit")
@@ -30,37 +36,113 @@ def _map_error(e: Exception) -> LLMError:
     if isinstance(e, openai.APIConnectionError):
         return LLMError("провайдер недоступен", code="unavailable")
     if isinstance(e, openai.APIStatusError):
+        text = str(e).lower()
+        if any(marker in text for marker in _QUOTA_MARKERS):
+            return LLMError("превышена квота ключа", code="rate_limit")
         return LLMError(f"провайдер ответил ошибкой {e.status_code}", code="unavailable")
     return LLMError(f"неожиданная ошибка провайдера: {e}", code="unavailable")
 
 
 class OpenAICompatProvider:
-    """Асинхронный клиент /chat/completions с tools, стримингом и ретраями.
+    """Асинхронный клиент /chat/completions с tools, стримингом, ретраями и цепочкой ключей.
+
+    Ключей может быть несколько: при ошибке квоты/авторизации ключ уходит в cooldown
+    и запрос повторяется следующим; рабочий индекс sticky. Идентификация ключа
+    в логах — только номер (zai#2), значение не логируется.
 
     httpx-клиент привязан к event loop: при смене петли (воркер с asyncio.run vs uvicorn)
     клиент пересоздаётся, иначе «Event loop is closed».
     """
 
     def __init__(
-        self, name: str, base_url: str, api_key: str | None, capabilities: ProviderCapabilities | None = None
+        self,
+        name: str,
+        base_url: str,
+        api_keys: list[str],
+        capabilities: ProviderCapabilities | None = None,
+        *,
+        cooldown_seconds: float = 600.0,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self.name = name
         self.capabilities = capabilities or ProviderCapabilities()
         self._base_url = base_url
-        self._api_key = api_key
-        self._client: openai.AsyncOpenAI | None = None
+        self._api_keys = api_keys
+        self._cooldown_seconds = cooldown_seconds
+        self._monotonic = monotonic
+        self._sticky = 0
+        self._cooldown_until: dict[int, float] = {}
+        self._clients: dict[int | None, openai.AsyncOpenAI] = {}
         self._loop_id: int | None = None
 
-    def _ensure_client(self) -> openai.AsyncOpenAI:
+    # --- цепочка ключей ---
+
+    def _pick_key(self) -> int | None:
+        """Индекс рабочего ключа: sticky, по кругу, пропуская cooldown.
+
+        None — провайдер без ключей (keyless). LLMError, если все ключи в cooldown.
+        """
+        n = len(self._api_keys)
+        if n == 0:
+            return None
+        now = self._monotonic()
+        for step in range(n):
+            idx = (self._sticky + step) % n
+            until = self._cooldown_until.get(idx)
+            if until is not None and until > now:
+                continue
+            if until is not None:
+                del self._cooldown_until[idx]  # cooldown истёк — ключ снова в строю
+            self._sticky = idx
+            return idx
+        reset = min(self._cooldown_until.values())
+        minutes = max(1, round((reset - now) / 60))
+        raise LLMError(
+            f"все ключи провайдера {self.name} ({n} шт.) в cooldown после ошибок квоты; "
+            f"ближайший сброс примерно через {minutes} мин",
+            code="rate_limit",
+        )
+
+    def _cooldown_key(self, idx: int) -> None:
+        self._cooldown_until[idx] = self._monotonic() + self._cooldown_seconds
+        log.warning(
+            "ключ %s#%d в cooldown на %d с после ошибки квоты/авторизации",
+            self.name,
+            idx + 1,
+            int(self._cooldown_seconds),
+        )
+
+    async def _with_key_rotation(self, attempt: Callable[[int | None], Awaitable[T]]) -> T:
+        """Выполнить запрос текущим ключом; при ошибке квоты — cooldown и следующий ключ."""
+        while True:
+            idx = self._pick_key()
+            try:
+                return await attempt(idx)
+            except LLMError as err:
+                if idx is None or err.code not in _ROTATABLE:
+                    raise
+                self._cooldown_key(idx)
+
+    # --- клиент ---
+
+    def _make_client(self, api_key: str | None) -> openai.AsyncOpenAI:
+        return openai.AsyncOpenAI(
+            base_url=self._base_url, api_key=api_key or "not-set", timeout=120.0, max_retries=0
+        )
+
+    def _ensure_client(self, key_index: int | None) -> openai.AsyncOpenAI:
         import asyncio
 
         loop = asyncio.get_running_loop()
-        if self._client is None or self._loop_id != id(loop):
+        if self._loop_id != id(loop):
             self._loop_id = id(loop)
-            self._client = openai.AsyncOpenAI(
-                base_url=self._base_url, api_key=self._api_key or "not-set", timeout=120.0, max_retries=0
-            )
-        return self._client
+            self._clients = {}
+        client = self._clients.get(key_index)
+        if client is None:
+            api_key = self._api_keys[key_index] if key_index is not None else None
+            client = self._make_client(api_key)
+            self._clients[key_index] = client
+        return client
 
     def _to_wire(self, request: LLMRequest) -> dict[str, Any]:
         messages: list[dict[str, Any]] = []
@@ -113,12 +195,17 @@ class OpenAICompatProvider:
         return payload
 
     async def complete(self, model: str, request: LLMRequest) -> LLMResponse:
-        """Один ответ целиком с ретраем для временных ошибок."""
+        """Один ответ целиком: ротация ключей по квоте + ретраи временных ошибок."""
         payload = self._to_wire(request)
+        return await self._with_key_rotation(lambda idx: self._complete_attempts(model, payload, idx))
+
+    async def _complete_attempts(
+        self, model: str, payload: dict[str, Any], key_index: int | None
+    ) -> LLMResponse:
         last_error: LLMError | None = None
         for attempt in range(_ATTEMPTS):
             try:
-                resp = await self._ensure_client().chat.completions.create(model=model, **payload)
+                resp = await self._ensure_client(key_index).chat.completions.create(model=model, **payload)
                 return self._parse_response(resp)
             except Exception as e:  # noqa: BLE001 — граница к внешнему сервису
                 err = _map_error(e)
@@ -138,19 +225,7 @@ class OpenAICompatProvider:
         payload = self._to_wire(request)
         payload["stream"] = True
         payload["stream_options"] = {"include_usage": True}
-        stream = None
-        for attempt in range(_ATTEMPTS):
-            try:
-                stream = await self._ensure_client().chat.completions.create(model=model, **payload)
-                break
-            except Exception as e:  # noqa: BLE001
-                err = _map_error(e)
-                if err.code == "bad_request":
-                    _dump_1214(model, payload, str(e))
-                if (err.code in _RETRYABLE or err.code == "bad_request") and attempt < _ATTEMPTS - 1:
-                    await asyncio.sleep(2**attempt)
-                    continue
-                raise err from e
+        stream = await self._with_key_rotation(lambda idx: self._open_stream(model, payload, idx))
         if stream is None:
             raise LLMError("нет ответа провайдера")
 
@@ -194,6 +269,21 @@ class OpenAICompatProvider:
         if usage:
             yield LLMEvent(type="usage", usage=usage)
         yield LLMEvent(type="finish", finish_reason=finish or "stop")
+
+    async def _open_stream(self, model: str, payload: dict[str, Any], key_index: int | None) -> Any:
+        """Открыть стрим с ретраями временных ошибок (квота уходит в ротацию выше)."""
+        for attempt in range(_ATTEMPTS):
+            try:
+                return await self._ensure_client(key_index).chat.completions.create(model=model, **payload)
+            except Exception as e:  # noqa: BLE001
+                err = _map_error(e)
+                if err.code == "bad_request":
+                    _dump_1214(model, payload, str(e))
+                if (err.code in _RETRYABLE or err.code == "bad_request") and attempt < _ATTEMPTS - 1:
+                    await asyncio.sleep(2**attempt)
+                    continue
+                raise err from e
+        raise LLMError("нет ответа провайдера")
 
     @staticmethod
     def _parse_response(resp: Any) -> LLMResponse:
