@@ -284,3 +284,29 @@ def test_auditor_registered_in_container(container):
     assert spec.tools == frozenset(
         {"repo_list", "repo_read", "create_task_file", "git_prepare_change", "run_checks"}
     )
+
+
+def test_secret_files_unreachable(tmp_path, monkeypatch):
+    """Файлы секретов (.env, ключи) недоступны аудитору: чтение и листинг (ревью T-038)."""
+    import pytest
+
+    from app.kernel.errors import ValidationFailed
+    from app.modules.revision.service import RevisionService
+
+    (tmp_path / ".env").write_text("ZAI_API_KEY=secret")
+    (tmp_path / ".env.production").write_text("ZAI=1")
+    (tmp_path / "server").mkdir()
+    (tmp_path / "server" / ".env").write_text("K=1")
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        kb_dir=tmp_path / "kb",
+        llm_config=tmp_path / "l.yaml",
+        repo_root=str(tmp_path),
+    )
+    svc = RevisionService(settings)
+    for rel in (".env", ".env.production", "server/.env"):
+        with pytest.raises(ValidationFailed):
+            svc.repo_read(rel)
+    listing = svc.repo_list("")
+    assert ".env" not in listing["entries"]
+    assert "server/.env" not in listing["entries"]

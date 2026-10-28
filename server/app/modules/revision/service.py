@@ -39,6 +39,10 @@ REPO_READ_MAX_BYTES = 2_000_000
 REPO_READ_DEFAULT_CHARS = 20_000
 REPO_READ_MAX_CHARS = 100_000
 
+# файлы секретов недоступны аудитору ни по чтению, ни в листинге: рабочая копия
+# на проде содержит /opt/learnos/.env с ключами LLM (инцидент-превенция, ревью T-038)
+SECRET_FILE_RE = re.compile(r"^\.env(\..+)?$|\.pem$|\.key$|id_rsa", re.IGNORECASE)
+
 # пути, закрытые для правок агентом навсегда (T-034, решение по этапу D):
 # точка входа, миграции, LLM-слой, деплой, весь веб, задачи, сам guard-модуль
 GUARDED_PREFIXES = (
@@ -95,10 +99,12 @@ class RevisionService:
         return root.resolve()
 
     def _resolve(self, rel: str) -> Path:
-        """Относительный путь внутри репо; абсолютные и «..» запрещены."""
+        """Относительный путь внутри репо; абсолютные и «..» запрещены; секреты недоступны."""
         posix = PurePosixPath(rel)
         if not rel or posix.is_absolute() or ".." in posix.parts:
             raise ValidationFailed(f"путь запрещён (нужен относительный, от корня репозитория): {rel}")
+        if SECRET_FILE_RE.search(posix.name):
+            raise ValidationFailed("файлы секретов (.env, ключи) недоступны для ревизии")
         full = (self._root() / rel).resolve()
         if not full.is_relative_to(self._root()):
             raise ValidationFailed(f"путь вне репозитория: {rel}")
@@ -122,6 +128,8 @@ class RevisionService:
             for name in sorted(dirnames):
                 entries.append(f"{rel_dir}/{name}/" if rel_dir != "." else f"{name}/")
             for name in sorted(filenames):
+                if SECRET_FILE_RE.search(name):
+                    continue
                 entries.append(f"{rel_dir}/{name}" if rel_dir != "." else name)
             if len(entries) > REPO_LIST_MAX_ENTRIES:
                 truncated = True
