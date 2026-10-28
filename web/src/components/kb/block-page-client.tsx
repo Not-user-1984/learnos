@@ -116,16 +116,13 @@ export function BlockPageClient({
 
   const discussInChat = async () => {
     try {
-      const res = await fetch(`/api/conversations`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "free", focus_block: block.block_uid, title: `Обсуждение: ${block.title}` }),
+      const conv = await apiPost<{ uid: string }>("/conversations", {
+        focus_block: block.block_uid,
+        title: `Обсуждение: ${block.title}`,
       });
-      if (!res.ok) throw new Error(String(res.status));
-      const conv = (await res.json()) as { uid: string };
       router.push(`/chat/${conv.uid}`);
-    } catch {
-      toast.error("API недоступен из браузера — используйте прокси");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "не удалось открыть обсуждение");
     }
   };
 

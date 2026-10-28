@@ -33,6 +33,7 @@ def make_router(svc) -> APIRouter:
                 "uid": c["uid"],
                 "title": c["title"],
                 "mode": c["mode"],
+                "scenario": c.get("scenario", ""),
                 "updated_at": c["updated_at"],
                 "messages_count": c.get("messages_count", 0),
             }
@@ -67,6 +68,7 @@ def make_router(svc) -> APIRouter:
                     body.content,
                     research=body.research,
                     attachments=[a.source_uid for a in body.attachments],
+                    intent=body.intent,
                 ):
                     await queue.put(ev)
             except Exception as e:  # noqa: BLE001 — ошибка уходит клиенту как SSE error

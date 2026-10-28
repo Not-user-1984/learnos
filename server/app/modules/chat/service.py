@@ -15,9 +15,10 @@ from ...kernel.errors import NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
 from ...llm.router import ModelRouter
 from ...llm.types import Message
+from .agents import SESSION_TOOLS
 from .domain import content_note
 from .infra.sql_repo import ConversationRepository, MessageRepository
-from .schemas import MODES
+from .schemas import INTENTS, MODES
 
 log = logging.getLogger("learnos.chat")
 
@@ -54,6 +55,43 @@ RESEARCH_DIRECTIVE = (
 )
 RESEARCH_MAX_STEPS = 30  # цикл «поиск → чтение статей → добавление» не укладывается в дефолтные 12
 
+# Сценарии единого входа (T-039): клиент передаёт код с первым сообщением,
+# сервер собирает директиву агенту — видимый текст сообщения остаётся пользователю.
+INTENT_DIRECTIVES = {
+    "review": (
+        "Сценарий «быстрый разбор»: источник и глава — в блоке «Контекст». Прочитай материал "
+        "(read_chapter; видео — весь транскрипт, листай offset до конца) и дай коротко: главное, "
+        "ключевые понятия, что применимо пользователю, 1–2 вопроса на подумать. Без сессии."
+    ),
+    "study": (
+        "Сценарий «изучение источника»: пользователь начал с карты глав. Формат выбери сам — "
+        "быстрый разбор текущей главы или сессия-урок (тогда start_session, сессия привяжется "
+        "к разговору, и веди её шагами advance/practice_step/finish_session). После каждой главы "
+        "решайте вместе: дальше, подробнее или закрепить (mark_chapter_done по подтверждению)."
+    ),
+    "session": (
+        "Сценарий «сессия-урок»: сессия уже создана и привязана к разговору (состояние — в "
+        "«Контексте»). Веди урок сам: теория по первым понятиям коротко → вопросы фейнмана "
+        "по одному → практика под железо из профиля → разбор; шаги — advance/practice_step/"
+        "finish_session без session_id, итог — блок-урок."
+    ),
+    "quote": (
+        "Сценарий «разбор фрагмента»: сообщение пользователя — выделенный фрагмент текущей "
+        "главы. Объясни, что имеется в виду, сверься с текстом главы (read_chapter), поправь "
+        "неточности понимания и свяжи фрагмент с ключевыми понятиями главы."
+    ),
+    "tune": (
+        "Сценарий «настройка агента»: имя агента — в сообщении пользователя. Уточни вопросами, "
+        "каким должно быть поведение, и предложи правку промпта карточкой propose_change("
+        "kind='prompt', target=<агент>, …) — дифф увидит пользователь, применение по его кнопке."
+    ),
+    "reinforce": (
+        "Сценарий «закрепление пройденного»: возьми очередь повторений (get_review_queue) и "
+        "слабые места блоков (search/list_blocks), выбери 3–5 самых созревших или слабых и "
+        "проводи короткое повторение по одному; каждый ответ оценивай answer_review."
+    ),
+}
+
 
 def _agent_for_mode(registry, mode: str) -> str:
     """Имя агента по режиму разговора: дефолтные режимы — из таблицы, agent:<name> — кастомный."""
@@ -77,9 +115,6 @@ def _valid_mode(registry, mode: str) -> bool:
         except KeyError:
             return False
     return False
-
-
-SESSION_TOOLS = {"advance", "practice_step", "finish_session", "start_session"}
 
 
 class ChatService:
@@ -153,14 +188,12 @@ class ChatService:
             return self._convs.get(uow.session, uid)
 
     def get_conversation(self, uid: str) -> dict:
-        """Разговор + сообщения + сессия (если есть)."""
+        """Разговор + сообщения + сессия (если есть, любым режимом) + сценарий."""
         with self._uow() as uow:
             conv = self._convs.get(uow.session, uid)
             conv["messages"] = self._msgs.list(uow.session, conv["id"])
-            session = (
-                self._learning.session_for_conversation(conv["id"]) if conv["mode"] == "session" else None
-            )
-            conv["session"] = session
+            conv["session"] = self._learning.session_for_conversation(conv["id"])
+            conv["scenario"] = self._scenario(conv, self._activity_source_kind(conv))
             return conv
 
     def list_conversations(
@@ -175,7 +208,10 @@ class ChatService:
         if source is not None:
             activity_ids = self._learning.activity_ids_for_source(source)
         with self._uow() as uow:
-            return self._convs.list(uow.session, mode=mode, q=q, activity_ids=activity_ids, chapter=chapter)
+            convs = self._convs.list(uow.session, mode=mode, q=q, activity_ids=activity_ids, chapter=chapter)
+            for c in convs:
+                c["scenario"] = self._scenario(c)
+            return convs
 
     def activity_id_for_conversation(self, uid: str) -> int | None:
         """Активность разговора (для mark_chapter_done из quick-разбора)."""
@@ -208,17 +244,27 @@ class ChatService:
     # --- отправка сообщения (SSE) ---
 
     async def stream_reply(
-        self, uid: str, content: str, research: bool = False, attachments: list[str] | None = None
+        self,
+        uid: str,
+        content: str,
+        research: bool = False,
+        attachments: list[str] | None = None,
+        intent: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         """Сохранить сообщение пользователя и запустить агента; поток SSE-событий.
 
         Генерация продолжает работу при разрыве соединения: события копятся в task,
         ответ сохраняется в БД независимо от читателя.
-        research=True — сообщение запускает ресёрч-цикл: директива уходит агенту
+        research=True — сообщение запускает ресэрч-цикл: директива уходит агенту
         в system_extra (пользователь видит только свою тему), лимит шагов выше.
         attachments — uid источников (PDF), загруженных до отправки: заметка о них
         уходит агенту в system_extra, карточки-вложения — в user-сообщение.
+        intent — сценарий входа (review/study/session/…): директива из
+        INTENT_DIRECTIVES уходит в system_extra; «session» создаёт сессию,
+        привязанную к разговору (как режим session).
         """
+        if intent is not None and intent not in INTENTS:
+            raise ValidationFailed(f"intent должен быть одним из {INTENTS}")
         conv = self.get_conversation(uid)
         attach_cards, attach_note = self._resolve_attachments(attachments or [])
         now = now_iso(self._clock)
@@ -234,12 +280,13 @@ class ChatService:
             self._convs.update(uow.session, conv["id"], updated_at=now)
         yield SseEvent("user_saved", {"message_id": user_msg_id})
 
-        # сессия для режима session: создаётся при первом сообщении
-        session = None
-        if conv["mode"] == "session":
-            session = self._learning.session_for_conversation(conv["id"])
-            if session is None:
-                session = self._create_session_for(conv)
+        # сессия: режим session создаёт её первым сообщением; интент «session» —
+        # то же для root-разговора (кнопка «Сессия» у главы). Сессия, созданная
+        # агентом по ходу (start_session), подтягывается ниже по tool_end.
+        session = self._learning.session_for_conversation(conv["id"])
+        if session is None and (conv["mode"] == "session" or intent == "session"):
+            session = self._create_session_for(conv)
+        if session:
             yield _session_event(session)
 
         agent_name = _agent_for_mode(self._agents, conv["mode"])
@@ -248,6 +295,8 @@ class ChatService:
         # претрекер контента: заметка о ссылках/ID в сообщении — агенту, без LLM
         for note in filter(None, [content_note(content), attach_note]):
             system_extra = f"{system_extra}\n\n{note}".strip()
+        if intent:
+            system_extra = f"{system_extra}\n\n{INTENT_DIRECTIVES[intent]}".strip()
         if research:
             spec = replace(spec, max_steps=RESEARCH_MAX_STEPS)
             system_extra = f"{system_extra}\n\n{RESEARCH_DIRECTIVE}".strip()
@@ -285,7 +334,8 @@ class ChatService:
                         "tool_end",
                         {"call_id": ev.call_id, "name": ev.name, "ok": ev.ok, "summary": ev.summary},
                     )
-                    if conv["mode"] == "session" and ev.name in SESSION_TOOLS:
+                    # сессия меняет состояние (или только создана агентом) — панель обновляется
+                    if ev.name in SESSION_TOOLS:
                         fresh = self._learning.session_for_conversation(conv["id"])
                         if fresh:
                             yield _session_event(fresh)
@@ -367,6 +417,41 @@ class ChatService:
         return [
             Message(role="user" if m["role"] == "user" else "assistant", content=m["content"]) for m in recent
         ]
+
+    def _activity_source_kind(self, conv: dict) -> str | None:
+        """Тип источника активности разговора (для сценария «Разбор видео/материала»)."""
+        if not conv.get("activity_id"):
+            return None
+        try:
+            act = self._learning.get_activity(conv["activity_id"])
+            return self._library.get_source(act["source_id"])["kind"]
+        except NotFound:
+            return None
+
+    @staticmethod
+    def _scenario(conv: dict, src_kind: str | None = None) -> str:
+        """Человекочитаемый сценарий разговора — бейдж «что происходит» вместо режима.
+
+        Старые режимы (quick/session/tuning/agent:*) показываем как есть;
+        root/free — по данным: сессия, блок в фокусе, активность с главой.
+        """
+        mode = conv["mode"]
+        if mode.startswith("agent:"):
+            return f"Агент {mode.split(':', 1)[1]}"
+        if mode == "quick":
+            return "Быстрый разбор"
+        if mode == "tuning":
+            return "Настройка агентов"
+        chapter = conv.get("chapter_idx")
+        if mode == "session" or conv.get("session"):
+            return f"Сессия · глава {chapter}" if chapter else "Сессия-урок"
+        if conv.get("focus_block_uid"):
+            return "Разбор блока"
+        if conv.get("activity_id"):
+            if src_kind == "video":
+                return "Разбор видео"
+            return f"Разбор · глава {chapter}" if chapter else "Разбор материала"
+        return "Разговор"
 
     def _context_block(self, conv: dict, session: dict | None) -> str:
         """Системный блок «Контекст»: профиль, источник, глава, состояние сессии, блок в фокусе."""
@@ -569,7 +654,7 @@ class ChatService:
 
 
 def _session_event(session: dict) -> SseEvent:
-    """SSE-событие session: state, allowed_events, прогресс."""
+    """SSE-событие session: uid, state, глава, разрешённые события, прогресс."""
     transcript = session.get("transcript") or []
     progress = {
         "theory_done": sum(1 for t in transcript if t["event"] == "theory_done"),
@@ -577,7 +662,13 @@ def _session_event(session: dict) -> SseEvent:
     }
     return SseEvent(
         "session",
-        {"state": session["state"], "allowed_events": session["allowed_events"], "progress": progress},
+        {
+            "session_uid": session["session_uid"],
+            "state": session["state"],
+            "allowed_events": session["allowed_events"],
+            "chapter_idx": session.get("chapter_idx"),
+            "progress": progress,
+        },
     )
 
 

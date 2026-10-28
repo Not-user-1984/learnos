@@ -115,15 +115,15 @@ export function ChapterReader({
     try {
       const act = await apiPost<{ uid: string }>("/activities", { source: sourceUid });
       const conv = await apiPost<{ uid: string }>("/conversations", {
-        mode: "quick",
         activity: act.uid,
         chapter: chapter.idx,
         title: quote ? `Фрагмент: ${chapter.title}` : `Разбор: ${chapter.title}`,
       });
-      const initial = quote
-        ? `Разбери этот фрагмент главы «${chapter.title}»:\n\n> ${quote.replace(/\n/g, "\n> ")}`
-        : `Разбери главу «${chapter.title}» кратко: главное и ключевые понятия.`;
-      router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(initial)}`);
+      // видимое сообщение — цитата или короткое намерение; сценарий (quote/review)
+      // сервер превращает в директиву агенту
+      const initial = quote ?? `Разберём главу «${chapter.title}»`;
+      const intent = quote ? "quote" : "review";
+      router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(initial)}&intent=${intent}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "не удалось открыть обсуждение");
       setStarting(null);
@@ -135,7 +135,6 @@ export function ChapterReader({
     setStarting("research");
     try {
       const conv = await apiPost<{ uid: string }>("/conversations", {
-        mode: "free",
         title: `Ресёрч: ${quote.slice(0, 50)}`,
       });
       const url = `/chat/${conv.uid}?initial=${encodeURIComponent(quote)}&research=1`;

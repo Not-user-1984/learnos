@@ -87,6 +87,8 @@ export type ConversationItem = {
   uid: string;
   title: string;
   mode: string;
+  /** Человекочитаемый сценарий («Разбор видео», «Сессия · глава 3») от бэкенда. */
+  scenario?: string | null;
   updated_at: string;
   messages_count?: number;
 };
@@ -112,6 +114,7 @@ export type ConversationDetail = {
   uid: string;
   title: string;
   mode: string;
+  scenario?: string | null;
   activity_id: number | null;
   chapter_idx: number | null;
   focus_block_uid: string | null;
@@ -246,7 +249,7 @@ export type SseEvent =
   | { event: "tool_start"; data: { call_id: string; name: string; args: Record<string, unknown>; label: string } }
   | { event: "tool_end"; data: { call_id: string; name: string; ok: boolean; summary: string } }
   | { event: "card"; data: { call_id?: string; card: Card } }
-  | { event: "session"; data: { state: string; allowed_events: string[]; progress: { theory_done: number; questions_done: number } } }
+  | { event: "session"; data: { session_uid?: string; state: string; allowed_events: string[]; chapter_idx?: number | null; progress: { theory_done: number; questions_done: number } } }
   | { event: "title"; data: { title: string } }
   | { event: "done"; data: { message_id: number | null } }
   | { event: "error"; data: { error: string; message: string } };

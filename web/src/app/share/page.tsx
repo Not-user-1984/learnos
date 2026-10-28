@@ -3,7 +3,6 @@
 /** Приём «Поделиться → LearnOS»: ссылка становится источником в Библиотеке. */
 
 import { Suspense, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -42,6 +41,17 @@ function ShareForm() {
     }
   };
 
+  /** Root-разговор с распознанным контентом: ссылка уйдёт первым сообщением,
+   *  агент сам предложит разбор (претрекер контента — T-036). */
+  const discuss = async () => {
+    try {
+      const conv = await apiPost<{ uid: string }>("/conversations", {});
+      router.push(`/chat/${conv.uid}?initial=${encodeURIComponent(url)}`);
+    } catch {
+      setStatus("error");
+    }
+  };
+
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 p-8">
       <h1 className="text-lg font-semibold">Поделиться с LearnOS</h1>
@@ -64,9 +74,9 @@ function ShareForm() {
             <Button size="sm" variant="outline" onClick={() => router.push(`/library/${result.uid}`)}>
               Открыть в Библиотеке
             </Button>
-            <Link href="/chat" className="inline-flex items-center rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-              В чат
-            </Link>
+            <Button size="sm" onClick={() => void discuss()}>
+              Обсудить в чате
+            </Button>
           </div>
         </div>
       ) : (
