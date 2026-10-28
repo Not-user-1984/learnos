@@ -20,7 +20,10 @@ def run_coro_sync(coro: Coroutine[Any, Any, Any]) -> Any:
     box: dict[str, Any] = {}
 
     def _run() -> None:
-        box["result"] = asyncio.run(coro)
+        try:
+            box["result"] = asyncio.run(coro)
+        except BaseException as e:  # noqa: BLE001 — исключение потока должно дойти до вызывающего
+            box["error"] = e
 
     thread = threading.Thread(target=_run, name="learnos-coro-bridge")
     thread.start()

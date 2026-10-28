@@ -30,6 +30,7 @@ MCP_MODULES = {
     "knowledge",
     "library",
     "learning",
+    "chat",
     "courses",
     "profile",
     "research",

@@ -2,19 +2,29 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from ...agent.spec import CancellationToken
 
 
 @dataclass(frozen=True, slots=True)
 class ToolContext:
-    """Контекст вызова инструмента: кто и откуда его позвал."""
+    """Контекст вызова инструмента: кто и откуда его позвал.
+
+    run_id/depth/cancellation идут от запуска агента — нужны инструменту run_agent,
+    чтобы связать трейс субагента с родителем, ограничить вложенность и отдать отмену.
+    """
 
     channel: str = "mcp"  # mcp | agent
     conversation_uid: str | None = None
     session_uid: str | None = None
     agent_name: str | None = None
+    run_id: int | None = None
+    depth: int = 0
+    cancellation: "CancellationToken | None" = None
 
 
 @dataclass(frozen=True, slots=True)

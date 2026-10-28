@@ -4,7 +4,7 @@ from ...kernel.module import Module
 
 
 class ChatModule(Module):
-    """Три режима: free / quick / session. Агент выбирается по mode разговора."""
+    """Режимы free / quick / session / tuning / root (оркестратор) + agent:<имя>."""
 
     name = "chat"
 
@@ -35,3 +35,8 @@ class ChatModule(Module):
         from .api import make_router
 
         return [make_router(c.chat)]
+
+    def tools(self, c):
+        from .tools import chat_tools
+
+        return chat_tools(c)
