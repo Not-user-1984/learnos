@@ -9,7 +9,11 @@ services:
       LEARNOS_KB_DIR: /kb
       LEARNOS_SKILLS_DIR: /app/skills
       # ключи пробрасываются из окружения (sec exec); поиск/прокси — в настройках UI (/api/connectivity)
+      # цепочка ключей GLM: ротация при исчерпании квоты (T-040), порядок = порядок в llm.yaml
       ZAI_API_KEY: ${ZAI_API_KEY:-}
+      ZAI_API_KEY_2: ${ZAI_API_KEY_2:-}
+      ZAI_API_KEY_3: ${ZAI_API_KEY_3:-}
+      ZAI_API_KEY_4: ${ZAI_API_KEY_4:-}
       LEARNOS_TELEGRAM_TOKEN: ${LEARNOS_TELEGRAM_TOKEN:-}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       SERPER_API_KEY: ${SERPER_API_KEY:-}
