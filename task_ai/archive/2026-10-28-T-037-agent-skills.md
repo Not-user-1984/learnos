@@ -1,7 +1,7 @@
 ---
 id: T-037
 title: Скриптовая песочница: агентские скиллы в data/agent-skills
-status: review   # ждёт ревью ZCode (ветка t-034-orchestrator)
+status: done   # закрыта 2026-10-28: ревью ZCode пройдено (240 тестов, линты, build), мердж 0b8cd9d, прод tools=66
 priority: high
 from: T-034 (этап C)
 created: 2026-10-28
