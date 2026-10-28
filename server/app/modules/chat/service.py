@@ -15,6 +15,7 @@ from ...kernel.errors import NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
 from ...llm.router import ModelRouter
 from ...llm.types import Message
+from .domain import content_note
 from .infra.sql_repo import ConversationRepository, MessageRepository
 from .schemas import MODES
 
@@ -206,15 +207,20 @@ class ChatService:
 
     # --- отправка сообщения (SSE) ---
 
-    async def stream_reply(self, uid: str, content: str, research: bool = False) -> AsyncIterator[SseEvent]:
+    async def stream_reply(
+        self, uid: str, content: str, research: bool = False, attachments: list[str] | None = None
+    ) -> AsyncIterator[SseEvent]:
         """Сохранить сообщение пользователя и запустить агента; поток SSE-событий.
 
         Генерация продолжает работу при разрыве соединения: события копятся в task,
         ответ сохраняется в БД независимо от читателя.
         research=True — сообщение запускает ресёрч-цикл: директива уходит агенту
         в system_extra (пользователь видит только свою тему), лимит шагов выше.
+        attachments — uid источников (PDF), загруженных до отправки: заметка о них
+        уходит агенту в system_extra, карточки-вложения — в user-сообщение.
         """
         conv = self.get_conversation(uid)
+        attach_cards, attach_note = self._resolve_attachments(attachments or [])
         now = now_iso(self._clock)
         with self._uow() as uow:
             user_msg_id = self._msgs.insert(
@@ -222,7 +228,7 @@ class ChatService:
                 conversation_id=conv["id"],
                 role="user",
                 content=content,
-                cards_json="[]",
+                cards_json=json.dumps(attach_cards, ensure_ascii=False),
                 created_at=now,
             )
             self._convs.update(uow.session, conv["id"], updated_at=now)
@@ -239,6 +245,9 @@ class ChatService:
         agent_name = _agent_for_mode(self._agents, conv["mode"])
         spec: AgentSpec = self._agents.get(agent_name)
         system_extra = self._context_block(conv, session)
+        # претрекер контента: заметка о ссылках/ID в сообщении — агенту, без LLM
+        for note in filter(None, [content_note(content), attach_note]):
+            system_extra = f"{system_extra}\n\n{note}".strip()
         if research:
             spec = replace(spec, max_steps=RESEARCH_MAX_STEPS)
             system_extra = f"{system_extra}\n\n{RESEARCH_DIRECTIVE}".strip()
@@ -320,6 +329,25 @@ class ChatService:
         return {"ok": True}
 
     # --- контекст ---
+
+    def _resolve_attachments(self, source_uids: list[str]) -> tuple[list[dict], str]:
+        """Вложения-источники → карточки для user-сообщения + заметка агенту.
+
+        PDF загружен до отправки сообщения (upload_pdf), агент оперирует готовым uid.
+        Источник не найден (удалён в другом окне) — NotFound, сообщение не отправляется.
+        """
+        cards: list[dict] = []
+        lines: list[str] = []
+        for source_uid in source_uids:
+            src = self._library.get_source(source_uid)
+            cards.append({"type": "attachment", "title": src["title"], "source_uid": src["uid"]})
+            lines.append(
+                f"Пользователь приложил PDF «{src['title']}» (источник uid={src['uid']}). "
+                "Доступные действия: process_source — нарежет книгу на главы; после обработки — "
+                "list_chapters/read_chapter, быстрый разбор — run_agent('quick_reviewer') или сам."
+            )
+        note = ("Вложения сообщения:\n" + "\n".join(lines)) if lines else ""
+        return cards, note
 
     async def _build_history(self, conv: dict) -> list[Message]:
         """История с бюджетом ~24k токенов; старая половина сжимается в summary."""

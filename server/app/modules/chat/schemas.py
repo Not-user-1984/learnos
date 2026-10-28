@@ -21,12 +21,19 @@ class ConversationPatch(BaseModel):
     title: str | None = None
 
 
+class MessageAttachment(BaseModel):
+    """Вложение сообщения: источник, уже загруженный через /api/sources/upload (PDF)."""
+
+    source_uid: str
+
+
 class MessageIn(BaseModel):
     """Сообщение пользователя."""
 
     content: str = Field(min_length=1)
     # режим ресёрча: инструкция уходит агенту в system_extra, в чате видна только тема
     research: bool = False
+    attachments: list[MessageAttachment] = Field(default_factory=list, max_length=4)
 
 
 class ConversationItem(BaseModel):

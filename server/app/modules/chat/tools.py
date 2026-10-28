@@ -28,6 +28,15 @@ class ListAgentsArgs(BaseModel):
     """Без аргументов."""
 
 
+class OfferActionArgs(BaseModel):
+    """Аргументы предложения-карточки (T-036)."""
+
+    title: str = Field(description="Короткий заголовок предложения")
+    description: str | None = Field(
+        default=None, description="Что именно произойдёт при согласии пользователя"
+    )
+
+
 def chat_tools(c) -> list[ToolSpec]:
     """run_agent и list_agents — фундамент корневого агента-оркестратора."""
 
@@ -66,6 +75,19 @@ def chat_tools(c) -> list[ToolSpec]:
         )
         return run_coro_sync(_collect_subagent(c.agent_runtime, spec, sub_ctx, args.task))
 
+    def offer_action(args: OfferActionArgs, ctx: ToolContext) -> dict:
+        """Показать пользователю карточку-предложение; ответ придёт следующим сообщением."""
+        del ctx
+        return {
+            "offered": True,
+            "note": "предложение показано карточкой — закончи ответ и дождись реакции пользователя",
+            "_card": {
+                "type": "action_offer",
+                "title": args.title,
+                "description": args.description or "",
+            },
+        }
+
     return [
         ToolSpec(
             name="run_agent",
@@ -87,6 +109,18 @@ def chat_tools(c) -> list[ToolSpec]:
             args_model=ListAgentsArgs,
             handler=list_agents,
             label="Каталог агентов",
+        ),
+        ToolSpec(
+            name="offer_action",
+            module="chat",
+            description=(
+                "Предложить пользователю действие карточкой с кнопками «Да/Нет» — например, "
+                "«Добавить видео в Библиотеку?». Вызывай ДО выполнения действия: молчаливые "
+                "загрузки запрещены. После вызова закончи ответ и дождись реакции."
+            ),
+            args_model=OfferActionArgs,
+            handler=offer_action,
+            label="Предложение",
         ),
     ]
 
