@@ -1,5 +1,6 @@
 """Фейковый провайдер для тестов: сценарий ответов, запись запросов."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -7,14 +8,20 @@ from ..types import LLMEvent, LLMRequest, LLMResponse, ProviderCapabilities, Too
 
 
 class FakeTurn:
-    """Один шаг сценария: текст и/или tool calls."""
+    """Один шаг сценария: текст и/или tool calls; delay — пауза между словами
+    (имитация долгой генерации для тестов обрыва SSE-читателя)."""
 
     def __init__(
-        self, text: str = "", tool_calls: list[ToolCall] | None = None, error: Exception | None = None
+        self,
+        text: str = "",
+        tool_calls: list[ToolCall] | None = None,
+        error: Exception | None = None,
+        delay: float = 0.0,
     ) -> None:
         self.text = text
         self.tool_calls = tool_calls or []
         self.error = error
+        self.delay = delay
 
 
 class FakeLLMProvider:
@@ -56,6 +63,8 @@ class FakeLLMProvider:
             raise turn.error
         for word in turn.text.split(" "):
             if word:
+                if turn.delay:
+                    await asyncio.sleep(turn.delay)
                 yield LLMEvent(type="text", text=word + " ")
         for call in turn.tool_calls:
             yield LLMEvent(type="tool_call", tool_call=call)
