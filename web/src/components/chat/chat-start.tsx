@@ -17,7 +17,29 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { StudyFlowDialog } from "@/components/chat/study-flow";
+import { ChatCat } from "@/components/chat/chat-cat";
 import { cn } from "@/lib/utils";
+
+/** Фразы приветствия: одна на заход, случайная. Пополняется без логики. */
+const TAGLINES = [
+  "Тут скиллы прокачивают человеческие скиллы",
+  "Учимся всерьёз, но не по-взрослому",
+  "Твой личный Harness для прокачки мозга",
+  "Знания приживаются здесь",
+  "Сессия 30 минут — блок в базе навсегда",
+];
+
+/** Логотип-маскот: линейный силуэт сидящего кота, красится темой через currentColor. */
+function CatMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M12 54c0-18 4-28 12-34l-3-11 9 5.5c2-.5 4-.5 6 0l9-5.5-3 11c8 6 12 16 12 34Z" />
+      <path d="M13 50C4 48 2 39 9 36c5-2 9 1 9 5" />
+      <circle cx="27" cy="24" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="37" cy="24" r="1.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 
 /** Плавное сворачивание секции: высота через grid-template-rows + прозрачность. */
 function Collapse({ collapsed, children }: { collapsed: boolean; children: React.ReactNode }) {
@@ -83,6 +105,9 @@ export function ChatStart({ conversations }: { conversations: ConversationItem[]
   const [busy, setBusy] = useState(false);
   const [flow, setFlow] = useState<"book" | "video" | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // одна случайная фраза на заход; сервер выберет другую — suppressHydrationWarning
+  // оставит клиентскую без предупреждения
+  const [tagline] = useState(() => TAGLINES[Math.floor(Math.random() * TAGLINES.length)]);
 
   const collapsed = focused || text.trim().length > 0;
 
@@ -109,96 +134,110 @@ export function ChatStart({ conversations }: { conversations: ConversationItem[]
   };
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-4 py-10">
-        <h1 className="mb-6 text-center text-2xl font-semibold">Привет! Что изучаем?</h1>
-
-        {research && (
-          <div className="mx-auto mb-3 flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-sm text-primary">
-            <Icon name="public" size={14} />
-            ресёрч-режим: тема уйдёт в поиск по сети
-            <button
-              type="button"
-              aria-label="Выключить ресэрч-режим"
-              className="rounded-full p-0.5 transition hover:bg-primary/20"
-              onClick={() => setResearch(false)}
-            >
-              <Icon name="close" size={14} />
-            </button>
+    <div className="relative h-full">
+      <div className="h-full overflow-y-auto">
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-4 py-10">
+          <div className="mb-6 flex flex-col items-center gap-3">
+            <div className="flex items-center gap-3">
+              <CatMark className="h-14 w-14 text-primary" />
+              <span className="text-4xl font-medium tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>
+                LearnOS
+              </span>
+            </div>
+            <h1 className="text-2xl font-semibold">Привет! Что изучаем?</h1>
+            <p suppressHydrationWarning className="min-h-6 text-sm text-muted-foreground">
+              {tagline}
+            </p>
           </div>
-        )}
 
-        <div className="rounded-2xl border bg-card p-2 shadow-sm">
-          <Textarea
-            ref={inputRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void start(text, { research });
+          {research && (
+            <div className="mx-auto mb-3 flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-sm text-primary">
+              <Icon name="public" size={14} />
+              ресёрч-режим: тема уйдёт в поиск по сети
+              <button
+                type="button"
+                aria-label="Выключить ресэрч-режим"
+                className="rounded-full p-0.5 transition hover:bg-primary/20"
+                onClick={() => setResearch(false)}
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+          )}
+
+          <div className="rounded-2xl border bg-card p-2 shadow-sm">
+            <Textarea
+              ref={inputRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void start(text, { research });
+                }
+              }}
+              placeholder={
+                research
+                  ? "Тема для ресёрча — например: observability в Kubernetes…"
+                  : "Спроси что угодно, кинь ссылку или начни сценарий…"
               }
-            }}
-            placeholder={
-              research
-                ? "Тема для ресёрча — например: observability в Kubernetes…"
-                : "Спроси что угодно, кинь ссылку или начни сценарий…"
-            }
-            className="min-h-16 resize-none border-0 bg-transparent px-3 py-2 text-base focus-visible:ring-0"
-            rows={2}
-          />
-          <div className="flex items-center justify-between px-2 pb-1">
-            <span className="text-xs text-muted-foreground">Enter — отправить · Shift+Enter — перенос</span>
-            <Button
-              size="icon"
-              aria-label="Начать разговор"
-              disabled={busy || !text.trim()}
-              onClick={() => void start(text, { research })}
-            >
-              {busy ? (
-                <Icon name="progress_activity" size={16} className="animate-spin" />
-              ) : (
-                <Icon name="send" size={16} />
-              )}
-            </Button>
+              className="min-h-16 resize-none border-0 bg-transparent px-3 py-2 text-base focus-visible:ring-0"
+              rows={2}
+            />
+            <div className="flex items-center justify-between px-2 pb-1">
+              <span className="text-xs text-muted-foreground">Enter — отправить · Shift+Enter — перенос</span>
+              <Button
+                size="icon"
+                aria-label="Начать разговор"
+                disabled={busy || !text.trim()}
+                onClick={() => void start(text, { research })}
+              >
+                {busy ? (
+                  <Icon name="progress_activity" size={16} className="animate-spin" />
+                ) : (
+                  <Icon name="send" size={16} />
+                )}
+              </Button>
+            </div>
           </div>
+
+          <Collapse collapsed={collapsed}>
+            <div className="flex flex-wrap justify-center gap-2 pt-5">
+              <ScenarioButton icon="track_changes" label="Закрепить пройденное" onClick={() => void start("Закрепим пройденное", { intent: "reinforce" })} />
+              <ScenarioButton icon="edit_note" label="Конспект" onClick={() => prefill("Конспект: ")} />
+              <ScenarioButton icon="school" label="Собрать курс" onClick={() => prefill("Собери курс по теме: ")} />
+              <ScenarioButton
+                icon="public"
+                label="Ресёрч темы"
+                onClick={() => {
+                  setResearch(true);
+                  inputRef.current?.focus();
+                }}
+              />
+              <ScenarioButton icon="auto_stories" label="Изучить книгу" onClick={() => setFlow("book")} />
+              <ScenarioButton icon="movie" label="Обсудить видео" onClick={() => setFlow("video")} />
+            </div>
+          </Collapse>
         </div>
 
         <Collapse collapsed={collapsed}>
-          <div className="flex flex-wrap justify-center gap-2 pt-5">
-            <ScenarioButton icon="track_changes" label="Закрепить пройденное" onClick={() => void start("Закрепим пройденное", { intent: "reinforce" })} />
-            <ScenarioButton icon="edit_note" label="Конспект" onClick={() => prefill("Конспект: ")} />
-            <ScenarioButton icon="school" label="Собрать курс" onClick={() => prefill("Собери курс по теме: ")} />
-            <ScenarioButton
-              icon="public"
-              label="Ресёрч темы"
-              onClick={() => {
-                setResearch(true);
-                inputRef.current?.focus();
-              }}
-            />
-            <ScenarioButton icon="auto_stories" label="Изучить книгу" onClick={() => setFlow("book")} />
-            <ScenarioButton icon="movie" label="Обсудить видео" onClick={() => setFlow("video")} />
-          </div>
+          {conversations.length > 0 && (
+            <section className="mx-auto w-full max-w-3xl px-4 pb-8">
+              <h2 className="mb-2 text-sm font-medium text-muted-foreground">Недавние разговоры</h2>
+              <div className="flex flex-col gap-1.5">
+                {conversations.map((c) => (
+                  <HistoryRow key={c.uid} conv={c} />
+                ))}
+              </div>
+            </section>
+          )}
         </Collapse>
+
+        <StudyFlowDialog open={flow !== null} onOpenChange={(v) => !v && setFlow(null)} defaultTab={flow ?? "book"} />
       </div>
-
-      <Collapse collapsed={collapsed}>
-        {conversations.length > 0 && (
-          <section className="mx-auto w-full max-w-3xl px-4 pb-8">
-            <h2 className="mb-2 text-sm font-medium text-muted-foreground">Недавние разговоры</h2>
-            <div className="flex flex-col gap-1.5">
-              {conversations.map((c) => (
-                <HistoryRow key={c.uid} conv={c} />
-              ))}
-            </div>
-          </section>
-        )}
-      </Collapse>
-
-      <StudyFlowDialog open={flow !== null} onOpenChange={(v) => !v && setFlow(null)} defaultTab={flow ?? "book"} />
+      <ChatCat />
     </div>
   );
 }
