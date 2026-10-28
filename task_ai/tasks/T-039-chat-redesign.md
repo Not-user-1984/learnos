@@ -1,7 +1,7 @@
 ---
 id: T-039
 title: Новый дизайн чата: один вход, история внизу, анимация, сценарные кнопки
-status: idea   # берётся после T-035+T-036 (механика root-агента и умного входа)
+status: review   # ждёт ревью ZCode (визуальная проверка web-gui-tester, три темы)
 priority: high
 from: T-034 (этап E)
 created: 2026-10-28
@@ -54,17 +54,53 @@ Symbols Rounded, Inter/Literata, никаких хардкод-цветов), д
 
 ## Критерии готовности
 
-- [ ] `/chat` новый разговор — всегда root, выбор режима отсутствует в UI.
-- [ ] Стартовый экран: приветствие, инпут, сценарные кнопки, история внизу;
+- [x] `/chat` новый разговор — всегда root, выбор режима отсутствует в UI.
+- [x] Стартовый экран: приветствие, инпут, сценарные кнопки, история внизу;
       при вводе история/кнопки анимационно схлопываются; `prefers-reduced-motion`.
-- [ ] Все прежние сценарные входы живы одним кликом (книга из библиотеки →
+- [x] Все прежние сценарные входы живы одним кликом (книга из библиотеки →
       разбор; глава → сессия; цитата из читалки → обсуждение; блок KB → чат;
       ресэрч темы).
-- [ ] Три темы корректны, только семантические токены; мобильная версия
+- [x] Три темы корректны, только семантические токены; мобильная версия
       (история/кнопки — компактно, сессия-панель — существующий плавающий диалог).
-- [ ] Старые разговоры (quick/session/tuning/agent:*) открываются и отображаются.
-- [ ] `npm run lint && npx tsc --noEmit && npm run build` зелёные; визуальная
-      проверка ZCode (web-gui-tester, три темы) — «ждёт ревью ZCode».
+- [x] Старые разговоры (quick/session/tuning/agent:*) открываются и отображаются.
+- [x] `npm run lint && npx tsc --noEmit && npm run build` зелёные; сервер:
+      ruff/format/lint-imports/pytest (272) зелёные. Визуальная проверка ZCode
+      (web-gui-tester, три темы) — **ждёт ревью ZCode**.
+
+## Что/где (коммиты 419e55e сервер, 7bcaa2f веб, ветка t-034-orchestrator)
+
+Сервер:
+- `server/app/modules/chat/schemas.py` — `MessageIn.intent` (Literal:
+  review/study/session/quote/tune/reinforce), `ConversationItem.scenario`.
+- `server/app/modules/chat/service.py` — `INTENT_DIRECTIVES` (директива агенту
+  в system_extra по паттерну research); интент `session` создаёт сессию,
+  привязанную к root-разговору (как режим session); SSE `session` для любого
+  режима + несёт `session_uid`/`chapter_idx`; `_scenario()` — бейдж «что
+  происходит» в detail (с типом источника) и в списке.
+- `server/app/modules/chat/agents.py` — root получил SESSION_TOOLS,
+  get_session_state, mark_chapter_done, get_review_queue, answer_review.
+- `server/tests/api/test_chat_intents.py` — 10 тестов: директивы всех интентов
+  доходят до system-промпта, session-интент (SSE + привязка + сценарий),
+  scenario-лейблы, 422 на неизвестный интент, инструменты root.
+
+Веб:
+- `web/src/components/chat/chat-start.tsx` (новый) — стартовый экран: Collapse
+  (grid-rows + opacity, motion-reduce), ScenarioButton, HistoryRow.
+- `web/src/app/chat/page.tsx` — рендерит ChatStart (история внизу).
+- Удалены `new-conversation.tsx` (ToggleGroup режимов) и `study-buttons.tsx`
+  (сценарии живут на стартовом экране).
+- `study-flow.tsx` — без шага quick/session: карта глав → «Разобрать с
+  агентом» (root + intent=study).
+- `source-actions.tsx` — root + intent=review/session; `reader.tsx` — root +
+  intent=quote/review, ресёрч без mode; `agents-settings.tsx` — root +
+  intent=tune; `block-page-client.tsx` — apiPost вместо fetch; `share/page.tsx`
+  — «Обсудить в чате» создаёт root-разговор со ссылкой (претрекер предложит
+  разбор); `upload-dialog.tsx` — без вкладки «Статья (скоро)».
+- `chat-view.tsx` — UI от данных: бейдж `scenario || modeLabel`, панель/кнопки
+  сессии по `session` (SSE-событие создаёт состояние), быстрые кнопки для
+  root/free/quick, EmptyHint для root; `?intent=` уходит первым сообщением.
+- `lib/format.ts` (root-лейбл/иконка hub), `lib/types.ts` (scenario, session
+  event), `lib/chat/stream.ts` (intent).
 
 ## Заметки
 
@@ -72,3 +108,21 @@ Symbols Rounded, Inter/Literata, никаких хардкод-цветов), д
   состояние «свёрнуто» — по наличию текста в инпуте или начатого диалога.
 - Hallmark применяется ZCode на этапе ревью/полировки макета; learnos-dev
   делает рабочую реализацию по этому ТЗ и DESIGN.md.
+- Решения (2026-10-28):
+  - Интент живёт в `MessageIn` (параметр первого сообщения), а не в колонке
+    разговора — точный паттерн уже живущего `research=1`, без миграции БД;
+    `?initial=` остаётся доставкой видимого текста (цитата, тема, «Начнём
+    разбор главы 3»).
+  - «Сессия» у главы: сессию создаёт сервер в stream_reply (детерминированно,
+    до ответа агента), root ведёт её сам (контекст «Состояние сессии» уже
+    режимонезависимый) — панель живёт по SSE-данным, субагентский стрим
+    прогресса остаётся открытым вопросом эпика.
+  - Сценарные кнопки: «Закрепить пройденное» — сразу root-разговор с
+    intent=reinforce; «Конспект»/«Собрать курс» — подставляют заготовку в
+    инпут (пользователь дописывает тему); «Ресёрч темы» — armed-режим с чипом;
+    «Изучить книгу»/«Обсудить видео» — существующий StudyFlowDialog.
+  - Scenario в списке разговоров без запроса типа источника (без N+1):
+    «Разбор материала», в detail — точно («Разбор видео», «Разбор · глава N»).
+  - Быстрые кнопки внутри разговора («Закрепить», «Конспект», «Собрать курс»,
+    «Фейнман») оставлены текстами сообщений — ТЗ их в чистку не включает;
+    кандидат на интенты позже.
