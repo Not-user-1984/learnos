@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Ресёрч (модуль research): провайдер поиска и прокси для внешних запросов
     search_provider: str = "chain"  # цепочка [платный по ключу → ddg → wikipedia → hn]; см. T-019
     web_proxy: str = ""  # например socks5://192.168.0.10:1080 (vpn-gw) — если регион блокирует
+    allow_private_url_fetch: bool = (
+        False  # from-url: разрешить внутренние адреса (LAN) — по умолчанию SSRF-защита
+    )
     yt_proxy: str = ""  # прокси yt-dlp (YouTube); из настроек связи (UI) или env LEARNOS_YT_PROXY
 
     @property

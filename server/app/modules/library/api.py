@@ -3,7 +3,7 @@
 from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel
 
-from .schemas import ChapterCard, JobOut, OutlineOut, SourceCard, SourceCreate
+from .schemas import ChapterCard, FromUrlCreate, FromUrlOut, JobOut, OutlineOut, SourceCard, SourceCreate
 
 
 class ProcessOut(BaseModel):
@@ -30,6 +30,11 @@ def make_router(svc) -> APIRouter:
         out = _card(result).model_dump()
         out["job_id"] = result.get("job_id")
         return out
+
+    @r.post("/sources/from-url", response_model=FromUrlOut)
+    def from_url(body: FromUrlCreate) -> FromUrlOut:
+        """Скачать и добавить материал по ссылке (YouTube/PDF/статья); обработка — job."""
+        return FromUrlOut(**svc.from_url(body.url))
 
     @r.get("/sources", response_model=list[SourceCard])
     def list_sources(

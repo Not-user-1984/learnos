@@ -1,6 +1,6 @@
 """DTO библиотеки."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SourceCreate(BaseModel):
@@ -11,6 +11,23 @@ class SourceCreate(BaseModel):
     url: str | None = None
     local_path: str | None = None
     course_id: int | None = None
+
+
+class FromUrlCreate(BaseModel):
+    """Добавление материала по ссылке (YouTube/PDF/статья)."""
+
+    url: str = Field(min_length=8, max_length=2000)
+
+
+class FromUrlOut(BaseModel):
+    """Результат добавления по ссылке: источник поставлен в обработку."""
+
+    ok: bool
+    uid: str
+    kind: str
+    title: str
+    job_id: int | None = None
+    processing: bool
 
 
 class SourceCard(BaseModel):

@@ -1,6 +1,7 @@
 """Домен библиотеки: виды источников, статусы обработки, правила, структура книги."""
 
 import re
+from urllib.parse import urlsplit
 
 SourceKind = str  # book | video | web
 
@@ -86,6 +87,29 @@ def parse_chapter_number(title: str) -> int | None:
         return int(raw)
     except (TypeError, ValueError):
         return None
+
+
+def is_youtube_url(url: str) -> bool:
+    """YouTube-ссылка на видео (youtu.be/<id>, watch?v=, shorts, live).
+
+    Семантика та же, что у претрекера чата (chat/domain.py): ссылка на ролик,
+    а не на канал/поиск — по ней можно добавить video-источник с транскриптом.
+    """
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower().removeprefix("www.")
+    if host == "youtu.be":
+        return len(parts.path.strip("/")) >= 11
+    if host != "youtube.com":
+        return False
+    path = parts.path.strip("/")
+    if path.startswith(("shorts/", "live/")):
+        return len(path.split("/", 1)[1]) >= 11
+    return path == "watch" and "v=" in (parts.query or "")
+
+
+def is_pdf_url(url: str) -> bool:
+    """Путь ссылки оканчивается на .pdf (без учёта регистра и query/фрагмента)."""
+    return urlsplit(url).path.lower().endswith(".pdf")
 
 
 def classify_toc_entry(title: str, page_count: int) -> EntryClass:
