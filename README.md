@@ -32,7 +32,7 @@ cd web && npm run lint && npx tsc --noEmit && npm run build
 
 ## Архитектура сервера
 
-Модульный монолит, 14 модулей. Порядок = порядок зависимостей (`app/bootstrap.py`):
+Модульный монолит, 15 модулей (включая revision — ревизия кода агентом). Порядок = порядок зависимостей (`app/bootstrap.py`):
 
 | Модуль | Ответственность |
 |---|---|
@@ -42,7 +42,7 @@ cd web && npm run lint && npx tsc --noEmit && npm run build
 | `knowledge` | база знаний: MD-блоки + frontmatter, категории, теги, версии, генерация блоков агентами |
 | `library` | источники (book/video/web), главы, jobs обработки, загрузка PDF; LLM-куратор `structure_curator` чистит структуру книги (мусорные закладки → описание, номера глав книги, секции, страницы) |
 | `learning` | активности («идём по источнику»), сессии-уроки со стейт-машиной theory→check→practice→debrief→done |
-| `chat` | разговоры, SSE-стриминг, режимы free/quick/session/tuning, авто-заголовки, сжатие истории |
+| `chat` | **единый вход** root-оркестратора: претрекер контента, интенты сценариев, субагенты, SSE, авто-заголовки, сжатие истории (legacy-режимы для старых разговоров) |
 | `courses` | курсы-подборки, планировщик курса |
 | `search` | FTS5 (блоки + главы), обновление по событиям |
 | `export` | выгрузка в MD/ZIP (Obsidian-совместимая) |
@@ -55,12 +55,12 @@ cd web && npm run lint && npx tsc --noEmit && npm run build
 
 **Хранение**: SQLite (+FTS5) в `data/`, блоки — MD-файлы в `kb/`, миграции — Alembic (`server/migrations/`). Контекст LLM бережём: книги читаются по главам порциями (`read_chapter` offset/limit).
 
-**LLM и агенты** (`app/llm`, `app/agent`): ModelRouter с ролями, OpenAI-совместимый провайдер (стрим, tool calls, structured output, цепочка ключей: основной `ZAI_API_KEY` + опциональные `ZAI_API_KEY_2..4` из `api_key_envs` в `server/config/llm.yaml` — при исчерпании квоты ключ уходит в cooldown ~10 мин и запрос идёт следующим), рантайм-цикл «модель → инструменты → модель» с отменой и трейсами в `agent_runs`. Агенты — declarative-спеки с промптами в `modules/<mod>/agents/*/prompt.md`: тьюторы чата (free_chat, quick_reviewer, session_tutor), repo_scout (idea-scout: идеи из GitHub-репозиториев → data/ideas + Telegram), генераторы блоков (block_writer, categorizer, chapter_summarizer, source_overviewer), review_examiner, prompt_tuner.
+**LLM и агенты** (`app/llm`, `app/agent`): ModelRouter с ролями, OpenAI-совместимый провайдер (стрим, tool calls, structured output, цепочка ключей: основной `ZAI_API_KEY` + опциональные `ZAI_API_KEY_2..4` из `api_key_envs` в `server/config/llm.yaml` — при исчерпании квоты ключ уходит в cooldown ~10 мин и запрос идёт следующим), рантайм-цикл «модель → инструменты → модель» с отменой, офлоадом инструментов и трейсами в `agent_runs`; субагенты `run_agent`/`list_agents` со связкой parent_run_id. Агенты — declarative-спеки с промптами в `modules/<mod>/agents/*/prompt.md`: корневой оркестратор **root** (дефолт новых разговоров), тьюторы чата (free_chat, quick_reviewer, session_tutor), repo_scout, auditor (ревизия кода) (idea-scout: идеи из GitHub-репозиториев → data/ideas + Telegram), генераторы блоков (block_writer, categorizer, chapter_summarizer, source_overviewer), review_examiner, prompt_tuner.
 
 **Протоколы**:
 - REST `/api/*` — CRUD + SSE чата (`POST /api/conversations/{uid}/messages`: события delta/tool_start/tool_end/card/session/title/done; `research:true` — ресёрч-режим, директива уходит агенту, в чате видна только тема).
-- MCP: `/mcp` (~50 инструментов) и `/mcp/<module>`.
-- Карточки UI (command/question/evaluation/block_saved/block_updated/prompt_change/note_draft) приходят инструментами через `_card`.
+- MCP: `/mcp` (~71 инструмент) и `/mcp/<module>`.
+- Карточки UI (command/question/evaluation/block_saved/block_updated/prompt_change/note_draft/subagent_result/attachment/action_offer/git_change) приходят инструментами через `_card`.
 
 ## Архитектура веба
 
