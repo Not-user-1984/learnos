@@ -60,7 +60,7 @@ cd web && npm run lint && npx tsc --noEmit && npm run build
 **Протоколы**:
 - REST `/api/*` — CRUD + SSE чата (`POST /api/conversations/{uid}/messages`: события delta/tool_start/tool_end/card/session/title/done; `research:true` — ресёрч-режим, директива уходит агенту, в чате видна только тема).
 - MCP: `/mcp` (~71 инструмент) и `/mcp/<module>`.
-- Карточки UI (command/question/evaluation/block_saved/block_updated/prompt_change/note_draft/subagent_result/attachment/action_offer/git_change) приходят инструментами через `_card`.
+- Действия над ссылками в чате (T-042): у YouTube/PDF-ссылок поповер «Открыть/В источники/Быстрый разбор» (новый разговор по интенту); `POST /api/sources/from-url` качает и добавляет материал (SSRF-защита). Карточки UI (command/question/evaluation/block_saved/block_updated/prompt_change/note_draft/subagent_result/attachment/action_offer/git_change) приходят инструментами через `_card`.
 
 ## Архитектура веба
 
