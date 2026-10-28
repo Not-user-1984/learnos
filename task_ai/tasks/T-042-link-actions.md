@@ -1,7 +1,7 @@
 ---
 id: T-042
 title: Действия над ссылками в чате: YouTube-меню и «скачать PDF в источники»
-status: idea   # берётся после T-041
+status: review   # ждёт ревью ZCode
 priority: high
 from: задача пользователя 2026-10-28
 created: 2026-10-28
@@ -54,3 +54,44 @@ created: 2026-10-28
   (Stream первые ~1 КБ HEAD/GET), чтобы ловить ссылки трекеров без .pdf.
 - Транскрибация видео и обработка PDF идут асинхронными jobs — from-url
   отвечает сразу (uid + статус), UI показывает тост «обрабатывается».
+
+## Заметки исполнителя (2026-10-28, ждёт ревью ZCode)
+
+Что сделано:
+
+- Сервер `POST /api/sources/from-url` — `LibraryService.from_url`:
+  YouTube → video-источник+job; PDF (расширение ИЛИ content-type ИЛИ
+  magic `%PDF-` в первом КБ стрима — один GET, без отдельного HEAD) →
+  скачивание и существующий `upload_pdf`; прочее → web-источник+job.
+  Ответ `{ok, uid, kind, title, job_id, processing}`. Файлы:
+  `server/app/modules/library/{service,domain,schemas,api}.py`,
+  тесты `server/tests/api/test_from_url.py` (8 шт., локальный http-сервер
+  на фикстуре, фикстурный PDF через pymupdf).
+- Веб `web/src/components/markdown/ActionLink.tsx` — рендер `a` в
+  Markdown: обычные ссылки как раньше; YouTube/PDF — шеврон → попап
+  («Открыть в новой вкладке», «Добавить в источники» → from-url+тост,
+  «Быстрый разбор»/«Изучить книгу» → новый root-разговор
+  `?initial=<url>&intent=review|study`, паттерн ChatStart). Esc/клик-мимо,
+  стрелки по пунктам, фокус на первый пункт и возврат на кнопку.
+
+Решения:
+
+- Определение YouTube/PDF: сервер — свои `is_youtube_url`/`is_pdf_url`
+  в `library/domain.py` с семантикой претрекера `chat/domain.py`
+  (приватную константу чужого домена не импортируем — межмодульно только
+  публичные сервисы); веб — минимальный дубль YouTube-regex из
+  `chat/domain.py` в `ActionLink.tsx` (TS-мир; комментарий-якорь на источник).
+- Лимит 200 МБ (`MAX_URL_PDF_BYTES`), таймаут connect=15/read=90;
+  превышение → 422 с подсказкой загрузить вручную, сетевые ошибки →
+  502 `external_service_error` с читаемым сообщением. Лимит проверяется
+  на лету по чанкам стрима (тест через monkeypatch константы).
+- PDF скачивается в память (bytes → `upload_pdf`): до 200 МБ на личном
+  сервере допустимо, второй путь записи через temp-файл не заводил.
+- Скачивание идёт через `settings.web_proxy` (как research `_fetch`) —
+  настройки vless/socks из UI применяются и на from-url.
+- Поповер: `absolute left-0 top-full` у ссылки + `max-w-[calc(100vw-2rem)]`;
+  клип по нижней границе ленты не обрабатываю (лента скроллится, поповер мал).
+- Промпт root не менялся; MCP-инструмент не добавлял (меню — чистый UI-слой,
+  агенту уже подсказывает претрекер T-036).
+
+Ветка `t-042-link-actions`: 2 коммита (сервер, веб) + этот файл.
