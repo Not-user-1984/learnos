@@ -115,6 +115,7 @@ def create_app() -> FastAPI:
         return {
             "ok": True,
             "llm_configured": llm["configured"],
+            "llm_keys": llm["keys"],
             "model": llm["model"],
             "provider": llm["provider"],
             "llm_reason": llm.get("reason"),

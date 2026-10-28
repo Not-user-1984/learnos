@@ -19,6 +19,7 @@ def test_health_without_llm_key(client):
     assert body["ok"] is True
     # llm.yaml в тестах отсутствует → LLM не настроен
     assert body["llm_configured"] is False
+    assert body["llm_keys"] == 0
     assert body["tools"] > 0
     assert body["worker_running"] is True
 

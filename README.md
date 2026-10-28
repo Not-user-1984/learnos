@@ -55,7 +55,7 @@ cd web && npm run lint && npx tsc --noEmit && npm run build
 
 **Хранение**: SQLite (+FTS5) в `data/`, блоки — MD-файлы в `kb/`, миграции — Alembic (`server/migrations/`). Контекст LLM бережём: книги читаются по главам порциями (`read_chapter` offset/limit).
 
-**LLM и агенты** (`app/llm`, `app/agent`): ModelRouter с ролями, OpenAI-совместимый провайдер (стрим, tool calls, structured output), рантайм-цикл «модель → инструменты → модель» с отменой и трейсами в `agent_runs`. Агенты — declarative-спеки с промптами в `modules/<mod>/agents/*/prompt.md`: тьюторы чата (free_chat, quick_reviewer, session_tutor), repo_scout (idea-scout: идеи из GitHub-репозиториев → data/ideas + Telegram), генераторы блоков (block_writer, categorizer, chapter_summarizer, source_overviewer), review_examiner, prompt_tuner.
+**LLM и агенты** (`app/llm`, `app/agent`): ModelRouter с ролями, OpenAI-совместимый провайдер (стрим, tool calls, structured output, цепочка ключей: основной `ZAI_API_KEY` + опциональные `ZAI_API_KEY_2..4` из `api_key_envs` в `server/config/llm.yaml` — при исчерпании квоты ключ уходит в cooldown ~10 мин и запрос идёт следующим), рантайм-цикл «модель → инструменты → модель» с отменой и трейсами в `agent_runs`. Агенты — declarative-спеки с промптами в `modules/<mod>/agents/*/prompt.md`: тьюторы чата (free_chat, quick_reviewer, session_tutor), repo_scout (idea-scout: идеи из GitHub-репозиториев → data/ideas + Telegram), генераторы блоков (block_writer, categorizer, chapter_summarizer, source_overviewer), review_examiner, prompt_tuner.
 
 **Протоколы**:
 - REST `/api/*` — CRUD + SSE чата (`POST /api/conversations/{uid}/messages`: события delta/tool_start/tool_end/card/session/title/done; `research:true` — ресёрч-режим, директива уходит агенту, в чате видна только тема).
@@ -72,7 +72,7 @@ Next.js App Router, TS strict, Tailwind + shadcn-подход, PWA. Дизайн
 
 - **CT 132 `learnos`** на Proxmox (4c/6G/30G SSD256, docker compose внутри): web `:3000`, api `:8765`.
 - **Разработка = git push**: systemd-таймер на CT раз в 2 мин проверяет `origin/main`; есть новые коммиты → build → up → health. Логи: `journalctl -u learnos-deploy.service`, `/var/log/learnos-deploy.log`.
-- Данные прода: `/opt/learnos/{data,kb}` (в git не попадают). Ключи: `ZAI_API_KEY`, GitHub-токен — файлами через `sec exec` (см. `proxmox/scripts/deploy/deploy-learnos-container.sh`).
+- Данные прода: `/opt/learnos/{data,kb}` (в git не попадают). Ключи: `ZAI_API_KEY` и опциональные `ZAI_API_KEY_2..4` (цепочка фейловера по квоте, в том же порядке, что `api_key_envs` в llm.yaml), GitHub-токен — файлами через `sec exec` (см. `proxmox/scripts/deploy/deploy-learnos-container.sh`).
 - Роут: `learn.not-user-1984.duckdns.org` (NPM/hginx, wildcard-сертификат). Доступ по LAN `http://192.168.0.132:3000`; снаружи — см. задачу T-002.
 - YouTube-скилл ходит через хомлаб-прокси `socks5://192.168.0.10:1080` (vpn-gw).
 - ⚠️ Сон сервера 19:00–08:30; ⚠️ стоп-случай: доступ с мобилки вне дома пока не настроен.

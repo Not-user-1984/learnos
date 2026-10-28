@@ -2,7 +2,8 @@ providers:
   zai:
     type: openai_compat
     base_url: https://api.z.ai/api/coding/paas/v4
-    api_key_env: ZAI_API_KEY
+    # цепочка ключей: фейловер по квоте, порядок = порядок списка; пустые env пропускаются
+    api_key_envs: [ZAI_API_KEY, ZAI_API_KEY_2, ZAI_API_KEY_3, ZAI_API_KEY_4]
     capabilities: {tools: true, streaming: true, json_schema: false, vision: false}
   ollama:
     type: openai_compat
