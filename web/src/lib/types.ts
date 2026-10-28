@@ -225,10 +225,11 @@ export interface Card {
   from_version?: number;
   to_version?: number;
   reason?: string;
-  // prompt_change
+  // prompt_change (kind: prompt | skill)
   status?: string;
   change_id?: number;
   agent?: string;
+  file?: string;
   diff?: { op: string; line: string }[];
   // note_draft (превью конспекта)
   preview_id?: number;

@@ -132,7 +132,7 @@ def test_v1_to_head_moves_data_and_kb(v1_layout):
             # ревизия дошла до головы
             assert (
                 conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == "0009_agent_runs_parent"
+                == "0010_prompt_changes_kind"
             )  # head (обновляется с новыми ревизиями)
 
             # sources получил uid, строки сохранены

@@ -342,6 +342,8 @@ function NoteDraftCardView({
 function PromptChangeCardView({ card }: { card: Card }) {
   const [status, setStatus] = useState<string>(card.status ?? "pending");
   const [busy, setBusy] = useState(false);
+  const isSkill = card.kind === "skill";
+  const what = isSkill ? `скилла ${card.agent}${card.file ? ` · ${card.file}` : ""}` : `промпта: ${card.agent}`;
 
   const act = async (action: "approve" | "reject") => {
     setBusy(true);
@@ -349,7 +351,13 @@ function PromptChangeCardView({ card }: { card: Card }) {
       const res = await fetch(`/api/tuning/changes/${card.change_id}/${action}`, { method: "POST" });
       if (!res.ok) throw new Error(String(res.status));
       setStatus(action === "approve" ? "applied" : "rejected");
-      toast.success(action === "approve" ? "Промпт обновлён — применится к новым ответам" : "Правка отклонена");
+      toast.success(
+        action === "approve"
+          ? isSkill
+            ? "Скилл обновлён — применится к новым вызовам"
+            : "Промпт обновлён — применится к новым ответам"
+          : "Правка отклонена"
+      );
     } catch {
       toast.error("Не удалось — попробуй ещё раз");
     } finally {
@@ -361,7 +369,7 @@ function PromptChangeCardView({ card }: { card: Card }) {
     <div className="rounded-xl border border-sky-500/40 bg-sky-500/5 p-4">
       <p className="mb-1 flex items-center gap-2 text-sm font-medium">
         <Icon name="tune" size={16} className="text-sky-500" />
-        Правка промпта: <b>{card.agent}</b>
+        Правка {what}
       </p>
       <p className="mb-2 text-sm text-muted-foreground">{card.summary}</p>
       <div className="max-h-64 overflow-auto rounded-lg border bg-zinc-950 font-mono text-xs leading-5">

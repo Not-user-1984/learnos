@@ -8,11 +8,13 @@ prompt_changes = Table(
     "prompt_changes",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("agent", Text, nullable=False),
+    Column("agent", Text, nullable=False),  # prompt: имя агента; skill: имя builtin-скилла
     Column("summary", Text, nullable=False),
     Column("old_content", Text, nullable=False),
     Column("new_content", Text, nullable=False),
     Column("status", Text, nullable=False, server_default="pending"),  # pending|applied|rejected
+    Column("kind", Text, nullable=False, server_default="prompt"),  # prompt|skill
+    Column("file", Text),  # skill: run.py | SKILL.md
     Column("conversation_uid", Text),
     Column("created_at", Text, nullable=False),
 )

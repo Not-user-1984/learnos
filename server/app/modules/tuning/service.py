@@ -13,6 +13,9 @@ from .infra.tables import custom_agents, prompt_changes
 
 SERVER_ROOT = Path(__file__).resolve().parents[3]  # server/
 
+# файлы builtin-скилла, правимые карточкой (канонический список — в modules/skills/loader)
+_SKILL_FILES = ("run.py", "SKILL.md")
+
 
 @dataclass(frozen=True, slots=True)
 class AgentPrompt:
@@ -31,12 +34,15 @@ class AgentPrompt:
 class TuningService:
     """Use-cases настройки: список промптов, черновик правки (дифф), применение, откат, кастомные агенты."""
 
-    def __init__(self, uow: UnitOfWorkFactory, settings, agent_registry, runtime=None, tools=None) -> None:
+    def __init__(
+        self, uow: UnitOfWorkFactory, settings, agent_registry, runtime=None, tools=None, skills=None
+    ) -> None:
         self._uow = uow
         self._settings = settings
         self._registry = agent_registry
         self._runtime = runtime
         self._tools = tools
+        self._skills = skills  # SkillsService: propose_change(kind="skill") и живой reload
         self._clock = SystemClock()
 
     # --- реестр ---
@@ -109,73 +115,155 @@ class TuningService:
     def stage_change(
         self, agent_name: str, new_content: str, summary: str, conversation_uid: str | None = None
     ) -> dict:
-        """Черновик правки: сохранить старый/новый текст, вернуть карточку с диффом."""
+        """Черновик правки промпта: сохранить старый/новый текст, вернуть карточку с диффом."""
         if not new_content.strip():
             raise ValidationFailed("новый промпт пуст")
         current = self.read_prompt(agent_name)
+        return self._insert_change(
+            agent_name,
+            current["content"],
+            new_content,
+            summary or "правка промпта",
+            conversation_uid,
+            kind="prompt",
+        )
+
+    def stage_skill_change(
+        self,
+        skill_name: str,
+        file: str,
+        new_content: str,
+        summary: str,
+        conversation_uid: str | None = None,
+    ) -> dict:
+        """Черновик правки builtin-скилла (run.py | SKILL.md) — применяется только карточкой."""
+        if self._skills is None:
+            raise NotFound("модуль скиллов недоступен")
+        if file not in _SKILL_FILES:
+            raise ValidationFailed(f"файл скилла: {' или '.join(_SKILL_FILES)}")
+        kind = self._skills.loader.kind_of(skill_name)
+        if kind == "agent":
+            raise ValidationFailed(f"скилл '{skill_name}' агентский — его правит владелец через save_skill")
+        if kind != "builtin":
+            raise NotFound(f"builtin-скилл '{skill_name}' не найден")
+        current = self._skills.loader.effective_file(skill_name, file).read_text(encoding="utf-8")
+        return self._insert_change(
+            skill_name,
+            current,
+            new_content,
+            summary or f"правка {file}",
+            conversation_uid,
+            kind="skill",
+            file=file,
+        )
+
+    def _insert_change(
+        self,
+        target: str,
+        old_content: str,
+        new_content: str,
+        summary: str,
+        conversation_uid: str | None,
+        *,
+        kind: str,
+        file: str | None = None,
+    ) -> dict:
+        """Общая стадия правки (prompt | skill): строка в БД + карточка с диффом."""
+        if not new_content.strip():
+            raise ValidationFailed("новое содержимое пусто")
+        diff = _diff_lines(old_content, new_content)
+        card = {
+            "type": "prompt_change",
+            "kind": kind,
+            "change_id": 0,
+            "agent": target,
+            "summary": summary,
+            "diff": diff,
+            "status": "pending",
+        }
+        if file:
+            card["file"] = file
         with self._uow() as uow:
             change_id = int(
                 uow.session.execute(
                     prompt_changes.insert().values(
-                        agent=agent_name,
-                        summary=summary or "правка промпта",
-                        old_content=current["content"],
+                        agent=target,
+                        summary=summary,
+                        old_content=old_content,
                         new_content=new_content,
                         status="pending",
+                        kind=kind,
+                        file=file,
                         conversation_uid=conversation_uid,
                         created_at=now_iso(self._clock),
                     )
                 ).inserted_primary_key[0]
             )
+        card["change_id"] = change_id
         return {
             "change_id": change_id,
-            "agent": agent_name,
+            "kind": kind,
+            "agent": target,
             "summary": summary,
-            "diff": _diff_lines(current["content"], new_content),
-            "_card": {
-                "type": "prompt_change",
-                "change_id": change_id,
-                "agent": agent_name,
-                "summary": summary or "правка промпта",
-                "diff": _diff_lines(current["content"], new_content),
-                "status": "pending",
-            },
+            "diff": diff,
+            "_card": card,
         }
 
     def apply_change(self, change_id: int) -> dict:
-        """Применить: override-файл в data/prompts/ + бэкап; промпт живёт сразу."""
+        """Применить: промпт — override в data/prompts/; скилл — override в data/skill-overrides/."""
         with self._uow() as uow:
             row = uow.session.execute(prompt_changes.select().where(prompt_changes.c.id == change_id)).first()
             if row is None:
                 raise NotFound(f"правка {change_id} не найдена")
             if row.status != "pending":
                 raise ValidationFailed(f"правка уже {row.status}")
-            spec = self._registry.get(row.agent)
-            if spec.prompt_text is not None:
-                # кастомный агент: правка пишется в БД, реестр обновляется сразу
-                self._write_custom_prompt(uow, row.agent, row.new_content)
-                uow.session.execute(
-                    prompt_changes.update().where(prompt_changes.c.id == change_id).values(status="applied")
-                )
-                return {
-                    "ok": True,
-                    "change_id": change_id,
-                    "agent": row.agent,
-                    "override": "(кастомный агент)",
-                }
-            default_path = spec.prompt_path
-            backup_dir = self._settings.data_dir / "prompt_backups" / row.agent
-            backup_dir.mkdir(parents=True, exist_ok=True)
-            (backup_dir / f"{now_iso(self._clock).replace(':', '')}.md").write_text(
-                row.old_content, encoding="utf-8"
-            )
-            override = self._override_path(default_path)
-            override.parent.mkdir(parents=True, exist_ok=True)
-            override.write_text(row.new_content, encoding="utf-8")
+            if row.kind == "skill":
+                out = self._apply_skill_change(row)
+            else:
+                out = self._apply_prompt_change(uow, row)
             uow.session.execute(
                 prompt_changes.update().where(prompt_changes.c.id == change_id).values(status="applied")
             )
-        return {"ok": True, "change_id": change_id, "agent": row.agent, "override": str(override)}
+        return out
+
+    def _apply_prompt_change(self, uow, row) -> dict:
+        """Применение правки промпта: override-файл + бэкап; промпт живёт сразу."""
+        spec = self._registry.get(row.agent)
+        if spec.prompt_text is not None:
+            # кастомный агент: правка пишется в БД, реестр обновляется сразу
+            self._write_custom_prompt(uow, row.agent, row.new_content)
+            return {"ok": True, "change_id": row.id, "agent": row.agent, "override": "(кастомный агент)"}
+        default_path = spec.prompt_path
+        backup_dir = self._settings.data_dir / "prompt_backups" / row.agent
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        (backup_dir / f"{now_iso(self._clock).replace(':', '')}.md").write_text(
+            row.old_content, encoding="utf-8"
+        )
+        override = self._override_path(default_path)
+        override.parent.mkdir(parents=True, exist_ok=True)
+        override.write_text(row.new_content, encoding="utf-8")
+        return {"ok": True, "change_id": row.id, "agent": row.agent, "override": str(override)}
+
+    def _apply_skill_change(self, row) -> dict:
+        """Применение правки builtin-скилла: бэкап + override + живая перезагрузка скиллов."""
+        if self._skills is None:
+            raise NotFound("модуль скиллов недоступен")
+        backup_dir = self._settings.data_dir / "prompt_backups" / f"skill_{row.agent}"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        (backup_dir / f"{now_iso(self._clock).replace(':', '')}__{row.file}").write_text(
+            row.old_content, encoding="utf-8"
+        )
+        override = self._settings.data_dir / "skill-overrides" / row.agent / row.file
+        override.parent.mkdir(parents=True, exist_ok=True)
+        override.write_text(row.new_content, encoding="utf-8")
+        self._skills.reload()
+        return {
+            "ok": True,
+            "change_id": row.id,
+            "skill": row.agent,
+            "file": row.file,
+            "override": str(override),
+        }
 
     def reject_change(self, change_id: int) -> dict:
         """Отклонить черновик."""
@@ -203,6 +291,27 @@ class TuningService:
             override.unlink()
         return {"ok": True, "agent": agent_name}
 
+    def reset_skill(self, skill_name: str) -> dict:
+        """Сбросить override builtin-скилла — файлы из кода; перед снятием бэкап."""
+        if self._skills is None:
+            raise NotFound("модуль скиллов недоступен")
+        if self._skills.loader.kind_of(skill_name) != "builtin":
+            raise NotFound(f"builtin-скилл '{skill_name}' не найден")
+        override_dir = self._settings.data_dir / "skill-overrides" / skill_name
+        if not override_dir.is_dir():
+            return {"ok": True, "skill": skill_name, "reset": False, "message": "override не был применён"}
+        backup_dir = self._settings.data_dir / "prompt_backups" / f"skill_{skill_name}"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        for f in sorted(override_dir.iterdir()):
+            if f.name not in _SKILL_FILES:
+                continue
+            (backup_dir / f"reset-{now_iso(self._clock).replace(':', '')}__{f.name}").write_text(
+                f.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            f.unlink()
+        self._skills.reload()
+        return {"ok": True, "skill": skill_name, "reset": True}
+
     def changes(self, status: str | None = None) -> list[dict]:
         """История правок."""
         with self._uow() as uow:
@@ -216,6 +325,8 @@ class TuningService:
                 "agent": r.agent,
                 "summary": r.summary,
                 "status": r.status,
+                "kind": r.kind,
+                "file": r.file,
                 "created_at": r.created_at,
             }
             for r in rows
@@ -376,12 +487,13 @@ class TuningService:
     ) -> None:
         from ...agent.spec import AgentSpec
 
+        own_skills = self._skills.loader.names_owned_by(name) if self._skills else set()
         self._registry.upsert_custom(
             AgentSpec(
                 name=name,
                 description=description,
                 prompt_text=prompt,
-                tools=frozenset(tools),
+                tools=frozenset(tools) | own_skills,  # скиллы агента видны сразу
                 model_role=model_role or "chat",
                 max_steps=24,
             )

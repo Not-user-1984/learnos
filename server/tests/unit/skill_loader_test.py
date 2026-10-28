@@ -39,7 +39,9 @@ def _make_loader(tmp_path: Path) -> SkillLoader:
         "    return {'ok': True, 'action': action, 'query': query, 'num': num, 'cat': cat}\n",
         encoding="utf-8",
     )
-    loader = SkillLoader(SimpleNamespace(skills_dir=tmp_path))
+    loader = SkillLoader(
+        SimpleNamespace(skills_dir=tmp_path, data_dir=tmp_path / "data", skill_exec_timeout=30)
+    )
     loader.load()
     return loader
 
@@ -62,9 +64,13 @@ def test_optional_param_null_and_default_kept(tmp_path):
     assert out["query"] == "" and out["num"] == 3 and out["cat"] == "movies"
 
 
-def test_torrent_fetch_model_validates_without_optionals():
+def test_torrent_fetch_model_validates_without_optionals(tmp_path):
     """Реальный torrent_fetch: вызов только с action валиден; None-поля не уходят в run.py."""
-    loader = SkillLoader(SimpleNamespace(skills_dir=Path(__file__).parents[2] / "skills"))
+    loader = SkillLoader(
+        SimpleNamespace(
+            skills_dir=Path(__file__).parents[2] / "skills", data_dir=tmp_path, skill_exec_timeout=30
+        )
+    )
     loader.load()
     spec = next(s for s in loader.tool_specs() if s.name == "torrent_fetch")
     args = spec.args_model.model_validate({"action": "status"})

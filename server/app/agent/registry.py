@@ -1,5 +1,7 @@
 """Реестр агентов приложения по имени; заполняется модулями в wire()."""
 
+from dataclasses import replace
+
 from .spec import AgentSpec
 
 
@@ -34,6 +36,12 @@ class AgentRegistry:
 
     def is_builtin(self, name: str) -> bool:
         return name in self._builtin
+
+    def extend_tools(self, name: str, extra: set[str]) -> None:
+        """Расширить набор инструментов агента без рестарта (горячая перезагрузка скиллов)."""
+        spec = self.get(name)
+        if not extra <= spec.tools:
+            self._agents[name] = replace(spec, tools=spec.tools | extra)
 
     def get(self, name: str) -> AgentSpec:
         spec = self._agents.get(name)
