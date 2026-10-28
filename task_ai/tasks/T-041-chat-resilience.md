@@ -1,7 +1,7 @@
 ---
 id: T-041
 title: Устойчивость ответа: пережить уход со страницы и рестарт, live-статус агента
-status: active
+status: review
 priority: high
 from: баг-репорт пользователя 2026-10-28 (разговор cnv_345485fc)
 created: 2026-10-28
@@ -57,15 +57,15 @@ created: 2026-10-28
 
 ## Критерии готовности
 
-- [ ] api-тест: обрыв SSE-читателя не теряет ответ.
-- [ ] api-тест: startup помечает старые running → interrupted; detail отдаёт
+- [x] api-тест: обрыв SSE-читателя не теряет ответ.
+- [x] api-тест: startup помечает старые running → interrupted; detail отдаёт
       agent_state (working/runs/interrupted).
-- [ ] api-тест: resume дорабатывает последний user-message; при живых
+- [x] api-тест: resume дорабатывает последний user-message; при живых
       running — 409.
-- [ ] Веб: бейдж работы с шагами, баннер прерывания с «Продолжить», поллинг
+- [x] Веб: бейдж работы с шагами, баннер прерывания с «Продолжить», поллинг
       без 180с-лимита; lint+tsc+build зелёные.
-- [ ] Сервер: ruff/format/lint-imports/pytest зелёные.
-- [ ] Коммиты в ветке `t-041-chat-resilience`; «ждёт ревью ZCode» в файле задачи.
+- [x] Сервер: ruff/format/lint-imports/pytest зелёные (300 тестов).
+- [x] Коммиты в ветке `t-041-chat-resilience`; «ждёт ревью ZCode» в файле задачи.
 
 ## Заметки
 
@@ -76,3 +76,43 @@ created: 2026-10-28
   пишутся на finish; для живого steps можно брать max(id) обновлением на
   каждом tool_start — если дёшево: обновляйте steps инкрементально в runtime,
   иначе показываем только «работает: agent»).
+
+## Что сделано (ждёт ревью ZCode)
+
+Ветка `t-041-chat-resilience`, изменения (коммиты `d2ca00c`, `15672c6`,
+`855c45d`, `5c34f51`):
+
+- **Сервер, трейсы**: `server/app/agent/recorder.py` — `progress()` (живые
+  steps/tool_calls инкрементально, пишется на каждом tool-вызове в
+  `runtime.py`), `interrupt_stale_running()` (startup-хук), `active_runs()` /
+  `has_recent_interrupted()` (окна 2 ч / 24 ч). Контейнер хранит recorder
+  (`bootstrap.py`), startup-хук — в `main.py` lifespan сразу после миграций.
+- **Сервер, чат**: `server/app/modules/chat/service.py` — общий цикл
+  генерации вынесен в `_reply_stream` (сообщение и resume делят один код);
+  `get_conversation` отдаёт `agent_state {working, runs, interrupted}`;
+  `resume(uid)` — докатка последнего user-сообщения без дубля (Conflict 409
+  до стрима при живой генерации / нечего дописывать). Роут
+  `POST /api/conversations/{uid}/resume` в `api.py` — SSE-памп вынесен в
+  общий `_streaming_response`.
+- **Тесты**: `server/tests/api/test_chat_resilience.py` (5 тестов: обрыв
+  читателя, startup-хук + interrupted, working во время генерации через
+  наблюдателя в отдельном потоке — TestClient буферизует SSE, resume, 409);
+  `FakeTurn(delay=…)` в `app/llm/providers/fake.py`; стабы рекордера в
+  `tests/agent/test_{runtime,subagents}.py` дополнены `progress()`.
+- **Веб**: `web/src/lib/types.ts` (AgentState/AgentRunInfo),
+  `lib/chat/stream.ts` (`streamResume` + общий SSE-ридер),
+  `components/chat/chat-view.tsx` — общий `runStream` для сообщения и resume,
+  поллинг detail каждые 5 с пока последнее сообщение без ответа (без лимита
+  времени, работает на mount и после обрыва стрима), бейдж «агент работает:
+  root · шаг N / субагент» и баннер прерывания с кнопкой «Продолжить».
+
+Осознанные решения:
+
+- resume не восстанавливает research-флаг и intent исходного сообщения —
+  это перезапуск ответа, не реплей (директивы привязаны к отправке).
+- `interrupted` гасится, если появилась новая живая генерация (working
+  приоритетнее): баннер не конфликтует с бейджем.
+- при отмене пользователем (stop) статус запуска `cancelled`, а не
+  `interrupted` — баннер «прервано сервером» для этого случая не показывается.
+- шаги в бейдже видны после первого tool-вызова (до этого «агент работает:
+  root» без счётчика) — steps пишутся инкрементально на tool-вызовах.
