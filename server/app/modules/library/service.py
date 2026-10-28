@@ -1,8 +1,10 @@
 """Сервис библиотеки: источники, главы, jobs, upload."""
 
+import ipaddress
 import json
 import logging
 import shutil
+import socket
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -693,6 +695,7 @@ class LibraryService:
         parts = urlsplit(url)
         if parts.scheme not in ("http", "https") or not parts.hostname:
             raise ValidationFailed("нужна http(s)-ссылка на видео, PDF или статью")
+        self._assert_public_http_url(parts)
         if is_youtube_url(url):
             return self._start_url_source("video", url)
         data = self._probe_pdf(url)
@@ -723,6 +726,26 @@ class LibraryService:
             "job_id": proc.get("job_id"),
             "processing": bool(proc.get("ok")),
         }
+
+    def _assert_public_http_url(self, parts) -> None:
+        """SSRF-защита: внутренние адреса (loopback/LAN/линк-локал) не скачиваются по ссылке.
+
+        Контент попадает в LLM-обработку — внутренние админки/метаданные выкачивать нельзя.
+        allow_private_url_fetch в настройках снимает запрет для доверенной LAN (ревью T-042).
+        """
+        if self._settings.allow_private_url_fetch:
+            return
+        host = (parts.hostname or "").lower()
+        if host == "localhost" or host.endswith((".local", ".internal", ".lan", ".home.arpa")):
+            raise ValidationFailed("внутренние адреса недоступны для загрузки по ссылке")
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except OSError:
+            return  # локально не резолвится (сеть решит на соединении; прокси-случай)
+        for info in infos:
+            ip = ipaddress.ip_address(info[4][0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                raise ValidationFailed("внутренние адреса недоступны для загрузки по ссылке")
 
     def _probe_pdf(self, url: str) -> bytes | None:
         """GET по ссылке: байты PDF или None, если ответ не похож на книгу.

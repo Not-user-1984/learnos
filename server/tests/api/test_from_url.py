@@ -117,7 +117,8 @@ def test_from_url_size_limit(client, http_dir, monkeypatch):
 
 
 def test_from_url_broken_url_is_readable(client):
-    r = client.post("/api/sources/from-url", json={"url": "http://127.0.0.1:1/book.pdf"})
+    # публичный мёртвый хост: loopback больше не проходит (SSRF-защита, ревью T-042)
+    r = client.post("/api/sources/from-url", json={"url": "http://нет-такого-хоста-тест.invalid/book.pdf"})
     assert r.status_code == 502
     assert "не удалось скачать" in r.json()["message"]
 
@@ -133,3 +134,29 @@ def test_from_url_youtube_host_variants(client):
         r = client.post("/api/sources/from-url", json={"url": url})
         assert r.status_code == 200
         assert r.json()["kind"] == "video"
+
+
+@pytest.fixture(autouse=True)
+def _allow_local_http(monkeypatch):
+    """Локальный тестовый http-сервер живёт на 127.0.0.1 — тестам можно приватные."""
+    monkeypatch.setenv("LEARNOS_ALLOW_PRIVATE_URL_FETCH", "true")
+
+
+def test_from_url_rejects_private_addresses(container):
+    """SSRF-защита: loopback и LAN-адреса не скачиваются (ревью T-042)."""
+    from urllib.parse import urlsplit
+
+    import pytest as _pytest
+
+    from app.kernel.errors import ValidationFailed
+
+    svc = container.library
+    svc._settings.allow_private_url_fetch = False  # в модуле autouse-флаг для локального http
+    for url in (
+        "http://localhost:8765/api/health",
+        "http://127.0.0.1:8006/",
+        "http://192.168.0.105:8006/",
+        "http://router.local/admin",
+    ):
+        with _pytest.raises(ValidationFailed):
+            svc._assert_public_http_url(urlsplit(url))
