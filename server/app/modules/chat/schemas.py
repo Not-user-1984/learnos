@@ -1,8 +1,14 @@
 """DTO чата."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 MODES = {"free", "quick", "session", "tuning", "root"}
+
+# Сценарии единого входа (T-039): код приходит с первым сообщением,
+# сервер превращает его в директиву агенту (см. INTENT_DIRECTIVES в service.py)
+INTENTS = ("review", "study", "session", "quote", "tune", "reinforce")
 
 
 class ConversationCreate(BaseModel):
@@ -34,6 +40,8 @@ class MessageIn(BaseModel):
     # режим ресёрча: инструкция уходит агенту в system_extra, в чате видна только тема
     research: bool = False
     attachments: list[MessageAttachment] = Field(default_factory=list, max_length=4)
+    # сценарий входа («быстрый разбор», «сессия-урок»…): директиву агенту собирает сервер
+    intent: Literal[INTENTS] | None = None
 
 
 class ConversationItem(BaseModel):
@@ -42,5 +50,6 @@ class ConversationItem(BaseModel):
     uid: str
     title: str
     mode: str
+    scenario: str = ""
     updated_at: str
     messages_count: int = 0

@@ -8,6 +8,10 @@ from ...agent.spec import AgentSpec
 
 AGENTS_DIR = Path(__file__).parent / "agents"
 
+# инструменты ведения сессии-урока: root получает их, чтобы вести сессию,
+# созданную по интенту «session» (сессия привязана к разговору)
+SESSION_TOOLS = frozenset({"start_session", "advance", "practice_step", "finish_session"})
+
 free_chat = AgentSpec(
     name="free_chat",
     description=(
@@ -134,7 +138,12 @@ root = AgentSpec(
         "сложные задачи передаёт специалистам через run_agent (каталог — list_agents)."
     ),
     prompt_path=AGENTS_DIR / "root" / "prompt.md",
-    tools=free_chat.tools | {"run_agent", "list_agents", "propose_change"},
+    tools=(
+        free_chat.tools
+        | {"run_agent", "list_agents", "propose_change"}
+        | SESSION_TOOLS
+        | {"get_session_state", "mark_chapter_done", "get_review_queue", "answer_review"}
+    ),
     max_steps=30,
 )
 
