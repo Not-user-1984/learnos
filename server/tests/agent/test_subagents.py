@@ -32,6 +32,9 @@ class ListRecorder:
         self.runs.append({"status": "running", **kwargs})
         return len(self.runs)
 
+    def progress(self, run_id: int, **kwargs) -> None:
+        self.runs[run_id - 1].update(kwargs)
+
     def finish(self, run_id: int, **kwargs) -> None:
         self.runs[run_id - 1].update(kwargs)
 

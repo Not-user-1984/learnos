@@ -1,8 +1,17 @@
 """Запись трейсов запусков агентов в таблицу agent_runs."""
 
+import datetime
+
+from sqlalchemy import select
+
 from ..kernel.clock import SystemClock, now_iso
 from ..kernel.db import UnitOfWorkFactory
 from .infra_tables import agent_runs_table
+
+# живые запуски старше этого возраста считаем мусором от прошлых процессов
+ACTIVE_RUN_MAX_AGE = datetime.timedelta(hours=2)
+# «прервано недавно» — окно, за котором interrupted-запуски ещё показываются баннером
+INTERRUPTED_WINDOW = datetime.timedelta(hours=24)
 
 
 class DbRunRecorder:
@@ -43,6 +52,16 @@ class DbRunRecorder:
                 ).inserted_primary_key[0]
             )
 
+    def progress(self, run_id: int, *, steps: int, tool_calls: int) -> None:
+        """Живой прогресс выполнения: агрегаты пишутся инкрементально по ходу запуска
+        (статус остаётся running до finish) — это то, что показывает badge «агент работает»."""
+        with self._uow() as uow:
+            uow.session.execute(
+                agent_runs_table.update()
+                .where(agent_runs_table.c.id == run_id, agent_runs_table.c.status == "running")
+                .values(steps=steps, tool_calls=tool_calls)
+            )
+
     def finish(
         self,
         run_id: int,
@@ -69,3 +88,52 @@ class DbRunRecorder:
                     error=error[:500] if error else None,
                 )
             )
+
+    # --- состояние запусков (правда о работе агента для клиента) ---
+
+    def interrupt_stale_running(self) -> int:
+        """Хук старта процесса: зависшие running (перезапуск убил генерацию) → interrupted."""
+        with self._uow() as uow:
+            result = uow.session.execute(
+                agent_runs_table.update()
+                .where(agent_runs_table.c.status == "running")
+                .values(status="interrupted", error="процесс перезапущен")
+            )
+            return int(result.rowcount or 0)
+
+    def active_runs(self, conversation_uid: str) -> list[dict]:
+        """Живые запуски разговора (root и субагенты несут один conversation_uid):
+        status=running и возраст меньше ACTIVE_RUN_MAX_AGE."""
+        rows = self._runs_of_conversation(conversation_uid, {"running"})
+        cutoff = self._clock.now() - ACTIVE_RUN_MAX_AGE
+        return [
+            {
+                "agent": r.agent,
+                "steps": r.steps,
+                "tool_calls": r.tool_calls,
+                "started_at": r.created_at,
+            }
+            for r in rows
+            if self._parse_iso(r.created_at) >= cutoff
+        ]
+
+    def has_recent_interrupted(self, conversation_uid: str) -> bool:
+        """Есть ли у разговора свежие interrupted-запуски (окно INTERRUPTED_WINDOW)."""
+        rows = self._runs_of_conversation(conversation_uid, {"interrupted"})
+        cutoff = self._clock.now() - INTERRUPTED_WINDOW
+        return any(self._parse_iso(r.created_at) >= cutoff for r in rows)
+
+    def _runs_of_conversation(self, conversation_uid: str, statuses: set[str]):
+        with self._uow() as uow:
+            return uow.session.execute(
+                select(agent_runs_table)
+                .where(
+                    agent_runs_table.c.conversation_uid == conversation_uid,
+                    agent_runs_table.c.status.in_(statuses),
+                )
+                .order_by(agent_runs_table.c.id)
+            ).all()
+
+    @staticmethod
+    def _parse_iso(value: str) -> datetime.datetime:
+        return datetime.datetime.fromisoformat(value)

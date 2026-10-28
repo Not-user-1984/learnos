@@ -64,6 +64,7 @@ class Container:
     agent_registry: AgentRegistry
     llm_router: ModelRouter
     agent_runtime: AgentRuntime
+    run_recorder: object | None = None  # трейсы agent_runs: старт-хук и состояние запусков
     ids: UuidHexGenerator = field(default_factory=UuidHexGenerator)
     clock: SystemClock = field(default_factory=SystemClock)
     # сервисы модулей (заполняются в wire):
@@ -116,9 +117,9 @@ def build_container(settings: Settings | None = None, *, fake_llm=None) -> Conta
     )
     from .agent.recorder import DbRunRecorder
 
-    container.agent_runtime = AgentRuntime(
-        router, container.tools, DbRunRecorder(uow), container.agent_registry
-    )
+    recorder = DbRunRecorder(uow)
+    container.run_recorder = recorder
+    container.agent_runtime = AgentRuntime(router, container.tools, recorder, container.agent_registry)
 
     for module in MODULES:
         module.wire(container)
