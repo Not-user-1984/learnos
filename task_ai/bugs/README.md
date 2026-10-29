@@ -6,8 +6,8 @@
 
 | ID | Симптом | Статус |
 |---|---|---|
-| [BUG-001](BUG-001-action-offer-no-feedback.md) | «Да» карточки без отклика; повторы создают дубли сообщений | open |
-| [BUG-002](BUG-002-link-navigates-away.md) | Клик по ссылке уводит со страницы; меню спрятано в шевроне 18px | open |
-| [BUG-003](BUG-003-long-run-invisible.md) | Часовой запуск без понятного прогресса и управления из UI | open |
-| [BUG-004](BUG-004-stale-browser-cache.md) | После деплоя вкладка сидит на старой сборке («всё исчезло») | open |
-| [BUG-005](BUG-005-active-runs-window.md) | Подозрение: окно 2ч в active_runs не фильтрует старые запуски | open |
+| [BUG-001](BUG-001-action-offer-no-feedback.md) | «Да» карточки без отклика; повторы создают дубли сообщений | fixed → [T-044](../tasks/T-044-chat-incident-fixes.md) |
+| [BUG-002](BUG-002-link-navigates-away.md) | Клик по ссылке уводит со страницы; меню спрятано в шевроне 18px | fixed → [T-044](../tasks/T-044-chat-incident-fixes.md) |
+| [BUG-003](BUG-003-long-run-invisible.md) | Часовой запуск без понятного прогресса и управления из UI | fixed → [T-044](../tasks/T-044-chat-incident-fixes.md) (стрим в БД и лимит длительности — отложено) |
+| [BUG-004](BUG-004-stale-browser-cache.md) | После деплоя вкладка сидит на старой сборке («всё исчезло») | fixed → [T-044](../tasks/T-044-chat-incident-fixes.md) |
+| [BUG-005](BUG-005-active-runs-window.md) | Подозрение: окно 2ч в active_runs не фильтрует старые запуски | fixed → [T-044](../tasks/T-044-chat-incident-fixes.md) |
