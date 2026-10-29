@@ -110,6 +110,20 @@ export type SessionState = {
   config: Record<string, unknown>;
 } | null;
 
+/** Прогресс быстрого разбора книги в разговоре (активность разговора, T-046).
+ *  Отдельная сущность от сессии-урока: разбор — курсор книги по главам. */
+export type ReviewProgress = {
+  activity_uid: string;
+  source_uid: string;
+  title: string;
+  kind: string;
+  done_chapters: number;
+  total_chapters: number;
+  current_chapter: number | null;
+  current_title: string | null;
+  status: string;
+};
+
 /** Живой запуск агента из agent_runs (root или субагент). */
 export type AgentRunInfo = {
   agent: string;
@@ -137,6 +151,7 @@ export type ConversationDetail = {
   focus_block_uid: string | null;
   messages: ChatMessage[];
   session: SessionState;
+  review_progress?: ReviewProgress | null;
   agent_state?: AgentState | null;
 };
 
@@ -275,6 +290,7 @@ export type SseEvent =
   | { event: "tool_end"; data: { call_id: string; name: string; ok: boolean; summary: string } }
   | { event: "card"; data: { call_id?: string; card: Card } }
   | { event: "session"; data: { session_uid?: string; state: string; allowed_events: string[]; chapter_idx?: number | null; progress: { theory_done: number; questions_done: number } } }
+  | { event: "review_progress"; data: ReviewProgress }
   | { event: "title"; data: { title: string } }
   | { event: "done"; data: { message_id: number | null } }
   | { event: "error"; data: { error: string; message: string } };

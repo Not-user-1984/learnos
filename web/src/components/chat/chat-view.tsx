@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
-import type { AgentState, ChatMessage, ConversationDetail, SseEvent } from "@/lib/types";
+import type { AgentState, ChatMessage, ConversationDetail, ReviewProgress, SseEvent } from "@/lib/types";
 import { useSearchParams } from "next/navigation";
 import { streamChat, streamResume } from "@/lib/chat/stream";
 import { apiPost, apiUpload } from "@/lib/api";
@@ -55,6 +55,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   const [streamError, setStreamError] = useState<string | null>(null);
   const [busyHint, setBusyHint] = useState<string | null>(null);
   const [session, setSession] = useState(conversation.session);
+  const [reviewProgress, setReviewProgress] = useState<ReviewProgress | null>(conversation.review_progress ?? null);
   const [input, setInput] = useState("");
   const [title, setTitle] = useState(conversation.title);
   const [reconnecting, setReconnecting] = useState(false);
@@ -85,6 +86,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     setMessages(fresh.messages ?? []);
     if (fresh.title) setTitle(fresh.title);
     if (fresh.session) setSession(fresh.session);
+    setReviewProgress(fresh.review_progress ?? null);
   };
 
   /** Общий прогон SSE-стрима (сообщение и resume): события → состояние ленты.
@@ -156,6 +158,10 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           break;
         case "title":
           setTitle(ev.data.title);
+          break;
+        case "review_progress":
+          // mark_chapter_done/finish_session двигают курсор книги — полоса обновляется
+          setReviewProgress(ev.data);
           break;
         case "error":
           gotError = true;
@@ -356,6 +362,10 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
             buttonClassName="rounded-lg p-1.5 text-muted-foreground transition hover:text-rose-500"
           />
         </header>
+
+        {/* статус-бар быстрого разбора: курсор книги по главам (активность разговора);
+            видео и материалы без глав (total ≤ 1) полосу не показывают */}
+        {reviewProgress && reviewProgress.total_chapters > 1 && <ReviewProgressBar progress={reviewProgress} />}
 
         {/* живой статус агента: бейдж работы (поллинг detail) или баннер прерывания с «Продолжить» */}
         {!streaming && (agentState?.working || agentState?.interrupted || reconnecting || busyHint) && (
@@ -578,6 +588,62 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           </aside>
         </>
       )}
+    </div>
+  );
+}
+
+/** Статус-бар быстрого разбора книги: сколько глав пройдено / всего, какая текущая.
+ *  Прогресс разбора — отдельно от сессии-урока: это курсор книги из активности
+ *  разговора, данные из БД — полоса переживает уход из разговора и возврат. */
+function ReviewProgressBar({ progress }: { progress: ReviewProgress }) {
+  const { done_chapters: done, total_chapters: total } = progress;
+  const finished = progress.status === "done" || done >= total;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  // до ~30 глав — сегменты по главам (видно, какие разобраны и какая сейчас); дальше — полоса
+  const segmented = total <= 30;
+  return (
+    <div className="border-b px-4 py-2">
+      <div className="mx-auto max-w-3xl">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Icon
+            name={finished ? "task_alt" : "auto_stories"}
+            size={15}
+            className="shrink-0 text-primary"
+          />
+          <span className="min-w-0 shrink truncate font-medium">{progress.title}</span>
+          <span className="shrink-0 tabular-nums">
+            {done}/{total} глав
+          </span>
+          <span
+            className={cn(
+              "ml-auto min-w-0 shrink truncate",
+              finished && "text-emerald-600 dark:text-emerald-400",
+            )}
+          >
+            {finished ? "книга разобрана" : progress.current_title ? `сейчас: ${progress.current_title}` : ""}
+          </span>
+        </div>
+        {segmented ? (
+          <div className="mt-1.5 flex gap-0.5" role="img" aria-label={`Пройдено ${done} из ${total} глав`}>
+            {Array.from({ length: total }, (_, i) => (
+              <span
+                key={i}
+                className={cn(
+                  "h-1.5 flex-1 rounded-full",
+                  i < done ? "bg-primary" : i === done && !finished ? "bg-primary/40" : "bg-muted",
+                )}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
