@@ -59,8 +59,8 @@ created: 2026-10-28
       `finish_session` (`server/app/modules/chat/service.py`, `agents.py`,
       тесты `server/tests/api/test_review_progress.py`); веб — компонент
       `ReviewProgressBar` под шапкой разговора (`web/src/components/chat/chat-view.tsx`).
-- [ ] Э2: разбор выводится блочно, как сессия. **Э2 ждёт ревью ZCode** (ветка `t-046-review-blocks`):
-      сервер — инструмент `show_chapter_review` в `server/app/modules/chat/tools.py` (карточка
+- [x] Э2: разбор выводится блочно, как сессия. **Э2 смержена и на проде** (ревью ZCode пройдено,
+      fast-forward до 16f691a, деплой подтверждён): сервер — инструмент `show_chapter_review` в `server/app/modules/chat/tools.py` (карточка
       `chapter_review`: title/key_points 3–5/concepts/applicable/questions 1–2/media), инструмент
       у quick_reviewer и root (`agents.py`), директива интента «review» ведёт к карточке
       (`service.py`), промпт quick_reviewer: разбор главы/видео = карточка + 2–3 строки
