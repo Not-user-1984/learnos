@@ -10,8 +10,13 @@ from .infra_tables import agent_runs_table
 
 # живые запуски старше этого возраста считаем мусором от прошлых процессов
 ACTIVE_RUN_MAX_AGE = datetime.timedelta(hours=2)
-# «прервано недавно» — окно, за котором interrupted-запуски ещё показываются баннером
+# «прервано недавно» — окно, за которым interrupted-запуски ещё показываются баннером
 INTERRUPTED_WINDOW = datetime.timedelta(hours=24)
+
+
+def _utcnow_naive() -> datetime.datetime:
+    """«Сейчас» в UTC без таймзоны: все сравнения времени трейсов — в одном типе."""
+    return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
 
 
 class DbRunRecorder:
@@ -20,7 +25,6 @@ class DbRunRecorder:
 
     def __init__(self, uow: UnitOfWorkFactory) -> None:
         self._uow = uow
-        self._clock = SystemClock()
 
     def start(
         self,
@@ -47,14 +51,15 @@ class DbRunRecorder:
                         duration_ms=0,
                         error=None,
                         parent_run_id=parent_run_id,
-                        created_at=now_iso(self._clock),
+                        created_at=now_iso(SystemClock()),
                     )
                 ).inserted_primary_key[0]
             )
 
     def progress(self, run_id: int, *, steps: int, tool_calls: int) -> None:
-        """Живой прогресс выполнения: агрегаты пишутся инкрементально по ходу запуска
-        (статус остаётся running до finish) — это то, что показывает badge «агент работает»."""
+        """Живой прогресс выполнения: агрегаты пишутся инкрементально по ходу
+        запуска (статус остаётся running до finish) — это то, что показывает
+        бейдж «агент работает»."""
         with self._uow() as uow:
             uow.session.execute(
                 agent_runs_table.update()
@@ -105,7 +110,7 @@ class DbRunRecorder:
         """Живые запуски разговора (root и субагенты несут один conversation_uid):
         status=running и возраст меньше ACTIVE_RUN_MAX_AGE."""
         rows = self._runs_of_conversation(conversation_uid, {"running"})
-        cutoff = self._clock.now() - ACTIVE_RUN_MAX_AGE
+        cutoff = _utcnow_naive() - ACTIVE_RUN_MAX_AGE
         return [
             {
                 "agent": r.agent,
@@ -120,7 +125,7 @@ class DbRunRecorder:
     def has_recent_interrupted(self, conversation_uid: str) -> bool:
         """Есть ли у разговора свежие interrupted-запуски (окно INTERRUPTED_WINDOW)."""
         rows = self._runs_of_conversation(conversation_uid, {"interrupted"})
-        cutoff = self._clock.now() - INTERRUPTED_WINDOW
+        cutoff = _utcnow_naive() - INTERRUPTED_WINDOW
         return any(self._parse_iso(r.created_at) >= cutoff for r in rows)
 
     def _runs_of_conversation(self, conversation_uid: str, statuses: set[str]):
@@ -136,4 +141,10 @@ class DbRunRecorder:
 
     @staticmethod
     def _parse_iso(value: str) -> datetime.datetime:
-        return datetime.datetime.fromisoformat(value)
+        """ISO-строка → naive UTC: aware-метки переводятся в UTC и теряют tzinfo,
+        чтобы сравнения с «сейчас» не смешивали aware и naive (TypeError — и фильтр
+        живых запусков молча терялся бы выше по стеку)."""
+        dt = datetime.datetime.fromisoformat(value)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(datetime.UTC).replace(tzinfo=None)
+        return dt
