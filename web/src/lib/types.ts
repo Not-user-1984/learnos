@@ -280,6 +280,12 @@ export interface Card {
   source_uid?: string;
   // quick_replies (кнопки-ответы на вопрос агента, T-045)
   replies?: string[];
+  // chapter_review (блочный разбор главы/видео, T-046 Э2)
+  media?: "chapter" | "video";
+  key_points?: string[];
+  concepts?: { term: string; definition: string }[];
+  applicable?: string[];
+  questions?: string[];
 }
 
 /** SSE-события чата. */
