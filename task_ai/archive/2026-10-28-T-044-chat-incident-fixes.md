@@ -1,7 +1,7 @@
 ---
 id: T-044
 title: Фиксы багов инцидента 2026-10-28 (BUG-001..005)
-status: active
+status: done
 priority: high
 from: task_ai/bugs BUG-001..005 (инцидент пользователя 2026-10-28)
 created: 2026-10-28
@@ -16,7 +16,10 @@ created: 2026-10-28
 
 Скоуп зафиксирован заказчиком в промпте запуска (обязательное/желательное/отложенное).
 
-**Ждёт ревью ZCode.** Ветка `t-044-chat-incident-fixes`, 8 коммитов от `origin/main`.
+**Закрыта 2026-10-28.** Ревью ZCode пройдено без замечаний, ветка смержена
+(fast-forward, head `0746fca`), прод задеплоен и проверен: health ok,
+`Cache-Control: no-cache` на /chat + immutable на /_next/static (curl),
+agent_state отвечает (миграция 0011 применилась — SELECT current_tool живой).
 
 ## Что изменилось (по багам)
 
