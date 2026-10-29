@@ -263,6 +263,8 @@ export interface Card {
   // action_offer (предложение действия) / attachment (вложение сообщения)
   description?: string;
   source_uid?: string;
+  // quick_replies (кнопки-ответы на вопрос агента, T-045)
+  replies?: string[];
 }
 
 /** SSE-события чата. */

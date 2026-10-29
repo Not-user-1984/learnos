@@ -1,6 +1,6 @@
 "use client";
 
-/** Карточки UI в чате: команда, вопрос, оценка, блок, job, превью конспекта, предложение действия. */
+/** Карточки UI в чате: команда, вопрос, оценка, блок, превью конспекта, предложение действия, кнопки-ответы. */
 
 import { useState } from "react";
 import Link from "next/link";
@@ -44,6 +44,8 @@ export function CardView({
       return <NoteDraftCardView card={card} onInsert={onInsert} onSend={onSend} />;
     case "action_offer":
       return <ActionOfferCardView card={card} onSend={onSend} />;
+    case "quick_replies":
+      return <QuickRepliesCardView card={card} onSend={onSend} />;
     default:
       return null;
   }
@@ -85,6 +87,45 @@ function ActionOfferCardView({ card, onSend }: { card: Card; onSend?: (t: string
           <span className="text-xs text-muted-foreground">агент предлагает — кнопки появятся после ответа</span>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Кнопки-ответы (T-045): короткие варианты на вопрос агента; клик = обычное сообщение.
+ *  После клика блокируются (как action_offer, T-044): повторный клик не плодит сообщения. */
+function QuickRepliesCardView({ card, onSend }: { card: Card; onSend?: (t: string) => void }) {
+  const [sent, setSent] = useState(false);
+  const answer = (text: string) => {
+    if (sent) return;
+    setSent(true);
+    onSend?.(text);
+  };
+  const replies = card.replies ?? [];
+  if (sent) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Icon name="progress_activity" size={14} className="animate-spin" /> отправлено — агент работает…
+      </span>
+    );
+  }
+  if (!onSend) {
+    return (
+      <div className="flex flex-wrap gap-2">
+        {replies.map((r) => (
+          <span key={r} className="rounded-full border bg-muted px-3 py-1 text-sm text-muted-foreground">
+            {r}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      {replies.map((r) => (
+        <Button key={r} size="sm" variant="outline" className="rounded-full" onClick={() => answer(r)}>
+          {r}
+        </Button>
+      ))}
     </div>
   );
 }
