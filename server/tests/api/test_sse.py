@@ -2,7 +2,7 @@
 
 import json
 
-from app.llm.providers.fake import FakeTurn
+from app.llm.providers.fake import FakeLLMProvider, FakeTurn
 
 
 def parse_sse(raw: str) -> list[tuple[str, dict]]:
@@ -148,3 +148,34 @@ def test_research_flag_directive_hidden_from_chat(client, fake_llm):
     # добавление источников — только по согласию через карточку offer_action (BUG-006)
     assert "offer_action" in system
     assert "НИЧЕГО не добавляй" in system
+
+
+def test_quick_replies_card_in_sse_and_history(client, fake_llm):
+    """offer_replies: карточка quick_replies доходит SSE-событием и сохраняется в ответе (T-045)."""
+    fake_llm.queue(
+        FakeTurn(
+            tool_calls=[
+                FakeLLMProvider.call("offer_replies", replies=["Дальше", "Подробнее", "Сессия по этой главе"])
+            ]
+        ),
+        FakeTurn(text="Глава разобрана. Что дальше?"),
+        FakeTurn(text="Разбор главы"),  # ответ для авто-заголовка (роль fast)
+    )
+    conv = client.post("/api/conversations", json={"mode": "free"}).json()
+    with client.stream(
+        "POST", f"/api/conversations/{conv['uid']}/messages", json={"content": "погнали"}
+    ) as resp:
+        raw = "".join(resp.iter_text())
+
+    events = parse_sse(raw)
+    assert [name for name, _ in events][-1] == "done"
+    cards = [data for name, data in events if name == "card"]
+    assert cards and cards[0]["card"]["type"] == "quick_replies"
+    assert cards[0]["card"]["replies"] == ["Дальше", "Подробнее", "Сессия по этой главе"]
+
+    # карточка сохранена в сообщении агента — кнопки кликабельны и в истории разговора
+    fresh = client.get(f"/api/conversations/{conv['uid']}").json()
+    assistant_cards = [
+        c for m in fresh["messages"] if m["role"] == "assistant" for c in (m.get("cards") or [])
+    ]
+    assert any(c["type"] == "quick_replies" and "Дальше" in c["replies"] for c in assistant_cards)

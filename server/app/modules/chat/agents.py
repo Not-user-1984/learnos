@@ -43,6 +43,7 @@ free_chat = AgentSpec(
             "send_block_to_telegram",
             "send_chapter_to_telegram",
             "offer_action",
+            "offer_replies",
             "save_skill",
         }
     ),
@@ -71,6 +72,7 @@ quick_reviewer = AgentSpec(
             "get_profile",
             "get_block",
             "mark_chapter_done",
+            "offer_replies",
             "send_telegram_text",
             "send_block_to_telegram",
             "send_chapter_to_telegram",
@@ -102,6 +104,7 @@ session_tutor = AgentSpec(
             "get_block",
             "get_profile",
             "start_session",
+            "offer_replies",
             "send_telegram_text",
             "send_block_to_telegram",
             "send_chapter_to_telegram",

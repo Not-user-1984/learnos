@@ -1,11 +1,32 @@
-"""Режимы чата: MODES (схемы) и AGENT_BY_MODE (сервис) согласованы."""
+"""Режимы чата: MODES (схемы) и AGENT_BY_MODE (сервис) согласованы; кнопки-ответы (T-045)."""
 
+from types import SimpleNamespace
+
+from app.kernel.tools.spec import ToolContext
+from app.modules.chat.agents import free_chat, quick_reviewer, session_tutor
 from app.modules.chat.schemas import MODES
 from app.modules.chat.service import AGENT_BY_MODE, RESEARCH_DIRECTIVE
+from app.modules.chat.tools import OfferRepliesArgs, chat_tools
 
 
 def test_agent_by_mode_covers_all_modes():
     assert set(AGENT_BY_MODE) == set(MODES), "новый режим чата должен получить агента"
+
+
+def test_offer_replies_returns_quick_replies_card():
+    """offer_replies прикладывает карточку quick_replies — варианты ответа без парсинга текста."""
+    tools = {t.name: t for t in chat_tools(SimpleNamespace())}
+    out = tools["offer_replies"].handler(
+        OfferRepliesArgs(replies=["Дальше", "Подробнее", "Сессия по этой главе"]), ToolContext()
+    )
+    assert out["_card"]["type"] == "quick_replies"
+    assert out["_card"]["replies"] == ["Дальше", "Подробнее", "Сессия по этой главе"]
+
+
+def test_offer_replies_lives_in_tutor_toolsets():
+    """Кнопки-ответы доступны тьюторам, которые спрашивают короткий выбор (root наследует free_chat)."""
+    for spec in (free_chat, quick_reviewer, session_tutor):
+        assert "offer_replies" in spec.tools, f"{spec.name} должен уметь предлагать кнопки-ответы"
 
 
 def test_research_directive_adds_sources_only_by_consent():

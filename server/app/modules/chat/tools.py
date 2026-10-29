@@ -1,5 +1,7 @@
 """Инструменты модуля chat: оркестрация субагентов (run_agent, list_agents), T-035."""
 
+from typing import Annotated
+
 from pydantic import BaseModel, Field
 
 from ...agent.runtime import AgentRuntime
@@ -34,6 +36,16 @@ class OfferActionArgs(BaseModel):
     title: str = Field(description="Короткий заголовок предложения")
     description: str | None = Field(
         default=None, description="Что именно произойдёт при согласии пользователя"
+    )
+
+
+class OfferRepliesArgs(BaseModel):
+    """Аргументы карточки кнопок-ответов (T-045)."""
+
+    replies: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(
+        min_length=2,
+        max_length=4,
+        description="Короткие варианты ответа (2–4): клик отправит текст варианта сообщением",
     )
 
 
@@ -88,6 +100,18 @@ def chat_tools(c) -> list[ToolSpec]:
             },
         }
 
+    def offer_replies(args: OfferRepliesArgs, ctx: ToolContext) -> dict:
+        """Приложить к вопросу кнопки-варианты ответа; клик придёт следующим сообщением."""
+        del ctx
+        return {
+            "offered": True,
+            "note": "кнопки показаны — закончи ответ вопросом и дождись реакции пользователя",
+            "_card": {
+                "type": "quick_replies",
+                "replies": list(args.replies),
+            },
+        }
+
     return [
         ToolSpec(
             name="run_agent",
@@ -121,6 +145,19 @@ def chat_tools(c) -> list[ToolSpec]:
             args_model=OfferActionArgs,
             handler=offer_action,
             label="Предложение",
+        ),
+        ToolSpec(
+            name="offer_replies",
+            module="chat",
+            description=(
+                "Приложить к вопросу кнопки-варианты ответа (2–4 коротких): «Дальше / Подробнее / "
+                "Сессия по этой главе». Клик кнопки отправит текст варианта сообщением. Только для "
+                "закрытых вопросов с коротким выбором; открытые вопросы и фейнман-проверки — без кнопок. "
+                "Вызывай в конце ответа, вопрос задай текстом сообщения."
+            ),
+            args_model=OfferRepliesArgs,
+            handler=offer_replies,
+            label="Кнопки-ответы",
         ),
     ]
 
