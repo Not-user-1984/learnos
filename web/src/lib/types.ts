@@ -115,6 +115,8 @@ export type AgentRunInfo = {
   agent: string;
   steps: number;
   tool_calls: number;
+  /** Чем запуск занят прямо сейчас: label последнего инструмента (BUG-003). */
+  current?: string | null;
   started_at: string;
 };
 

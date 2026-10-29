@@ -361,12 +361,17 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
         {!streaming && (agentState?.working || agentState?.interrupted || reconnecting || busyHint) && (
           <div className="flex flex-col gap-1.5 border-b px-4 py-2">
             {agentState?.working && (
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <Icon name="progress_activity" size={15} className="animate-spin shrink-0" />
-                <span>
+                <span className="min-w-0">
                   агент работает:{" "}
-                  {agentState.runs.map((r) => `${r.agent}${r.steps ? ` · шаг ${r.steps}` : ""}`).join(" / ")}
+                  {agentState.runs
+                    .map((r) => [r.agent, r.steps ? `шаг ${r.steps}` : "", r.current].filter(Boolean).join(" · "))
+                    .join(" / ") || "…"}
                 </span>
+                <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={() => void stop()}>
+                  <Icon name="stop_circle" size={14} /> Остановить
+                </Button>
                 {reconnecting && <span className="text-amber-600 dark:text-amber-400">· связь прервалась, догоняю ответ…</span>}
               </p>
             )}
