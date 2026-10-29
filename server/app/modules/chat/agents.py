@@ -77,6 +77,7 @@ quick_reviewer = AgentSpec(
             "get_block",
             "mark_chapter_done",
             "offer_replies",
+            "show_chapter_review",
             "send_telegram_text",
             "send_block_to_telegram",
             "send_chapter_to_telegram",
@@ -150,6 +151,8 @@ root = AgentSpec(
         | {"run_agent", "list_agents", "propose_change"}
         | SESSION_TOOLS
         | {"get_session_state", "mark_chapter_done", "get_review_queue", "answer_review"}
+        # разбор главы карточкой: root ведёт интент «review» (единый вход) сам
+        | {"show_chapter_review"}
     ),
     max_steps=30,
 )

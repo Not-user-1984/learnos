@@ -1,12 +1,15 @@
-"""Режимы чата: MODES (схемы) и AGENT_BY_MODE (сервис) согласованы; кнопки-ответы (T-045)."""
+"""Режимы чата: MODES/AGENT_BY_MODE согласованы; кнопки-ответы (T-045), блочный разбор (T-046 Э2)."""
 
 from types import SimpleNamespace
 
+import pytest
+from pydantic import ValidationError
+
 from app.kernel.tools.spec import ToolContext
-from app.modules.chat.agents import free_chat, quick_reviewer, session_tutor
+from app.modules.chat.agents import free_chat, quick_reviewer, root, session_tutor
 from app.modules.chat.schemas import MODES
-from app.modules.chat.service import AGENT_BY_MODE, RESEARCH_DIRECTIVE
-from app.modules.chat.tools import OfferRepliesArgs, chat_tools
+from app.modules.chat.service import AGENT_BY_MODE, INTENT_DIRECTIVES, RESEARCH_DIRECTIVE
+from app.modules.chat.tools import OfferRepliesArgs, ShowChapterReviewArgs, chat_tools
 
 
 def test_agent_by_mode_covers_all_modes():
@@ -27,6 +30,58 @@ def test_offer_replies_lives_in_tutor_toolsets():
     """Кнопки-ответы доступны тьюторам, которые спрашивают короткий выбор (root наследует free_chat)."""
     for spec in (free_chat, quick_reviewer, session_tutor):
         assert "offer_replies" in spec.tools, f"{spec.name} должен уметь предлагать кнопки-ответы"
+
+
+def _review_args(**overrides) -> ShowChapterReviewArgs:
+    """Валидные аргументы разбора главы; переопределения — для проверки лимитов."""
+    base = dict(
+        title="Глава 3. Процессы",
+        key_points=[
+            "Процесс = программа в выполнении",
+            "Контекст — снимок состояния",
+            "fork порождает копию",
+        ],
+        concepts=[{"term": "процесс", "definition": "программа в выполнении"}],
+        applicable=["ps aux на твоём маке покажет процессы терминала"],
+        questions=["Чем процесс отличается от потока?"],
+    )
+    base.update(overrides)
+    return ShowChapterReviewArgs(**base)
+
+
+def test_show_chapter_review_returns_card():
+    """show_chapter_review оформляет итог разбора карточкой chapter_review со всеми секциями."""
+    tools = {t.name: t for t in chat_tools(SimpleNamespace())}
+    args = _review_args(
+        media="video",
+        key_points=["Пункты", "не обязаны", "быть длинными", "тут четыре"],
+    )
+    out = tools["show_chapter_review"].handler(args, ToolContext())
+    assert out["_card"]["type"] == "chapter_review"
+    assert out["_card"]["media"] == "video"
+    assert out["_card"]["title"] == "Глава 3. Процессы"
+    assert len(out["_card"]["key_points"]) == 4
+    assert out["_card"]["concepts"] == [{"term": "процесс", "definition": "программа в выполнении"}]
+    assert out["_card"]["applicable"] and out["_card"]["questions"]
+
+
+def test_show_chapter_review_validates_sections():
+    """Секции карточки жёстко ограничены: 3–5 пунктов главного, 1–2 вопроса, media — chapter|video."""
+    with pytest.raises(ValidationError):
+        _review_args(key_points=["один", "два"])
+    with pytest.raises(ValidationError):
+        _review_args(questions=["много", "вопросов", "сразу"])
+    with pytest.raises(ValidationError):
+        _review_args(media="podcast")
+
+
+def test_show_chapter_review_lives_in_review_toolsets():
+    """Карточку разбора показывают quick_reviewer и root (root ведёт интент «review» единого входа)."""
+    for spec in (quick_reviewer, root):
+        assert "show_chapter_review" in spec.tools, f"{spec.name} должен показывать разбор карточкой"
+    assert "show_chapter_review" not in free_chat.tools
+    # директива интента «review» ведёт к карточке, а не к текстовой простыне
+    assert "show_chapter_review" in INTENT_DIRECTIVES["review"]
 
 
 def test_research_directive_adds_sources_only_by_consent():

@@ -1,6 +1,6 @@
 """Инструменты модуля chat: оркестрация субагентов (run_agent, list_agents), T-035."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -46,6 +46,42 @@ class OfferRepliesArgs(BaseModel):
         min_length=2,
         max_length=4,
         description="Короткие варианты ответа (2–4): клик отправит текст варианта сообщением",
+    )
+
+
+class ReviewConcept(BaseModel):
+    """Понятие разбора: термин — определение."""
+
+    term: str = Field(min_length=1, max_length=80, description="Термин")
+    definition: str = Field(min_length=1, max_length=300, description="Определение термина")
+
+
+class ShowChapterReviewArgs(BaseModel):
+    """Аргументы карточки разбора главы/видео (T-046 Э2)."""
+
+    title: str = Field(min_length=1, max_length=120, description="Заголовок главы или название видео")
+    key_points: list[Annotated[str, Field(min_length=1, max_length=240)]] = Field(
+        min_length=3,
+        max_length=5,
+        description="Главное — 3–5 пунктов по одному тезису",
+    )
+    concepts: list[ReviewConcept] = Field(
+        min_length=1,
+        max_length=8,
+        description="Ключевые понятия: термин — определение",
+    )
+    applicable: list[Annotated[str, Field(min_length=1, max_length=300)]] = Field(
+        min_length=1,
+        max_length=5,
+        description="Что применимо пользователю (с учётом профиля из контекста)",
+    )
+    questions: list[Annotated[str, Field(min_length=1, max_length=300)]] = Field(
+        min_length=1,
+        max_length=2,
+        description="Вопросы на подумать",
+    )
+    media: Literal["chapter", "video"] = Field(
+        default="chapter", description="chapter — глава книги, video — разбор видео целиком"
     )
 
 
@@ -112,6 +148,23 @@ def chat_tools(c) -> list[ToolSpec]:
             },
         }
 
+    def show_chapter_review(args: ShowChapterReviewArgs, ctx: ToolContext) -> dict:
+        """Показать разбор главы/видео структурированной карточкой."""
+        del ctx
+        return {
+            "shown": True,
+            "note": "карточка показана — дай короткое текстовое сопровождение и предложи продолжение",
+            "_card": {
+                "type": "chapter_review",
+                "media": args.media,
+                "title": args.title,
+                "key_points": list(args.key_points),
+                "concepts": [{"term": c.term, "definition": c.definition} for c in args.concepts],
+                "applicable": list(args.applicable),
+                "questions": list(args.questions),
+            },
+        }
+
     return [
         ToolSpec(
             name="run_agent",
@@ -158,6 +211,20 @@ def chat_tools(c) -> list[ToolSpec]:
             args_model=OfferRepliesArgs,
             handler=offer_replies,
             label="Кнопки-ответы",
+        ),
+        ToolSpec(
+            name="show_chapter_review",
+            module="chat",
+            description=(
+                "Показать разбор главы (или видео целиком) структурированной карточкой: title — "
+                "заголовок главы/название видео, key_points — главное (3–5 пунктов), concepts — "
+                "ключевые понятия (термин — определение), applicable — что применимо пользователю "
+                "с учётом профиля, questions — 1–2 вопроса на подумать. Итог разбора живёт в карточке: "
+                "текстом дай только 2–3 строки сопровождения, не дублируй секции."
+            ),
+            args_model=ShowChapterReviewArgs,
+            handler=show_chapter_review,
+            label="Разбор главы",
         ),
     ]
 

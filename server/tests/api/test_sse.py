@@ -179,3 +179,52 @@ def test_quick_replies_card_in_sse_and_history(client, fake_llm):
         c for m in fresh["messages"] if m["role"] == "assistant" for c in (m.get("cards") or [])
     ]
     assert any(c["type"] == "quick_replies" and "Дальше" in c["replies"] for c in assistant_cards)
+
+
+def test_chapter_review_card_in_sse_and_history(client, fake_llm):
+    """show_chapter_review: карточка разбора доходит SSE и сохраняется в ответе (T-046 Э2)."""
+    fake_llm.queue(
+        FakeTurn(
+            tool_calls=[
+                FakeLLMProvider.call(
+                    "show_chapter_review",
+                    title="Глава 1. Введение в ОС",
+                    key_points=[
+                        "ОС — менеджер ресурсов",
+                        "Системные вызовы — интерфейс ядра",
+                        "Процессы изолированы друг от друга",
+                    ],
+                    concepts=[{"term": "системный вызов", "definition": "запрос программы к ядру ОС"}],
+                    applicable=["посмотри strace на любую утилиту в терминале"],
+                    questions=["Зачем ядру отделение от пользовательского режима?"],
+                )
+            ]
+        ),
+        FakeTurn(text="Разобрали вводную главу. Дальше?"),
+        FakeTurn(text="Разбор книги"),  # ответ для авто-заголовка (роль fast)
+    )
+    conv = client.post("/api/conversations", json={"mode": "quick"}).json()
+    with client.stream(
+        "POST", f"/api/conversations/{conv['uid']}/messages", json={"content": "погнали"}
+    ) as resp:
+        raw = "".join(resp.iter_text())
+
+    events = parse_sse(raw)
+    assert [name for name, _ in events][-1] == "done"
+    cards = [data for name, data in events if name == "card"]
+    assert cards and cards[0]["card"]["type"] == "chapter_review"
+    card = cards[0]["card"]
+    assert card["title"] == "Глава 1. Введение в ОС"
+    assert card["media"] == "chapter"
+    assert len(card["key_points"]) == 3
+    assert card["concepts"] == [{"term": "системный вызов", "definition": "запрос программы к ядру ОС"}]
+    assert card["applicable"] and card["questions"]
+
+    # карточка сохранена в сообщении агента — история показывает разбор живой карточкой
+    fresh = client.get(f"/api/conversations/{conv['uid']}").json()
+    assistant_cards = [
+        c for m in fresh["messages"] if m["role"] == "assistant" for c in (m.get("cards") or [])
+    ]
+    assert any(
+        c["type"] == "chapter_review" and c["title"] == "Глава 1. Введение в ОС" for c in assistant_cards
+    )
