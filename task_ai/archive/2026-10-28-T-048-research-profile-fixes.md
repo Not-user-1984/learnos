@@ -1,7 +1,7 @@
 ---
 id: T-048
 title: Фиксы BUG-006 (research не добавляет источники сам) и BUG-007 (профиль влияет на агентов)
-status: active
+status: done
 priority: high
 from: task_ai/bugs BUG-006 + BUG-007 (батч-репорт пользователя 2026-10-28)
 created: 2026-10-28
@@ -47,7 +47,8 @@ free_chat, quick_reviewer, session_tutor). Включить about/name в кон
 
 ## Статус
 
-Ждёт ревью ZCode: ветка `t-048-research-profile-fixes`, коммиты 36422cf (BUG-006)
+Закрыта 2026-10-28: ревью ZCode без замечаний, fast-forward мердж (head 38bf579),
+деплой на CT 132 подтверждён (health ok). Коммиты 36422cf (BUG-006)
 и b6cbd1f (BUG-007); реестр багов переведён в fixed со ссылкой на T-048.
 
 Изменённое:

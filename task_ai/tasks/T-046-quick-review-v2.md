@@ -53,7 +53,7 @@ created: 2026-10-28
 ## Критерии готовности
 
 - [x] Э1: статус-бар книги в разборе, прогресс разбора виден отдельно
-      от сессий, жив после перезахода. **Э1 ждёт ревью ZCode** (ветка
+      от сессий, жив после перезахода. **Э1 смержена и на проде** (ревью ZCode пройдено, ветка
       `t-046-review-progress`): сервер — `review_progress` в GET
       `/api/conversations/{uid}` и SSE-событие после `mark_chapter_done`/
       `finish_session` (`server/app/modules/chat/service.py`, `agents.py`,
