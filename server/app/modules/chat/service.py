@@ -15,7 +15,7 @@ from ...kernel.errors import Conflict, NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
 from ...llm.router import ModelRouter
 from ...llm.types import Message
-from .agents import SESSION_TOOLS
+from .agents import REVIEW_TOOLS, SESSION_TOOLS
 from .domain import content_note
 from .infra.sql_repo import ConversationRepository, MessageRepository
 from .schemas import INTENTS, MODES
@@ -195,11 +195,12 @@ class ChatService:
             return self._convs.get(uow.session, uid)
 
     def get_conversation(self, uid: str) -> dict:
-        """Разговор + сообщения + сессия (если есть, любым режимом) + сценарий + состояние агента."""
+        """Разговор: сообщения, сессия, прогресс разбора, сценарий, состояние агента."""
         with self._uow() as uow:
             conv = self._convs.get(uow.session, uid)
             conv["messages"] = self._msgs.list(uow.session, conv["id"])
             conv["session"] = self._learning.session_for_conversation(conv["id"])
+            conv["review_progress"] = self._review_progress(conv)
             conv["scenario"] = self._scenario(conv, self._activity_source_kind(conv))
             conv["agent_state"] = self._agent_state(uid, conv["messages"])
             return conv
@@ -403,6 +404,12 @@ class ChatService:
                         fresh = self._learning.session_for_conversation(conv["id"])
                         if fresh:
                             yield _session_event(fresh)
+                    # курсор книги двигается (глава разобрана / сессия завершена) —
+                    # статус-бар быстрого разбора обновляется
+                    if ev.name in REVIEW_TOOLS:
+                        progress = self._review_progress(conv)
+                        if progress:
+                            yield SseEvent("review_progress", progress)
                 elif ev.type == "tool_start":
                     yield SseEvent(
                         "tool_start",
@@ -509,6 +516,37 @@ class ChatService:
             return self._library.get_source(act["source_id"])["kind"]
         except NotFound:
             return None
+
+    def _review_progress(self, conv: dict) -> dict | None:
+        """Прогресс быстрого разбора книги разговора: главы пройдено/всего, текущая глава.
+
+        Прогресс разбора живёт отдельно от сессии-урока: сессия — углублённое
+        изучение со стейт-машиной, разбор — курсор книги по главам (активность).
+        None — разговор без активности; материалы с total_chapters ≤ 1 (видео)
+        полосу не показывают, но данные отдаются честными.
+        """
+        if not conv.get("activity_id"):
+            return None
+        try:
+            act = self._learning.get_activity(conv["activity_id"])
+            src = self._library.get_source(act["source_id"])
+        except NotFound:
+            return None
+        total = int(act["total_chapters"])
+        done = max(0, min(act["cursor_chapter"] - 1, total))
+        finished = total > 0 and done >= total
+        current = next((c for c in src.get("chapters", []) if c["idx"] == act["cursor_chapter"]), None)
+        return {
+            "activity_uid": act["uid"],
+            "source_uid": src["uid"],
+            "title": act["title"],
+            "kind": src["kind"],
+            "done_chapters": done,
+            "total_chapters": total,
+            "current_chapter": None if finished else act["cursor_chapter"],
+            "current_title": _chapter_label(current) if not finished and current else None,
+            "status": act["status"],
+        }
 
     @staticmethod
     def _scenario(conv: dict, src_kind: str | None = None) -> str:

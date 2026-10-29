@@ -12,6 +12,10 @@ AGENTS_DIR = Path(__file__).parent / "agents"
 # созданную по интенту «session» (сессия привязана к разговору)
 SESSION_TOOLS = frozenset({"start_session", "advance", "practice_step", "finish_session"})
 
+# инструменты, двигающие курсор книги (активность разговора): после них статус-бар
+# быстрого разбора обновляется событием review_progress
+REVIEW_TOOLS = frozenset({"mark_chapter_done", "finish_session"})
+
 free_chat = AgentSpec(
     name="free_chat",
     description=(
