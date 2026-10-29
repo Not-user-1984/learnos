@@ -145,3 +145,6 @@ def test_research_flag_directive_hidden_from_chat(client, fake_llm):
     assert "ресёрч-цикл" in system
     assert "web_search" in system
     assert "torrent_fetch" in system  # подсказка про скилл закачек (T-029)
+    # добавление источников — только по согласию через карточку offer_action (BUG-006)
+    assert "offer_action" in system
+    assert "НИЧЕГО не добавляй" in system

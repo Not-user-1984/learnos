@@ -1,11 +1,21 @@
 """Режимы чата: MODES (схемы) и AGENT_BY_MODE (сервис) согласованы."""
 
 from app.modules.chat.schemas import MODES
-from app.modules.chat.service import AGENT_BY_MODE
+from app.modules.chat.service import AGENT_BY_MODE, RESEARCH_DIRECTIVE
 
 
 def test_agent_by_mode_covers_all_modes():
     assert set(AGENT_BY_MODE) == set(MODES), "новый режим чата должен получить агента"
+
+
+def test_research_directive_adds_sources_only_by_consent():
+    """Ресёрч не добавляет источники сам: карточка offer_action → согласие → добавление (BUG-006)."""
+    assert "offer_action" in RESEARCH_DIRECTIVE
+    assert "НИЧЕГО не добавляй" in RESEARCH_DIRECTIVE
+    # пользователь может править список прямо в ответе («добавь только первые два»)
+    assert "добавь именно выбранные" in RESEARCH_DIRECTIVE
+    # старое поведение — «добавь сам в Библиотеку» — запрещено возвращать
+    assert "добавь сам" not in RESEARCH_DIRECTIVE
 
 
 def _svc_with_source(lang: str | None):
@@ -15,7 +25,9 @@ def _svc_with_source(lang: str | None):
     from app.modules.chat.service import ChatService
 
     svc = ChatService.__new__(ChatService)
-    svc._profile = SimpleNamespace(machines_brief=lambda: "машины", learning_brief=lambda: "стиль")
+    svc._profile = SimpleNamespace(
+        person_brief=lambda: "имя", machines_brief=lambda: "машины", learning_brief=lambda: "стиль"
+    )
     svc._learning = SimpleNamespace(
         get_activity=lambda _a: {
             "id": 1,
