@@ -49,8 +49,15 @@ export function CardView({
   }
 }
 
-/** Предложение действия (T-036): заголовок + описание, решение — обычным сообщением. */
+/** Предложение действия (T-036): заголовок + описание, решение — обычным сообщением.
+ *  После клика кнопки блокируются (BUG-001): повторное «Да» не плодит сообщения. */
 function ActionOfferCardView({ card, onSend }: { card: Card; onSend?: (t: string) => void }) {
+  const [sent, setSent] = useState(false);
+  const answer = (text: string) => {
+    if (sent) return;
+    setSent(true);
+    onSend?.(text);
+  };
   return (
     <div className="rounded-xl border border-primary/40 bg-primary/5 p-4">
       <p className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-primary">
@@ -60,14 +67,20 @@ function ActionOfferCardView({ card, onSend }: { card: Card; onSend?: (t: string
       {card.description && <p className="mt-1 text-sm text-muted-foreground">{card.description}</p>}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {onSend ? (
-          <>
-            <Button size="sm" onClick={() => onSend(`Да — делай: «${card.title}»`)}>
-              <Icon name="check" size={16} className="mr-1" /> Да
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => onSend(`Нет, не надо: «${card.title}»`)}>
-              <Icon name="close" size={16} className="mr-1" /> Нет
-            </Button>
-          </>
+          sent ? (
+            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Icon name="progress_activity" size={14} className="animate-spin" /> отправлено — агент работает…
+            </span>
+          ) : (
+            <>
+              <Button size="sm" onClick={() => answer(`Да — делай: «${card.title}»`)}>
+                <Icon name="check" size={16} className="mr-1" /> Да
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => answer(`Нет, не надо: «${card.title}»`)}>
+                <Icon name="close" size={16} className="mr-1" /> Нет
+              </Button>
+            </>
+          )
         ) : (
           <span className="text-xs text-muted-foreground">агент предлагает — кнопки появятся после ответа</span>
         )}

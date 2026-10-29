@@ -35,7 +35,17 @@ export async function streamResume(conversationUid: string, onEvent: (ev: SseEve
 
 async function readSse(res: Response, onEvent: (ev: SseEvent) => void): Promise<void> {
   if (!res.ok || !res.body) {
-    onEvent({ event: "error", data: { error: "http", message: `HTTP ${res.status}` } });
+    // HTTP-ошибки до стрима (например 409 «агент уже работает») несут пояснение в JSON-теле
+    let error = "http";
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string; message?: string };
+      error = body.error ?? error;
+      message = body.message ?? message;
+    } catch {
+      // тело не JSON — остаётся код статуса
+    }
+    onEvent({ event: "error", data: { error, message } });
     return;
   }
   const reader = res.body.getReader();

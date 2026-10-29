@@ -53,6 +53,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   const [chips, setChips] = useState<ToolChip[]>([]);
   const [liveCards, setLiveCards] = useState<ChatMessage["cards"]>([]);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [busyHint, setBusyHint] = useState<string | null>(null);
   const [session, setSession] = useState(conversation.session);
   const [input, setInput] = useState("");
   const [title, setTitle] = useState(conversation.title);
@@ -86,8 +87,9 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     if (fresh.session) setSession(fresh.session);
   };
 
-  /** Общий прогон SSE-стрима (сообщение и resume): события → состояние ленты. */
-  const runStream = async (start: (onEvent: (ev: SseEvent) => void, signal: AbortSignal) => Promise<void>) => {
+  /** Общий прогон SSE-стрима (сообщение и resume): события → состояние ленты.
+   *  Возвращает true, если разговор был занят (409/conflict) — сообщение не ушло. */
+  const runStream = async (start: (onEvent: (ev: SseEvent) => void, signal: AbortSignal) => Promise<void>): Promise<boolean> => {
     setStreaming(true);
     setStreamText("");
     setChips([]);
@@ -100,6 +102,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     let cards: ChatMessage["cards"] = [];
     let gotDone = false;
     let gotError = false;
+    let busyConflict = false;
     let streamFail: unknown = null;
     await start((ev: SseEvent) => {
       switch (ev.event) {
@@ -156,8 +159,15 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           break;
         case "error":
           gotError = true;
-          setStreamError(ev.data.message);
-          toast.error(ev.data.message);
+          if (ev.data.error === "conflict") {
+            // агент уже работает над прошлым сообщением: не ошибка, а подсказка
+            busyConflict = true;
+            setBusyHint(ev.data.message);
+            toast.info(ev.data.message);
+          } else {
+            setStreamError(ev.data.message);
+            toast.error(ev.data.message);
+          }
           break;
         case "done":
           gotDone = true;
@@ -176,7 +186,9 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     });
 
     const userStopped = streamFail instanceof DOMException && streamFail.name === "AbortError";
-    if (!gotDone && !gotError && !userStopped) {
+    if (busyConflict) {
+      // сообщение не сохранилось на сервере — optimistичный бабл откатываем
+    } else if (!gotDone && !gotError && !userStopped) {
       // стрим оборвался без финала (деплой перезапустил веб, сеть моргнула): ядро
       // продолжает писать ответ в БД — поллинг agent_state подхватит его, лимита
       // времени нет (длинные автономные цепочки длятся 10+ минут)
@@ -188,18 +200,21 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     }
     setStreaming(false);
     abortRef.current = null;
+    return busyConflict;
   };
 
   const send = async (content: string, opts?: { research?: boolean; intent?: string }) => {
     if (!content.trim() || streaming) return;
     lastSentRef.current = content;
     setInput("");
+    setBusyHint(null);
     const attached = attachment;
     setAttachment(null);
+    const optimisticId = -Date.now();
     setMessages((m) => [
       ...m,
       {
-        id: -Date.now(),
+        id: optimisticId,
         role: "user",
         content,
         cards: attached ? [{ type: "attachment", title: attached.title, source_uid: attached.uid }] : [],
@@ -207,13 +222,18 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
       },
     ]);
     setAgentState(null);
-    await runStream((onEvent, signal) =>
+    const busy = await runStream((onEvent, signal) =>
       streamChat(conversation.uid, content, onEvent, signal, {
         research: opts?.research,
         intent: opts?.intent,
         attachments: attached ? [attached.uid] : undefined,
       }),
     );
+    if (busy) {
+      // 409: сервер не сохранил сообщение — убираем бабл, покажем подсказку
+      setMessages((m) => m.filter((msg) => msg.id !== optimisticId));
+      setAgentState((s) => s ?? { working: true, runs: [], interrupted: false });
+    }
   };
 
   // «Продолжить» после прерывания: генерация заново по последнему user-сообщению
@@ -338,7 +358,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
         </header>
 
         {/* живой статус агента: бейдж работы (поллинг detail) или баннер прерывания с «Продолжить» */}
-        {!streaming && (agentState?.working || agentState?.interrupted || reconnecting) && (
+        {!streaming && (agentState?.working || agentState?.interrupted || reconnecting || busyHint) && (
           <div className="flex flex-col gap-1.5 border-b px-4 py-2">
             {agentState?.working && (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -348,6 +368,12 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
                   {agentState.runs.map((r) => `${r.agent}${r.steps ? ` · шаг ${r.steps}` : ""}`).join(" / ")}
                 </span>
                 {reconnecting && <span className="text-amber-600 dark:text-amber-400">· связь прервалась, догоняю ответ…</span>}
+              </p>
+            )}
+            {busyHint && (
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Icon name="hourglass_top" size={15} className="shrink-0 text-primary" />
+                {busyHint}
               </p>
             )}
             {!agentState?.working && reconnecting && (
