@@ -1,9 +1,9 @@
 "use client";
 
-/** Ссылка с меню действий: YouTube- и PDF-ссылки получают кнопку-шеврон → попап
- *  («Открыть», «Добавить в источники», «Быстрый разбор» / «Изучить книгу» —
- *  новый root-разговор со ссылкой первым сообщением). Обычные http(s)-ссылки
- *  рендерятся как раньше. */
+/** Ссылка с меню действий: у YouTube- и PDF-ссылок клик по тексту и кнопка-шеврон
+ *  открывают попап («Открыть в новой вкладке», «Добавить в источники», «Быстрый
+ *  разбор» / «Изучить книгу» — новый root-разговор со ссылкой первым сообщением).
+ *  Обычные http(s)-ссылки рендерятся как раньше — навигация без меню. */
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -118,7 +118,18 @@ export function ActionLink({ href, children }: { href?: string; children?: React
 
   return (
     <span ref={boxRef} className="relative inline-flex items-center gap-0.5 align-baseline">
-      <a href={url}>{children}</a>
+      {/* клик по тексту ссылки открывает меню действий (BUG-002): «Открыть в новой
+          вкладке» — первый пункт; модификаторные клики (Ctrl/Cmd/Shift) идут нативно */}
+      <a
+        href={url}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          setOpen(true);
+        }}
+      >
+        {children}
+      </a>
       <button
         ref={triggerRef}
         type="button"
