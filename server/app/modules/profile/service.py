@@ -49,6 +49,14 @@ class ProfileService:
                 )
             return profile
 
+    def person_brief(self) -> str:
+        """Кто учится: имя и «о себе» — для обращения и подбора примеров в промптах."""
+        p = self.get()
+        lines = [f"Имя: {p.name}"]
+        if p.about.strip():
+            lines.append(f"О себе: {p.about.strip()}")
+        return "\n".join(lines)
+
     def machines_brief(self) -> str:
         """Компактное описание машин для промптов агентов."""
         profile = self.get()

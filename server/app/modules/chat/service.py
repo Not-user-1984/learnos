@@ -536,7 +536,10 @@ class ChatService:
 
     def _context_block(self, conv: dict, session: dict | None) -> str:
         """Системный блок «Контекст»: профиль, источник, глава, состояние сессии, блок в фокусе."""
-        parts = [f"Профиль пользователя:\n{self._profile.machines_brief()}", self._profile.learning_brief()]
+        parts = [
+            f"Профиль пользователя:\n{self._profile.person_brief()}\n{self._profile.machines_brief()}",
+            self._profile.learning_brief(),
+        ]
         if conv.get("activity_id"):
             try:
                 act = self._learning.get_activity(conv["activity_id"])
