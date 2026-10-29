@@ -102,6 +102,23 @@ def test_startup_marks_stale_running_interrupted(rest_app, container):
         assert state["interrupted"] is True
 
 
+def test_send_message_while_busy_is_409_without_duplicate(client, container):
+    """BUG-001: сообщение в занятый разговор — честный 409 до стрима; сообщение-дубль
+    не сохраняется (раньше user-строка вставлялась до проверки занятости)."""
+    conv = client.post("/api/conversations", json={"mode": "root", "title": "занят"}).json()
+    uid = conv["uid"]
+    _insert_unanswered_user(container, uid, "первый вопрос")
+    _insert_run(container, uid, "running")  # генерация идёт (независимо от нашей вкладки)
+
+    before = client.get(f"/api/conversations/{uid}").json()["messages"]
+    r = client.post(f"/api/conversations/{uid}/messages", json={"content": "Да — делай"})
+    assert r.status_code == 409
+    assert "уже работает" in r.json()["message"]
+
+    after = client.get(f"/api/conversations/{uid}").json()["messages"]
+    assert [m["content"] for m in after] == [m["content"] for m in before]  # дубля нет
+
+
 def test_agent_state_working_during_generation(rest_app, container, fake_llm):
     """Пока генерация идёт, detail отдаёт working=True и живой запуск с прогрессом
     (steps/tool_calls пишутся инкрементально по ходу).
@@ -151,6 +168,8 @@ def test_agent_state_working_during_generation(rest_app, container, fake_llm):
     assert [r["agent"] for r in state["runs"]] == ["root"]
     assert state["runs"][0]["tool_calls"] == 1
     assert state["runs"][0]["started_at"]
+    # BUG-003: чем запуск занят прямо сейчас — label текущего инструмента
+    assert state["runs"][0]["current"] == "Каталог агентов"
 
     # после завершения генерации working гаснет
     with TestClient(rest_app) as tc:

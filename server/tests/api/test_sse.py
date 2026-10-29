@@ -72,10 +72,11 @@ def test_sse_error_event_on_invalid_conversation(client):
         raw = "".join(resp.iter_text())
 
     events = parse_sse(raw)
-    # при ошибке стрим заканчивается событием error (без done)
+    # при ошибке стрим заканчивается событием error (без done); ошибка приложения
+    # несёт свой код (not_found/conflict), а не безликий internal
     assert [name for name, _ in events] == ["error"]
     error = events[0][1]
-    assert error["error"] == "internal"
+    assert error["error"] == "not_found"
     assert "не найден" in error["message"]
 
 

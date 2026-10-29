@@ -9,6 +9,7 @@ import json
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
+from ...kernel.errors import AppError
 from .schemas import ConversationCreate, ConversationItem, ConversationPatch, MessageIn
 from .service import SseEvent
 
@@ -21,6 +22,7 @@ def _streaming_response(source) -> StreamingResponse:
     """SSE-обёртка: генерация живёт в фоновой задаче и не зависит от читателя.
 
     При обрыве соединения прокачка продолжает собирать события и сохранять ответ.
+    Ошибки приложения несут свой код (conflict/…) — клиент различает «занято» и сбой.
     """
     queue: asyncio.Queue[SseEvent | None] = asyncio.Queue()
 
@@ -28,7 +30,9 @@ def _streaming_response(source) -> StreamingResponse:
         try:
             async for ev in source:
                 await queue.put(ev)
-        except Exception as e:  # noqa: BLE001 — ошибка уходит клиенту как SSE error
+        except AppError as e:  # ошибка приложения уходит клиенту как SSE error с кодом
+            await queue.put(SseEvent("error", {"error": e.code, "message": e.message}))
+        except Exception as e:  # noqa: BLE001 — остальное тоже уходит клиенту, не в лог молча
             await queue.put(SseEvent("error", {"error": "internal", "message": str(e)[:300]}))
         finally:
             await queue.put(None)
@@ -91,6 +95,10 @@ def make_router(svc) -> APIRouter:
 
     @r.post("/{uid}/messages")
     async def send_message(uid: str, body: MessageIn):
+        # занятый разговор — HTTP 409 до SSE: клиент показывает пояснение,
+        # а сообщение-дубль не сохраняется (BUG-001)
+        svc.ensure_idle(uid)
+
         async def source():
             async for ev in svc.stream_reply(
                 uid,

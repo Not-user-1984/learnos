@@ -268,6 +268,9 @@ class ChatService:
         """
         if intent is not None and intent not in INTENTS:
             raise ValidationFailed(f"intent должен быть одним из {INTENTS}")
+        # занятый разговор честно 409 ещё до стрима: сообщение не сохраняется
+        # (раньше проверка жила в _reply_stream ПОСЛЕ вставки — дубли «Да» копились в истории)
+        self.ensure_idle(uid)
         conv = self.get_conversation(uid)
         attach_cards, attach_note = self._resolve_attachments(attachments or [])
         now = now_iso(self._clock)
@@ -319,8 +322,16 @@ class ChatService:
         last = conv["messages"][-1] if conv["messages"] else None
         if last is None or last["role"] != "user":
             raise Conflict("нет сообщения без ответа — продолжать нечего")
-        if conv["uid"] in self._running or self._recorder.active_runs(conv["uid"]):
-            raise Conflict("агент уже работает")
+        self.ensure_idle(conv["uid"])
+
+    def ensure_idle(self, uid: str) -> None:
+        """Разговор не генерирует ответ сейчас; иначе 409 — пользователь ждёт,
+        а не получает тихий отказ с дублем сообщения в истории.
+
+        Роут зовёт до открытия SSE-стрима (клиент видит HTTP 409 с пояснением),
+        stream_reply повторяет проверку как вторую линию от гонки."""
+        if uid in self._running or self._recorder.active_runs(uid):
+            raise Conflict("агент уже работает — дождись ответа или останови его")
 
     async def _resume_stream(self, conv: dict) -> AsyncIterator[SseEvent]:
         self._check_resume(conv)
@@ -353,8 +364,7 @@ class ChatService:
         if research:
             spec = replace(spec, max_steps=RESEARCH_MAX_STEPS)
             system_extra = f"{system_extra}\n\n{RESEARCH_DIRECTIVE}".strip()
-        if uid in self._running:
-            raise ValidationFailed("для этого разговора уже идёт генерация")
+        self.ensure_idle(uid)  # вторая линия от гонки: 409-проверка роута была до await'ов
         token = CancellationToken()
         self._running[uid] = token
         ctx = AgentContext(
