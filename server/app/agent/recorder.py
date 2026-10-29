@@ -56,15 +56,15 @@ class DbRunRecorder:
                 ).inserted_primary_key[0]
             )
 
-    def progress(self, run_id: int, *, steps: int, tool_calls: int) -> None:
-        """Живой прогресс выполнения: агрегаты пишутся инкрементально по ходу
-        запуска (статус остаётся running до finish) — это то, что показывает
-        бейдж «агент работает»."""
+    def progress(self, run_id: int, *, steps: int, tool_calls: int, current: str | None = None) -> None:
+        """Живой прогресс выполнения: агрегаты и текущий инструмент пишутся
+        инкрементально по ходу запуска (статус остаётся running до finish) —
+        это то, что показывает бейдж «агент работает»."""
         with self._uow() as uow:
             uow.session.execute(
                 agent_runs_table.update()
                 .where(agent_runs_table.c.id == run_id, agent_runs_table.c.status == "running")
-                .values(steps=steps, tool_calls=tool_calls)
+                .values(steps=steps, tool_calls=tool_calls, current_tool=current)
             )
 
     def finish(
@@ -116,6 +116,7 @@ class DbRunRecorder:
                 "agent": r.agent,
                 "steps": r.steps,
                 "tool_calls": r.tool_calls,
+                "current": r.current_tool,
                 "started_at": r.created_at,
             }
             for r in rows
