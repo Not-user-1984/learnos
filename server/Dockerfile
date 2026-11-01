@@ -31,8 +31,10 @@ COPY migrations ./migrations
 COPY config ./config
 COPY skills ./skills
 COPY app ./app
-# тесты нужны в образе: CI-гейт деплоя гоняет pytest в свежесобранном образе до up
+# тесты и eval-раннер нужны в образе: CI-гейт деплоя гоняет pytest в свежесобранном
+# образе до up; evals запускаются вручную из контейнера на живой модели
 COPY tests ./tests
+COPY scripts ./scripts
 
 RUN mkdir -p /data /kb
 VOLUME ["/data", "/kb"]
