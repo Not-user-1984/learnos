@@ -1,7 +1,7 @@
 ---
 id: T-048
 title: "Аудит 2026-11-01, спринт 0: P0-hotfix (R-01..R-04, R-09, R-10, R-22)"
-status: active
+status: done
 priority: high
 from: внешний аудит [task_ai/reference/audit-2026-11-01.md](../reference/audit-2026-11-01.md), спринт 0
 created: 2026-11-01
@@ -42,21 +42,21 @@ created: 2026-11-01
 
 ## Критерии готовности
 
-- [ ] Тест: `read_chapter` на главе 30k через channel="agent" — по окнам агент получает весь
+- [x] Тест: `read_chapter` на главе 30k через channel="agent" — по окнам агент получает весь
       текст без дыр и без обрезки
-- [ ] Тест: list из 100+ элементов не превращается в `{"truncated": true}` — отдаются первые
+- [x] Тест: list из 100+ элементов не превращается в `{"truncated": true}` — отдаются первые
       элементы + `truncated_items`
-- [ ] Тест: save_block(concepts+practice+2 weak_spots, confirmed) → update_block(append_theses)
+- [x] Тест: save_block(concepts+practice+2 weak_spots, confirmed) → update_block(append_theses)
       → concepts/practice/weak_spots на месте, category_status в файле confirmed, reindex()
       не меняет статус; round-trip render→parse без потерь
-- [ ] Тест: падение LLM в finish_session оставляет сессию активной, повторный finish создаёт блок
-- [ ] Тест: root/free_chat промпты и директивы интентов не упоминают инструментов вне spec.tools
+- [x] Тест: падение LLM в finish_session оставляет сессию активной, повторный finish создаёт блок
+- [x] Тест: root/free_chat промпты и директивы интентов не упоминают инструментов вне spec.tools
       (линтер в pytest)
-- [ ] Тест: list_blocks отдаёт tags/sources; глава курса с привязанным блоком отмечается пройденной
-- [ ] Тест: рестарт воркера выводит source из processing (failed с ошибкой), job не остаётся running
-- [ ] Тест: прямой маршрут Telegram не падает на повторной отправке; глава читается с первого куска;
+- [x] Тест: list_blocks отдаёт tags/sources; глава курса с привязанным блоком отмечается пройденной
+- [x] Тест: рестарт воркера выводит source из processing (failed с ошибкой), job не остаётся running
+- [x] Тест: прямой маршрут Telegram не падает на повторной отправке; глава читается с первого куска;
       HTML-куски ≤ 4096
-- [ ] `ruff`/`lint-imports`/`pytest` зелёные, деплой на CT 132 поднялся, health ок
+- [x] `ruff`/`lint-imports`/`pytest` зелёные, деплой на CT 132 поднялся, health ок
 
 ## Заметки
 
@@ -64,3 +64,17 @@ created: 2026-11-01
 - Промпты quick_reviewer/root: заменить «limit=24000» на «читай окнами по ~6000 (limit=6000),
   листай offset пока next_offset != null».
 - R-03: `BlockWriterDraft.concepts/practice` типизировать pydantic-моделями вместо `list[dict]`.
+
+## Итог (закрыта 2026-11-01)
+
+Все пункты закрыты коммитами (порядок = история main):
+
+- R-01 `5fa067f` — truncatable для оконных инструментов, списки ужимаются по элементам
+- R-02 `98ef4be` — полный round-trip parse→patch→render, category_status/review переживают правку
+- R-03 `b9237f7` — блок до закрытия сессии, идемпотентный повтор, pydantic-схемы block_writer
+- R-04 `5435a5b` — root/free_chat инструменты + линтер «промпт ↔ инструменты» (2 теста)
+- R-09 `9f5ba30` — list_blocks с tags/sources (батч), главы курсов засчитываются
+- R-10 `ee789f3` + `1d3154c` — recovery воркера + кнопка «Повторить обработку» в вебе
+- R-22 `045c408` — прямой маршрут Telegram, [0:6], HTML-нарезка после конвертации
+
+Тесты: 327 → 361 (+34). Прод CT 132 поднялся, health ок.
