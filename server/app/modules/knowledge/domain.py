@@ -191,7 +191,11 @@ def apply_patch(draft: BlockDraft, patch: dict) -> BlockDraft:
 
 
 def draft_to_markdown(uid: str, draft: BlockDraft, meta_extra: dict) -> str:
-    """Собрать MD-файл v2: frontmatter (YAML-словарь) + секции в фиксированном порядке."""
+    """Собрать MD-файл v2: frontmatter (YAML-словарь) + секции в фиксированном порядке.
+
+    category_status и review берутся из meta_extra (при правке — из текущего файла,
+    чтобы подтверждённая категория и SRS-состояние не сбрасывались при пересборке).
+    """
     import yaml
 
     frontmatter: dict = {
@@ -200,7 +204,7 @@ def draft_to_markdown(uid: str, draft: BlockDraft, meta_extra: dict) -> str:
         "title": draft.title,
         "summary": draft.summary,
         "category": draft.category_suggestion,
-        "category_status": "suggested",
+        "category_status": meta_extra.get("category_status", "suggested"),
         "tags": list(draft.tags),
         "sources": [{"source": s.source, "chapter": s.chapter, "title": s.title} for s in draft.sources],
         "session": meta_extra.get("session_uid"),
@@ -209,7 +213,7 @@ def draft_to_markdown(uid: str, draft: BlockDraft, meta_extra: dict) -> str:
         "created": meta_extra.get("created", ""),
         "updated": meta_extra.get("updated", ""),
         "version": meta_extra.get("version", 1),
-        "review": {"ease": 2.5, "interval": 1, "due": None},
+        "review": meta_extra.get("review") or {"ease": 2.5, "interval": 1, "due": None},
     }
     fm = yaml.safe_dump(frontmatter, allow_unicode=True, sort_keys=False).strip()
 
@@ -233,10 +237,13 @@ def draft_to_markdown(uid: str, draft: BlockDraft, meta_extra: dict) -> str:
         [
             f"{i}. **{p.machine}** · `{p.command}` — {p.explanation}"
             + (f"; результат: {p.result}" if p.result else "")
+            + (f"; проверка: {p.verify}" if p.verify else "")
+            + (f"; откат: {p.cleanup}" if p.cleanup else "")
             for i, p in enumerate(draft.practice, 1)
         ],
     )
-    section("Дозакрепить", [f"> [!WARNING]\n> {w}" for w in draft.weak_spots])
+    # между callout'ами пустая строка — иначе парсер (и рендереры) склеивают их в один
+    section("Дозакрепить", [f"> [!WARNING]\n> {w}\n" for w in draft.weak_spots])
     section("Вопросы на потом", [f"- {q}" for q in draft.open_questions])
     section("Связи", [f"- [[{link}]]" for link in draft.links])
     section(
