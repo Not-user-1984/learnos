@@ -26,13 +26,14 @@ log = logging.getLogger("learnos.agent")
 _jinja = Environment(undefined=StrictUndefined, autoescape=False, keep_trailing_newline=True)
 
 
-def render_prompt(path: Path, variables: dict[str, Any]) -> str:
+def render_prompt(path: Path, variables: dict[str, Any], override_root: Path | None = None) -> str:
     """Промпт агента с подстановками; битый Jinja-синтаксис не роняет агента (R-14).
 
     Override: если в data/prompts/ лежит отредактированная копия — читаем её
     (правки из чата применяются сразу и переживают пересборку контейнера).
+    override_root — каталог данных из Settings (без чтения os.environ, R-15).
     """
-    actual = resolve_prompt_path(path)
+    actual = resolve_prompt_path(path, override_root=override_root)
     return safe_render(actual.read_text(encoding="utf-8"), variables)
 
 
@@ -73,25 +74,29 @@ def validate_prompt(text: str) -> str | None:
     return None
 
 
-def resolve_prompt_path(path: Path) -> Path:
-    """Путь промпта с учётом override из data/prompts/ (если задан LEARNOS_DATA_DIR)."""
+def resolve_prompt_path(path: Path, override_root: Path | None = None) -> Path:
+    """Путь промпта с учётом override из data/prompts/.
+
+    Корень override — из Settings (аргумент); os.environ — фолбэк для вызовов
+    вне контейнера (тесты, CLI), чтобы не было двух источников правды (R-15).
+    """
     import os
 
     marker = os.sep + "modules" + os.sep
     if marker in str(path):
-        override_root = Path(os.environ.get("LEARNOS_DATA_DIR", Path.cwd() / "data")) / "prompts"
-        override = override_root / str(path).split(marker, 1)[1]
+        root = override_root or Path(os.environ.get("LEARNOS_DATA_DIR", Path.cwd() / "data"))
+        override = root / "prompts" / str(path).split(marker, 1)[1]
         if override.is_file():
             return override
     return path
 
 
-def _system_prompt(spec: AgentSpec, ctx: AgentContext) -> str:
+def _system_prompt(spec: AgentSpec, ctx: AgentContext, override_root: Path | None = None) -> str:
     """Промпт агента (файл или строка кастомного агента) + блок «Контекст», если задан."""
     if spec.prompt_text is not None:
         prompt = safe_render(spec.prompt_text, ctx.variables)
     else:
-        prompt = render_prompt(spec.prompt_path, ctx.variables)
+        prompt = render_prompt(spec.prompt_path, ctx.variables, override_root=override_root)
     if ctx.system_extra:
         prompt = f"{prompt}\n\n# Контекст\n\n{ctx.system_extra}"
     return prompt
@@ -180,10 +185,12 @@ class AgentRuntime:
         tools: ToolRegistry,
         recorder: RunRecorder | None = None,
         agent_registry: "AgentRegistryLike | None" = None,
+        data_dir: Path | None = None,
     ) -> None:
         self._router = router
         self._tools = tools
         self._recorder = recorder or NullRecorder()
+        self._data_dir = data_dir  # корень override-промптов из Settings (R-15)
         self._agent_registry = agent_registry  # живой spec: скиллы, сохранённые агентом, видны сразу
 
     async def run(
@@ -202,7 +209,10 @@ class AgentRuntime:
             parent_run_id=ctx.parent_run_id,
         )
         try:
-            messages: list[Message] = [Message(role="system", content=_system_prompt(spec, ctx)), *history]
+            messages: list[Message] = [
+                Message(role="system", content=_system_prompt(spec, ctx, self._data_dir)),
+                *history,
+            ]
 
             for _step in range(spec.max_steps):
                 if ctx.cancellation:
@@ -356,7 +366,7 @@ class AgentRuntime:
                 provider,
                 model,
                 [
-                    Message(role="system", content=_system_prompt(spec, ctx)),
+                    Message(role="system", content=_system_prompt(spec, ctx, self._data_dir)),
                     Message(role="user", content=user_prompt),
                 ],
                 spec.output_model,

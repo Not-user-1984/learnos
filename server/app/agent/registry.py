@@ -43,6 +43,12 @@ class AgentRegistry:
         if not extra <= spec.tools:
             self._agents[name] = replace(spec, tools=spec.tools | extra)
 
+    def remove_tools(self, name: str, gone: set[str]) -> None:
+        """Убрать инструменты агента (при удалении их источника, например внешнего MCP)."""
+        spec = self.get(name)
+        if gone & spec.tools:
+            self._agents[name] = replace(spec, tools=spec.tools - gone)
+
     def get(self, name: str) -> AgentSpec:
         spec = self._agents.get(name)
         if spec is None:

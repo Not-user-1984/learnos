@@ -119,7 +119,9 @@ def build_container(settings: Settings | None = None, *, fake_llm=None) -> Conta
 
     recorder = DbRunRecorder(uow)
     container.run_recorder = recorder
-    container.agent_runtime = AgentRuntime(router, container.tools, recorder, container.agent_registry)
+    container.agent_runtime = AgentRuntime(
+        router, container.tools, recorder, container.agent_registry, data_dir=settings.data_dir
+    )
 
     for module in MODULES:
         module.wire(container)

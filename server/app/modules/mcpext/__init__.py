@@ -41,7 +41,7 @@ class McpExtModule(Module):
         from .agents import register_agents
         from .service import McpExtService
 
-        c.mcpext = McpExtService(c.uow, c.tools, c.agent_runtime)
+        c.mcpext = McpExtService(c.uow, c.tools, c.agent_runtime, c.agent_registry)
         register_agents(c)
         # обёртки из БД регистрируются в lifespan, после миграций (нерабочие серверы не мешают старту)
 

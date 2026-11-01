@@ -32,10 +32,11 @@ def _tool_wrapper_name(mcp_name: str, tool: str) -> str:
 class McpExtService:
     """Use-cases внешних MCP: добавить по ссылке/конфигу, проверить, дать инструменты агентам."""
 
-    def __init__(self, uow: UnitOfWorkFactory, tools_registry, runtime=None) -> None:
+    def __init__(self, uow: UnitOfWorkFactory, tools_registry, runtime=None, agent_registry=None) -> None:
         self._uow = uow
         self._tools = tools_registry
         self._runtime = runtime
+        self._agents = agent_registry
         self._clock = SystemClock()
         self._registered: dict[str, list[str]] = {}  # mcp name → имена обёрток в реестре
 
@@ -258,11 +259,18 @@ class McpExtService:
             )
             names.append(wname)
         self._registered[mcp_name] = names
+        # инструменты внешних MCP сразу доступны root (R-29): UI это обещал,
+        # раньше обёртки попадали только в ToolRegistry, минуя spec.tools агентов
+        if self._agents is not None and names:
+            self._agents.extend_tools("root", set(names))
         log.info("MCP %s: зарегистрировано инструментов %d", mcp_name, len(names))
 
     def _unregister_wrappers(self, mcp_name: str) -> None:
-        for wname in self._registered.pop(mcp_name, []):
+        names = self._registered.pop(mcp_name, [])
+        for wname in names:
             self._tools.unregister(wname)
+        if self._agents is not None and names:
+            self._agents.remove_tools("root", set(names))
 
 
 def _is_http_url(url: str) -> bool:

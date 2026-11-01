@@ -108,6 +108,7 @@ class TuningService:
         if not actual.exists():
             raise NotFound(f"файл промпта не найден: {actual}")
         return {
+            "base_changed": self._base_changed(spec.name, spec.prompt_path),
             "agent": spec.name,
             "description": spec.description,
             "path": str(spec.prompt_path.relative_to(SERVER_ROOT)),
@@ -116,6 +117,41 @@ class TuningService:
             "custom": False,
             "tools": sorted(spec.tools),
         }
+
+    # --- целостность override (R-15) ---
+
+    def _current_content_for(self, row) -> str:
+        """Действующее содержимое цели правки (промпт агента или файл скилла)."""
+        if row.kind == "skill":
+            if self._skills is None:
+                return ""
+            return self._skills.loader.effective_file(row.agent, row.file).read_text(encoding="utf-8")
+        try:
+            spec = self._registry.get(row.agent)
+        except KeyError as e:
+            raise NotFound(f"агент '{row.agent}' не найден") from e
+        if spec.prompt_text is not None:
+            return spec.prompt_text
+        return resolve_prompt_path(spec.prompt_path).read_text(encoding="utf-8")
+
+    def _base_sha_path(self, agent_name: str) -> Path:
+        return self._settings.data_dir / "prompt_backups" / agent_name / "base.sha"
+
+    def _write_base_sha(self, agent_name: str, base_path: Path) -> None:
+        import hashlib
+
+        sha = hashlib.sha256(base_path.read_bytes()).hexdigest()
+        self._base_sha_path(agent_name).write_text(sha, encoding="utf-8")
+
+    def _base_changed(self, agent_name: str, base_path: Path) -> bool:
+        """Базовый промпт из кода изменился после применения override (заморозка R-15)."""
+        import hashlib
+
+        sha_path = self._base_sha_path(agent_name)
+        if not sha_path.exists() or not base_path.exists():
+            return False
+        current = hashlib.sha256(base_path.read_bytes()).hexdigest()
+        return current != sha_path.read_text(encoding="utf-8").strip()
 
     # --- стадия правок ---
 
@@ -224,6 +260,12 @@ class TuningService:
                 raise NotFound(f"правка {change_id} не найдена")
             if row.status != "pending":
                 raise ValidationFailed(f"правка уже {row.status}")
+            # R-15: база ушла вперёд (другая правка применена) — старый черновик
+            # нельзя применять вслепую: он затёр бы её. Переставь правку заново.
+            if row.old_content != self._current_content_for(row):
+                raise ValidationFailed(
+                    "промпт изменился с момента черновика — прочитай текущий и поставь правку заново"
+                )
             if row.kind == "skill":
                 out = self._apply_skill_change(row)
             else:
@@ -249,6 +291,8 @@ class TuningService:
         override = self._override_path(default_path)
         override.parent.mkdir(parents=True, exist_ok=True)
         override.write_text(row.new_content, encoding="utf-8")
+        # sha базового промпта из кода: правки базы в новых релизах будут видны
+        self._write_base_sha(row.agent, default_path)
         return {"ok": True, "change_id": row.id, "agent": row.agent, "override": str(override)}
 
     def _apply_skill_change(self, row) -> dict:
@@ -278,6 +322,8 @@ class TuningService:
             row = uow.session.execute(prompt_changes.select().where(prompt_changes.c.id == change_id)).first()
             if row is None:
                 raise NotFound(f"правка {change_id} не найдена")
+            if row.status != "pending":
+                raise ValidationFailed(f"правка уже {row.status} — отклонить нельзя")
             uow.session.execute(
                 prompt_changes.update().where(prompt_changes.c.id == change_id).values(status="rejected")
             )
