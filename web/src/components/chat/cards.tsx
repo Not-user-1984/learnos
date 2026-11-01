@@ -483,9 +483,9 @@ function GitChangeCardView({ card }: { card: Card }) {
   };
 
   return (
-    <div className="rounded-xl border border-violet-500/40 bg-violet-500/5 p-4">
+    <div className="rounded-xl border border-primary/40 bg-primary/5 p-4">
       <p className="mb-1 flex items-center gap-2 text-sm font-medium">
-        <Icon name="fork_right" size={16} className="text-violet-500" /> Ветка агента:{" "}
+        <Icon name="fork_right" size={16} className="text-primary" /> Ветка агента:{" "}
         <code className="font-mono">{card.branch}</code>
         {card.commit && <span className="text-muted-foreground">· {card.commit}</span>}
       </p>

@@ -65,6 +65,23 @@ export async function apiUpload<T>(path: string, file: File, extra?: Record<stri
     body: form,
     headers: authHeaders(),
   });
-  if (!res.ok) throw new ApiError(res.status, `upload failed: ${res.status}`);
+  if (!res.ok) {
+    // текст ошибки сервера раньше терялся (R-25)
+    let message = `upload failed: ${res.status}`;
+    try {
+      const body = (await res.json()) as { message?: string };
+      if (body.message) message = body.message;
+    } catch {
+      /* тело не JSON — оставляем статус */
+    }
+    throw new ApiError(res.status, message);
+  }
   return (await res.json()) as T;
+}
+
+
+/** Добавить материал по ссылке одним действием (R-25: единая точка, не 4 копии):
+ *  сервер сам определяет тип (видео/PDF/статья), качает и ставит job обработки. */
+export async function addSourceFromUrl(url: string): Promise<{ uid: string; kind: string; title: string; job_id: number | null }> {
+  return apiPost("/sources/from-url", { url });
 }

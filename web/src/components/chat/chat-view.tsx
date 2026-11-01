@@ -280,9 +280,25 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     };
     void tick();
     const id = setInterval(() => void tick(), 5000);
+    // R-25: чат не опрашивает вечно, когда отвечать некому (LLМ не настроен и
+    // агент не работает) — последняя реплика user, генерации нет
+    const staleTicks = { n: 0 };
+    const guard = setInterval(() => {
+      const last = messages[messages.length - 1];
+      if (!streaming && last?.role === "user" && !agentState?.working && !agentState?.interrupted) {
+        staleTicks.n += 1;
+        if (staleTicks.n > 3) {
+          clearInterval(id);
+          clearInterval(guard);
+        }
+      } else {
+        staleTicks.n = 0;
+      }
+    }, 5000);
     return () => {
       cancelled = true;
       clearInterval(id);
+      clearInterval(guard);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMessage?.id, streaming]);

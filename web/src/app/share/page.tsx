@@ -4,7 +4,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { apiPost } from "@/lib/api";
+import { addSourceFromUrl, apiPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 function ShareForm() {
@@ -27,14 +27,10 @@ function ShareForm() {
   const save = async () => {
     setStatus("saving");
     try {
-      const src = await apiPost<{ uid: string; id: number }>("/sources", { kind, title: title || url, url });
-      let processed = false;
-      if (isYoutube) {
-        await apiPost(`/sources/${src.id}/process`, {}).then(() => {
-          processed = true;
-        });
-      }
-      setResult({ uid: src.uid, kind, processed });
+      // единая точка добавления (R-25): from-url сам определяет тип и запускает
+      // обработку — раньше web-статьи оставались «не обработаны», PDF не поддерживался
+      const out = await addSourceFromUrl(url);
+      setResult({ uid: out.uid, kind: out.kind, processed: Boolean(out.job_id) });
       setStatus("done");
     } catch {
       setStatus("error");

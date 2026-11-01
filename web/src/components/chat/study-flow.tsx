@@ -95,7 +95,7 @@ export function StudyFlowDialog({
             let ticks = 0;
             summariesRef.current = setInterval(async () => {
               ticks += 1;
-              if (ticks > 12) stopPolling();
+              if (ticks > 36) stopPolling(); // 3 мин: длинные книги суммаризируются дольше минуты (R-25)
               else await loadSource(uid).catch(() => stopPolling());
             }, 5000);
           } else if (j.status === "failed") {
@@ -173,16 +173,21 @@ export function StudyFlowDialog({
   };
 
   const pickLibrary = async (uid: string) => {
-    const src = await api<{ uid: string; title: string; status: string; chapters: ChapterCard[] }>(`/sources/${uid}`);
-    if (src.status === "processed" && (src.chapters?.length ?? 0) > 0) {
-      setSourceUid(uid);
-      await loadSource(uid);
-      setStep("ready");
-    } else {
-      toast.info("Источник ещё не обработан — запускаю обработку");
-      const proc = await apiPost<{ ok: boolean; job_id: number | null }>(`/sources/${uid}/process`, {});
-      setSourceUid(uid);
-      if (proc.job_id) waitForJob(proc.job_id, uid);
+    try {
+      const src = await api<{ uid: string; title: string; status: string; chapters: ChapterCard[] }>(`/sources/${uid}`);
+      if (src.status === "processed" && (src.chapters?.length ?? 0) > 0) {
+        setSourceUid(uid);
+        await loadSource(uid);
+        setStep("ready");
+      } else {
+        toast.info("Источник ещё не обработан — запускаю обработку");
+        const proc = await apiPost<{ ok: boolean; job_id: number | null }>(`/sources/${uid}/process`, {});
+        setSourceUid(uid);
+        if (proc.job_id) waitForJob(proc.job_id, uid);
+      }
+    } catch (e) {
+      // 409 «в обработке» и прочее раньше превращались в unhandled rejection (R-25)
+      toast.error(e instanceof Error ? e.message : "не удалось выбрать источник");
     }
   };
 

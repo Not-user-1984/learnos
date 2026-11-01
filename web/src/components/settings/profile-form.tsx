@@ -38,6 +38,21 @@ export function ProfileForm({ initial }: { initial: Profile }) {
     setProfile((p) => ({ ...p, machines: p.machines.map((m) => (m.id === id ? { ...m, ...patch } : m)) }));
   };
 
+  // R-25: машины можно добавлять и удалять — практика строится «под железо»
+  const addMachine = () => {
+    setProfile((p) => ({
+      ...p,
+      machines: [
+        ...p.machines,
+        { id: `m${Date.now().toString(36)}`, name: "Новая машина", kind: "other", specs: "", tools: [], notes: "" },
+      ],
+    }));
+  };
+
+  const removeMachine = (id: string) => {
+    setProfile((p) => ({ ...p, machines: p.machines.filter((m) => m.id !== id) }));
+  };
+
   return (
     <div className="flex flex-col gap-8">
       <section className="grid gap-5 sm:grid-cols-2">
@@ -75,8 +90,22 @@ export function ProfileForm({ initial }: { initial: Profile }) {
               <Label>Заметки</Label>
               <Input value={m.notes} onChange={(e) => setMachine(m.id, { notes: e.target.value })} aria-label={`Заметки ${m.id}`} />
             </div>
+            <div className="sm:col-span-2 sm:justify-self-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => removeMachine(m.id)}
+                aria-label={`Удалить машину ${m.name}`}
+              >
+                <Icon name="delete" size={16} /> Удалить машину
+              </Button>
+            </div>
           </div>
         ))}
+        <Button type="button" variant="outline" size="sm" className="self-start" onClick={addMachine}>
+          <Icon name="add" size={16} /> Добавить машину
+        </Button>
       </section>
 
       <section className="grid gap-5 sm:grid-cols-3">
