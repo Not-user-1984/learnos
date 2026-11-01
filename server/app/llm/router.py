@@ -107,38 +107,44 @@ class ModelRouter:
         return self._providers[name]
 
     def status(self) -> dict[str, Any]:
-        """Сводка для /api/health: настроена ли роль chat, чем и сколько ключей в пуле."""
-        binding = self._config.roles.get("chat")
-        if binding is None:
-            return {
-                "configured": False,
-                "provider": None,
-                "model": None,
-                "keys": 0,
-                "reason": "роль chat не настроена",
-            }
-        spec = self._config.providers.get(binding.provider) or {}
-        if not spec.get("enabled", True):
-            return {
-                "configured": False,
+        """Сводка для /api/health: все роли (R-23), не только chat.
+
+        Раньше молчаливые поломки fast/structured не были видны: блоки не
+        генерировались, а health показывал зелёный.
+        """
+        roles_out: dict[str, dict[str, Any]] = {}
+        reasons: list[str] = []
+        first_ok: dict[str, Any] | None = None
+        for role, binding in self._config.roles.items():
+            spec = self._config.providers.get(binding.provider) or {}
+            keys, missing = _collect_api_keys(spec)
+            # keyless-провайдер (api_key_env не задан) — легален без ключей (R-23)
+            keyless = not (spec.get("api_key_envs") or spec.get("api_key_env"))
+            ok = bool(spec.get("enabled", True)) and (bool(keys) or keyless)
+            entry = {
                 "provider": binding.provider,
                 "model": binding.model,
-                "keys": 0,
-                "reason": "провайдер выключен",
+                "keys": len(keys),
+                "configured": ok,
             }
-        keys, missing = _collect_api_keys(spec)
-        if missing and not keys:
-            return {
-                "configured": False,
-                "provider": binding.provider,
-                "model": binding.model,
-                "keys": 0,
-                "reason": f"нет ключей ({', '.join(missing)})",
-            }
+            if not ok:
+                if not spec.get("enabled", True):
+                    entry["reason"] = "провайдер выключен"
+                elif missing:
+                    entry["reason"] = f"нет ключей ({', '.join(missing)})"
+                else:
+                    entry["reason"] = "провайдер не настроен"
+                reasons.append(f"{role}: {entry['reason']}")
+            elif first_ok is None:
+                first_ok = entry
+            roles_out[role] = entry
+        overall = bool(roles_out) and not reasons  # ролей нет вовсе — LLM не настроен
+        head = first_ok or {"provider": None, "model": None, "keys": 0}
         return {
-            "configured": True,
-            "provider": binding.provider,
-            "model": binding.model,
-            "keys": len(keys),
-            "reason": None,
+            "configured": overall,
+            "provider": head["provider"],
+            "model": head["model"],
+            "keys": head["keys"],
+            "reason": None if overall else "; ".join(reasons),
+            "roles": roles_out,
         }

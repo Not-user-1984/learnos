@@ -248,7 +248,11 @@ class OpenAICompatProvider:
                 yield LLMEvent(type="text", text=delta.content)
             if delta and delta.tool_calls:
                 for tc in delta.tool_calls:
-                    slot = collected.setdefault(tc.id or tc.index, {"id": "", "name": "", "args": ""})  # type: ignore[assignment]
+                    # ключ — index (R-23): у OpenAI-совместимых id приходит только в первом
+                    # чанке, дельты аргументов — с index; старый ключ "id or index" расползался
+                    # на два слота и рождал «призрачные» tool-call'ы с пустым именем
+                    key = tc.index if tc.index is not None else (tc.id or 0)
+                    slot = collected.setdefault(key, {"id": "", "name": "", "args": ""})
                     if tc.id:
                         slot["id"] = tc.id
                     if tc.function:
@@ -256,9 +260,9 @@ class OpenAICompatProvider:
                             slot["name"] += tc.function.name
                         if tc.function.arguments:
                             slot["args"] += tc.function.arguments
-        for slot in collected.values():
+        for i, slot in enumerate(collected.values()):
             if not slot["id"]:
-                slot["id"] = f"call_{slot['name']}"
+                slot["id"] = f"call_{slot['name'] or 'tool'}_{i}"  # без коллизий одноимённых (R-23)
             try:
                 arguments = json.loads(slot["args"]) if slot["args"] else {}
             except json.JSONDecodeError:
