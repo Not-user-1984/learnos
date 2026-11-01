@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import type { ActivityCard, ChapterCard, SourceDetail } from "@/lib/types";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { SourceActions } from "@/components/library/source-actions";
+import { ProcessSourceButton } from "@/components/library/process-source-button";
 import { ChapterHistoryButton } from "@/components/library/chapter-history";
 import { Badge } from "@/components/ui/badge";
 
@@ -66,6 +67,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
             </p>
           </div>
           <SourceActions sourceUid={source.uid} className="ml-auto" />
+          <ProcessSourceButton sourceUid={source.uid} status={source.status} />
         </header>
 
         {activity && (
