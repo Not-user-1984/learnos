@@ -138,6 +138,7 @@ def build_container(settings: Settings | None = None, *, fake_llm=None) -> Conta
         container.library.bind_runtime(container.learning, container.chat)
     if container.knowledge is not None and container.courses is not None:
         container.knowledge.bind_courses(container.courses)
+        container.library.bind_courses(container.courses)
     if container.learning is not None and container.chat is not None:
         container.learning.bind_chat(container.chat)
     log.info("container готов: модулей=%d, инструментов=%d", len(MODULES), len(container.tools.all()))

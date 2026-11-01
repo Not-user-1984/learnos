@@ -6,7 +6,7 @@ import logging
 from ...agent.spec import AgentContext
 from ...kernel.asyncio_bridge import run_coro_sync
 from ...kernel.clock import Clock, now_iso
-from ...kernel.errors import NotFound, ValidationFailed
+from ...kernel.errors import Conflict, NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
 from .infra.sql_repo import CourseRepository
 
@@ -26,6 +26,7 @@ class CoursesService:
         runtime,
         ids: IdGenerator,
         clock: Clock,
+        research=None,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -33,6 +34,7 @@ class CoursesService:
         self._knowledge = knowledge
         self._learning = learning
         self._runtime = runtime
+        self._research = research
         self._ids = ids
         self._clock = clock
 
@@ -90,9 +92,33 @@ class CoursesService:
             return self._repo.get(uow.session, ref)
 
     def delete_course(self, ref: str | int) -> dict:
-        """Удалить курс (элементы каскадом; источники и блоки не трогаем)."""
+        """Удалить курс (элементы каскадом; источники и блоки не трогаем).
+
+        Зависимости (сессии/активности курса) проверяем явно — IntegrityError
+        отдавал 500 вместо понятного 409 (R-16).
+        """
+        from sqlalchemy import func, select
+
+        from ..learning.infra.tables import activities as acts
+        from ..learning.infra.tables import sessions as ses
+
         with self._uow() as uow:
             course = self._repo.get(uow.session, ref)
+            deps = []
+            n_sessions = int(
+                uow.session.execute(select(func.count()).where(ses.c.course_id == course["id"])).scalar_one()
+            )
+            if n_sessions:
+                deps.append(f"сессий: {n_sessions}")
+            n_acts = int(
+                uow.session.execute(select(func.count()).where(acts.c.course_id == course["id"])).scalar_one()
+            )
+            if n_acts:
+                deps.append(f"активностей: {n_acts}")
+            if deps:
+                raise Conflict(
+                    f"курс «{course['topic']}» используют ({', '.join(deps)}) — сначала уберите зависимости"
+                )
             self._repo.delete(uow.session, course["id"])
         return {"ok": True, "deleted": course["uid"]}
 
@@ -159,7 +185,7 @@ class CoursesService:
 
         sources = self._library.list_sources()
         blocks = self._knowledge.list_blocks(limit=30)
-        research = self._library.research_sources(topic, limit=5)
+        research = self._research_web(topic)  # цепочка провайдеров, не легаси-DDG (R-30)
         brief = (
             f"Тема: {topic}\nОграничения: {constraints or 'нет'}\n\n"
             "Источники в библиотеке:\n"
@@ -181,9 +207,16 @@ class CoursesService:
     def create_from_plan(self, plan: dict) -> dict:
         """Создать курс из подтверждённого плана; кандидаты-ссылки добавляются в библиотеку (found)."""
         items = []
+        skipped: list[str] = []
         for item in plan.get("items", []):
             item_type = item.get("item_type", "source")
             if item_type == "source" and item.get("source_uid"):
+                # планировщик (LLM) мог выдумать uid: валидируем, мусор отбрасываем (R-30)
+                try:
+                    self._library.get_source(item["source_uid"])
+                except NotFound:
+                    skipped.append(str(item["source_uid"]))
+                    continue
                 items.append({"item_type": "source", "source": item["source_uid"], "note": item.get("note")})
             elif item_type == "web":
                 created = self._library.add_source("web", item["title"], url=item.get("url"))
@@ -205,13 +238,16 @@ class CoursesService:
                 )
             elif item_type == "block" and item.get("block_uid"):
                 items.append({"item_type": "block", "block_uid": item["block_uid"], "note": item.get("note")})
-        return self.create_course(
+        out = self.create_course(
             topic=plan.get("topic", "Курс"),
             title=plan.get("title"),
             description=plan.get("description"),
             category=plan.get("category"),
             items=items,
         )
+        if skipped:
+            out["skipped_invalid_uids"] = skipped  # планировщик выдумал — не роняем курс (R-30)
+        return out
 
     # --- прогресс ---
 
@@ -304,6 +340,26 @@ class CoursesService:
             block_uid=item.get("block_uid"),
             note=item.get("note"),
         )
+
+    def count_items_for_source(self, source_id: int) -> int:
+        """Число элементов курсов по источнику (запрет удаления, R-16)."""
+        from sqlalchemy import func, select
+
+        from .infra.tables import course_items
+
+        with self._uow() as uow:
+            return int(
+                uow.session.execute(
+                    select(func.count()).where(course_items.c.source_id == source_id)
+                ).scalar_one()
+            )
+
+    def _research_web(self, topic: str, limit: int = 5) -> dict:
+        """Веб-кандидаты для плана через цепочку провайдеров (R-30)."""
+        try:
+            return self._research.search(topic, limit=limit)
+        except Exception:  # noqa: BLE001 — поиск не критичен для планирования
+            return {"results": []}
 
     def _resolve_source(self, session, ref) -> int:
         src = self._library.get_source(ref)

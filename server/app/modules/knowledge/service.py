@@ -488,6 +488,13 @@ class KnowledgeService:
                 self._runtime.run_structured(categorizer, cat_ctx, f"Блок: {draft.title}\n{draft.summary}")
             )
             path = cat_out.path
+            # R-31: новый корень дереву не создаём — только подкатегории существующих
+            # корней (иначе categorizer плодит мусорные корни вроде «kubernetes»)
+            normalized = normalize_category_path(path)
+            roots = {c.path.split("/")[0] for c in self.list_categories()}
+            if normalized.split("/")[0] not in roots:
+                log.info("categorizer предложил новый корень %s — оставляем без категории", path)
+                return draft
             if getattr(cat_out, "new_category_title", None):
                 self.create_category(path, cat_out.new_category_title)
             return replace(draft, category_suggestion=path)

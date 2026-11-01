@@ -22,6 +22,7 @@ class CoursesModule(Module):
             runtime=c.agent_runtime,
             ids=c.ids,
             clock=c.clock,
+            research=c.research,
         )
         register_agents(c)
 

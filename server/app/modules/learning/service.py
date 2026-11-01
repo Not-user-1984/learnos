@@ -109,11 +109,22 @@ class LearningService:
             return acts
 
     def get_activity(self, ref: str | int) -> dict:
-        """Активность с прогрессом."""
-        acts = [a for a in self.list_activities() if a["uid"] == str(ref) or a["id"] == _to_int(ref)]
-        if not acts:
-            raise NotFound(f"активность '{ref}' не найдена")
-        return acts[0]
+        """Активность с прогрессом — точечный запрос (R-27: было N+1 через list)."""
+        from sqlalchemy import func, select
+
+        from ..library.infra.tables import chapters, sources
+
+        with self._uow() as uow:
+            act = self._acts.get(uow.session, ref)
+            act["total_chapters"] = int(
+                uow.session.execute(
+                    select(func.count()).where(chapters.c.source_id == act["source_id"])
+                ).scalar_one()
+            )
+            act["source_uid"] = uow.session.execute(
+                select(sources.c.uid).where(sources.c.id == act["source_id"])
+            ).scalar_one()
+            return act
 
     def activity_ids_for_source(self, source_ref: str | int) -> list[int]:
         """id активностей источника — для фильтра «история разговоров по главе»."""

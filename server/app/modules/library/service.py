@@ -59,6 +59,7 @@ class LibraryService:
         self._knowledge = None  # ставится в bootstrap (публичный сервис knowledge)
         self._learning = None  # ставится в bootstrap (каскад удаления)
         self._chat = None
+        self._courses = None  # проверка «источник в элементах курсов» (R-16)
         self._outline_cache: dict[int, dict] = {}  # source_id → страницы глав по закладкам PDF
 
     def bind(self, knowledge) -> None:
@@ -69,6 +70,10 @@ class LibraryService:
         """Сервисы обучения/чата — для каскада при удалении источника."""
         self._learning = learning
         self._chat = chat
+
+    def bind_courses(self, courses) -> None:
+        """Публичный сервис курсов — для запрета удаления источника из курсов (R-16)."""
+        self._courses = courses
 
     # --- источники ---
 
@@ -149,6 +154,13 @@ class LibraryService:
             src = self._sources.get(uow.session, ref)
             if self._knowledge is not None and self._knowledge.count_for_source(src["uid"]) > 0:
                 raise Conflict(f"по источнику «{src['title']}» есть блоки — сначала удалите их")
+        if self._courses is not None:
+            used = self._courses.count_items_for_source(src["id"])
+            if used:
+                raise Conflict(
+                    f"источник «{src['title']}» входит в {used} элемент(ов) курсов — "
+                    "сначала уберите его из курсов"
+                )
         if self._learning is not None:
             act_ids = self._learning.activity_ids_for_source(src["uid"])
             if act_ids:
