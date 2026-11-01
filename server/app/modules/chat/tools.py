@@ -230,13 +230,21 @@ def chat_tools(c) -> list[ToolSpec]:
 
 
 async def _collect_subagent(runtime: AgentRuntime, spec: AgentSpec, ctx: AgentContext, task: str) -> dict:
-    """Прогнать цикл субагента до конца; собрать текст, статус и агрегаты."""
+    """Прогнать цикл субагента до конца; собрать текст, карточки, статус и агрегаты.
+
+    Карточки субагента (git_change, prompt_change, note_draft, chapter_review…)
+    возвращаются в _cards: рантайм родителя эмитит их в SSE — иначе ветка/правка
+    создана, но человеку не показана и не может быть одобрена (R-05).
+    """
     text_parts: list[str] = []
+    cards: list[dict] = []
     steps = tool_calls = input_tokens = output_tokens = 0
     status = "ok"
     async for ev in runtime.run(spec, ctx, [Message(role="user", content=task)]):
         if ev.type == "text":
             text_parts.append(ev.text)
+        elif ev.type == "card" and ev.card is not None:
+            cards.append(ev.card)
         elif ev.type == "usage":
             steps += 1
             input_tokens += ev.usage[0]
@@ -263,6 +271,8 @@ async def _collect_subagent(runtime: AgentRuntime, spec: AgentSpec, ctx: AgentCo
             "tokens": input_tokens + output_tokens,
         },
     }
+    if cards:
+        result["_cards"] = cards[:10]
     if status != "ok":
         result["error"] = status
     return result

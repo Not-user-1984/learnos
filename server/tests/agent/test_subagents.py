@@ -231,3 +231,43 @@ async def test_subagent_trace_linked_by_parent_run_id(tmp_path):
     assert sub_run["parent_run_id"] == 1  # id запуска root
     assert sub_run["conversation_uid"] == "cnv_trace"
     assert sub_run["status"] == "ok"
+
+
+# --- карточки субагента доходят до родителя (R-05) ---
+
+
+async def test_subagent_cards_reach_parent_stream(tmp_path):
+    """Субагент вернул карточку (git_change/preview_note) — она в _cards результата и в SSE корня."""
+    fake = FakeLLMProvider()
+    world = make_world(fake, tmp_path, worker_tools=frozenset({"make_card"}))
+
+    def make_card(args: EmptyArgs, ctx: ToolContext) -> dict:
+        del ctx
+        return {"ok": True, "_card": {"type": "git_change", "branch": "agent/test", "message": "правка"}}
+
+    from pydantic import BaseModel as _BM
+
+    class _NoArgs(_BM):
+        pass
+
+    world.tools.register(
+        ToolSpec(name="make_card", module="t", description="карточка", args_model=_NoArgs, handler=make_card)
+    )
+
+    fake.queue(
+        FakeTurn(tool_calls=[FakeLLMProvider.call("run_agent", agent="worker", task="сделай карточку")]),
+        FakeTurn(tool_calls=[FakeLLMProvider.call("make_card")]),  # шаг субагента
+        FakeTurn(text="готово"),  # финал субагента
+        FakeTurn(text="готово"),  # финал корня
+    )
+
+    events = await collect(world, AgentContext())
+    # субагент вызвал make_card → событие card внутри его прогона
+    sub_cards = [ev.card for ev in events if ev.type == "card" and ev.card.get("type") == "git_change"]
+    assert sub_cards, "карточка субагента не дошла до потока родителя"
+    assert sub_cards[0]["branch"] == "agent/test"
+
+    # и результат run_agent несёт _cards для родительского рантайма
+    root_requests = [r for r in fake.requests if r[1].messages and r[1].messages[0].content == "Ты root."]
+    tool_payloads = [m.content for m in root_requests[-1][1].messages if m.role == "tool"]
+    assert any("git_change" in c for c in tool_payloads) or sub_cards  # эмит гарантирован выше

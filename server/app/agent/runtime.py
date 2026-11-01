@@ -223,8 +223,9 @@ class AgentRuntime:
                             "error": "unknown_tool",
                             "message": f"инструмент '{call.name}' недоступен этому агенту",
                         }
-                    card = result.get("_card")
-                    if card is not None:
+                    for card in ([result.get("_card")] if result.get("_card") is not None else []) + list(
+                        result.get("_cards") or []
+                    ):
                         yield AgentEvent(type="card", card=card, call_id=call.id, name=call.name)
                     ok = "error" not in result
                     summary = (
@@ -236,7 +237,7 @@ class AgentRuntime:
                     yield AgentEvent(
                         type="tool_end", call_id=call.id, name=call.name, ok=ok, summary=str(summary)[:200]
                     )
-                    payload = {k: v for k, v in result.items() if k != "_card"}
+                    payload = {k: v for k, v in result.items() if k not in ("_card", "_cards")}
                     messages.append(
                         Message(
                             role="tool",
