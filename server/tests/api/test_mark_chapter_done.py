@@ -11,7 +11,7 @@ def test_mark_chapter_done_moves_cursor_via_conversation(client, container):
     conv = container.chat.create_conversation(mode="quick", activity=act["uid"], chapter=1)
 
     spec = container.tools.get("mark_chapter_done")
-    assert "quick" in spec.modes
+    assert "agent" in spec.channels  # modes-поле удалено как мёртвое (R-28)
 
     out = container.learning.mark_chapter_done(conversation_uid=conv["uid"])
     assert out["cursor_chapter"] == 2 and out["marked_chapter"] == 1

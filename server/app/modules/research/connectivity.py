@@ -66,10 +66,14 @@ def apply_to_settings(settings, values: dict) -> dict:
 
         if settings.search_provider == "tavily":
             os.environ["TAVILY_API_KEY"] = api_key
+            os.environ.pop("SERPER_API_KEY", None)  # смена провайдера — чужой ключ не висит (R-26)
         elif settings.search_provider == "serper":
             os.environ["SERPER_API_KEY"] = api_key
+            os.environ.pop("TAVILY_API_KEY", None)
         else:
-            os.environ["TAVILY_API_KEY"] = api_key  # автоопределение по типу не критично
+            # chain: ключ ставим обоим — голова цепочки включит того, у кого ключ есть
+            os.environ["TAVILY_API_KEY"] = api_key
+            os.environ["SERPER_API_KEY"] = api_key
     proxy = effective_proxy(values, settings.web_proxy)
     settings.web_proxy = proxy
     settings.yt_proxy = proxy
@@ -81,6 +85,7 @@ def apply_to_settings(settings, values: dict) -> dict:
         settings.telegram_proxy = proxy
     else:
         os.environ.pop("LEARNOS_YT_PROXY", None)
+        settings.telegram_proxy = ""  # очистка прокси сбрасывает и телеграм (R-26)
     return {"provider": settings.search_provider, "proxy": proxy, "vless": bool(values.get("vless_key"))}
 
 

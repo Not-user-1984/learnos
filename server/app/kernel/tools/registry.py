@@ -62,7 +62,6 @@ class ToolRegistry:
         names: set[str] | None = None,
         module: str | None = None,
         channel: str | None = None,
-        mode: str | None = None,
     ) -> list[ToolSpec]:
         """Отбор инструментов для конкретного потребителя (агент, MCP-модуль)."""
         out = []
@@ -72,8 +71,6 @@ class ToolRegistry:
             if module is not None and t.module != module:
                 continue
             if channel is not None and channel not in t.channels:
-                continue
-            if mode is not None and mode not in t.modes:
                 continue
             out.append(t)
         return out

@@ -37,7 +37,6 @@ class ToolSpec:
     args_model: type[BaseModel]
     handler: Callable[[BaseModel, ToolContext], Any]
     channels: frozenset[str] = field(default=frozenset({"mcp", "agent"}))
-    modes: frozenset[str] = field(default=frozenset({"free", "quick", "session"}))
     label: str | Callable[[dict[str, Any]], str] = ""  # подпись чипа; может зависеть от args
     # оконные инструменты (read_chapter, web_read) сами отвечают за размер порции через
     # limit и отдают согласованный next_offset — обрезать их результат нельзя

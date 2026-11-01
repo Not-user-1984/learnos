@@ -198,6 +198,8 @@ def create_app() -> FastAPI:
             "llm_reason": llm.get("reason"),
             "worker_running": container.job_worker.running if container.job_worker else False,
             "tools": len(container.tools.all()),
+            # счётчики для доков (R-28): единственный источник правды о размерах
+            "modules": len({t.module for t in container.tools.all()}),
         }
 
     @app.get("/api/runs", tags=["system"])
