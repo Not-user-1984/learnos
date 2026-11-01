@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 import anyio
-from jinja2 import Environment, StrictUndefined
+from jinja2 import Environment, StrictUndefined, TemplateError
 from pydantic import BaseModel
 
 from ..kernel.errors import AppError
@@ -27,13 +27,50 @@ _jinja = Environment(undefined=StrictUndefined, autoescape=False, keep_trailing_
 
 
 def render_prompt(path: Path, variables: dict[str, Any]) -> str:
-    """Промпт агента с Jinja-подстановками; StrictUndefined ловит опечатки.
+    """Промпт агента с подстановками; битый Jinja-синтаксис не роняет агента (R-14).
 
     Override: если в data/prompts/ лежит отредактированная копия — читаем её
     (правки из чата применяются сразу и переживают пересборку контейнера).
     """
     actual = resolve_prompt_path(path)
-    return _jinja.from_string(actual.read_text(encoding="utf-8")).render(**variables)
+    return safe_render(actual.read_text(encoding="utf-8"), variables)
+
+
+def safe_render(text: str, variables: dict[str, Any]) -> str:
+    """Jinja-рендер; при ошибке — фолбэк: только известные переменные через replace.
+
+    DevOps-контент промптов полон {{ .Values }}, {{.Names}} (Helm, docker --format):
+    StrictUndefined ронял агента на каждом запуске. В фолбэке такой текст живёт
+    как есть, известные переменные подставляются точечно.
+    """
+    try:
+        return _jinja.from_string(text).render(**variables)
+    except TemplateError:
+        log.warning("промпт содержит битый/чужой Jinja-синтаксис — рендер с частичной подстановкой")
+        out = text
+        for key, value in variables.items():
+            for pattern in (f"{{{{ {key} }}}}", f"{{{{{key}}}}}"):
+                out = out.replace(pattern, str(value))
+        return out
+
+
+def validate_prompt(text: str) -> str | None:
+    """Проверка промпта при сохранении: предупреждение о непарсящемся Jinja.
+
+    Битый синтаксис не блокирует сохранение — рантайм рендерит его безопасным
+    фолбэком (safe_render), но автор промпта должен знать, что подстановки
+    переменных в таких местах работать не будут.
+    """
+    from jinja2 import TemplateSyntaxError
+
+    try:
+        _jinja.from_string(text).render()
+    except TemplateSyntaxError as e:
+        return (
+            f"в строке {e.lineno} не парсится Jinja ({e.message}) — "
+            "этот фрагмент уйдёт агенту без подстановок"
+        )
+    return None
 
 
 def resolve_prompt_path(path: Path) -> Path:
@@ -52,7 +89,7 @@ def resolve_prompt_path(path: Path) -> Path:
 def _system_prompt(spec: AgentSpec, ctx: AgentContext) -> str:
     """Промпт агента (файл или строка кастомного агента) + блок «Контекст», если задан."""
     if spec.prompt_text is not None:
-        prompt = _jinja.from_string(spec.prompt_text).render(**ctx.variables)
+        prompt = safe_render(spec.prompt_text, ctx.variables)
     else:
         prompt = render_prompt(spec.prompt_path, ctx.variables)
     if ctx.system_extra:

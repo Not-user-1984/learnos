@@ -43,7 +43,12 @@ class LearningService:
     # --- активности ---
 
     def start_activity(self, source_ref: str | int, course_id: int | None = None) -> dict:
-        """«Идём по источнику»: курсор на первой главе."""
+        """«Идём по источнику»: курсор на первой главе.
+
+        Идемпотентно (R-11): повторный клик «Разбор/Сессия/Обсудить» не плодит
+        активности с курсором 1 — возвращается действующая, прогресс книги
+        не размазывается по дублям.
+        """
         from sqlalchemy import select
 
         from ..library.infra.tables import sources
@@ -53,6 +58,17 @@ class LearningService:
             row = uow.session.execute(select(sources).where(_ref_cond(sources, source_ref))).first()
             if row is None:
                 raise NotFound(f"источник '{source_ref}' не найден")
+            existing = self._acts.find_active(uow.session, row.id, course_id)
+            if existing is not None:
+                return {
+                    "id": existing["id"],
+                    "uid": existing["uid"],
+                    "source_id": row.id,
+                    "title": existing["title"],
+                    "status": existing["status"],
+                    "cursor_chapter": existing["cursor_chapter"],
+                    "note": "изучение уже идёт — вернул действующую активность",
+                }
             uid = self._ids.new("act")
             act_id = self._acts.insert(
                 uow.session,

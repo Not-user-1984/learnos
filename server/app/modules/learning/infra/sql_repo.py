@@ -100,6 +100,17 @@ class ActivityRepository:
         rows = session.execute(stmt.order_by(activities.c.updated_at.desc())).all()
         return [_activity_dict(r) for r in rows]
 
+    def find_active(self, session: Session, source_id: int, course_id: int | None) -> dict | None:
+        """Действующая активность источника (для get-or-create, R-11): один курсор на книгу."""
+        stmt = select(activities).where(
+            activities.c.source_id == source_id,
+            activities.c.status == "active",
+            activities.c.course_id.is_(None) if course_id is None else activities.c.course_id == course_id,
+        )
+        stmt = stmt.order_by(activities.c.cursor_chapter.desc(), activities.c.id.desc())
+        row = session.execute(stmt).first()
+        return _activity_dict(row) if row else None
+
     def ids_for_source(self, session: Session, source_id: int) -> list[int]:
         """id активностей источника (фильтр разговоров по главе)."""
         rows = session.execute(select(activities.c.id).where(activities.c.source_id == source_id)).all()

@@ -31,6 +31,13 @@ class AgentPrompt:
     tools: list[str] | None = None
 
 
+def _prompt_warning(prompt: str) -> str | None:
+    """Предупреждение о непарсящемся Jinja — сохраняем, но автор должен знать (R-14)."""
+    from ...agent.runtime import validate_prompt
+
+    return validate_prompt(prompt)
+
+
 class TuningService:
     """Use-cases настройки: список промптов, черновик правки (дифф), применение, откат, кастомные агенты."""
 
@@ -402,6 +409,7 @@ class TuningService:
             raise ValidationFailed("нужно описание агента")
         if len(prompt.strip()) < 40:
             raise ValidationFailed("промпт слишком короткий")
+        warning = _prompt_warning(prompt)
         tools = self._sanitize_tools(tools, strict=True)
         now = now_iso(self._clock)
         with self._uow() as uow:
@@ -417,7 +425,10 @@ class TuningService:
                 )
             )
         self._register_custom(name, description.strip(), prompt.strip(), tools, model_role)
-        return {"ok": True, "agent": name, "mode": f"agent:{name}"}
+        out = {"ok": True, "agent": name, "mode": f"agent:{name}"}
+        if warning:
+            out["warning"] = warning
+        return out
 
     def update_custom_agent(
         self,

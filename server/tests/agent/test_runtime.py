@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-from jinja2 import UndefinedError
 from pydantic import BaseModel
 
 from app.agent.runtime import AgentRuntime, NullRecorder, render_prompt
@@ -267,11 +266,11 @@ def test_null_recorder_returns_zero():
 # --- промпт: StrictUndefined ---
 
 
-def test_render_prompt_strict_undefined(tmp_path):
+def test_render_prompt_unknown_variable_falls_back(tmp_path):
+    """Неизвестная переменная — фолбэк: литерал остаётся, рендер не падает (R-14)."""
     prompt = tmp_path / "p.md"
     prompt.write_text("Ты тестовый агент. {{ x }}", encoding="utf-8")
-    with pytest.raises(UndefinedError):
-        render_prompt(prompt, {})
+    assert render_prompt(prompt, {}) == "Ты тестовый агент. {{ x }}"
 
 
 def test_render_prompt_substitutes_variables(tmp_path):
@@ -280,15 +279,15 @@ def test_render_prompt_substitutes_variables(tmp_path):
     assert render_prompt(prompt, {"x": "1"}) == "Ты тестовый агент. 1"
 
 
-async def test_missing_variable_yields_error_event(tmp_path):
-    """Пропущенная переменная промпта не роняет стрим — событие error."""
+async def test_missing_variable_does_not_crash_agent(tmp_path):
+    """Пропущенная переменная не роняет стрим (R-14): фолбэк оставляет текст как есть."""
     fake = FakeLLMProvider()
     runtime = AgentRuntime(make_router(fake), make_tools())
 
     events = await collect(runtime, make_spec(tmp_path), make_ctx(variables={}))
 
-    assert [e.type for e in events] == ["error"]
-    assert "x" in events[0].text
+    # агент отвечает; переменная без значения ушла в промпт литералом
+    assert events[-1].type == "final"
 
 
 # --- run_structured ---

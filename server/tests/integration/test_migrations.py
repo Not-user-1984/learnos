@@ -129,11 +129,11 @@ def test_v1_to_head_moves_data_and_kb(v1_layout):
     engine = create_engine(f"sqlite:///{data_dir / 'learnos.db'}")
     try:
         with engine.connect() as conn:
-            # ревизия дошла до головы
-            assert (
-                conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == "0011_agent_runs_current_tool"
-            )  # head (обновляется с новыми ревизиями)
+            # ревизия дошла до головы (актуальный head — из каталога миграций, R-28)
+            from alembic.script import ScriptDirectory
+
+            head = ScriptDirectory(str(SERVER_DIR / "migrations")).get_current_head()
+            assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == head
 
             # sources получил uid, строки сохранены
             src = conn.execute(text("SELECT id, uid, kind, title, status FROM sources")).mappings().all()

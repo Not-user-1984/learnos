@@ -1,7 +1,7 @@
 ---
 id: T-050
 title: "Аудит 2026-11-01, спринт 2: harness (handoff, контекст, R-11..R-15, R-24, eval-каркас)"
-status: idea
+status: active
 priority: high
 from: внешний аудит [task_ai/reference/audit-2026-11-01.md](../reference/audit-2026-11-01.md), спринт 2 + раздел «Архитектура A/B/F»
 created: 2026-11-01
@@ -41,6 +41,19 @@ created: 2026-11-01
   exec/admin только по подтверждению; «агент с web_read не получает save_skill» — решить
   судьбу save_skill у root (lethal trifecta, см. T-049 заметки); `save_skill` новых скриптов
   через карточку с подтверждением.
+
+## Этапы (каждый — отдельный коммит, порядок по возрастанию риска)
+
+1. **Э1 быстрые фиксы**: R-11 start_activity get-or-create + миграция слияния дублей;
+   R-14 безопасный рендер промптов ({{ … }} не роняет агента) + валидация при создании/правке
+2. **Э2 тюнинг и внешние MCP**: R-15 (base_sha у override, apply сверяет old_content,
+   reject только pending, data_dir из Settings); R-29 (mcp_* инструменты доступны root)
+3. **Э3 наблюдаемость (R-24)**: usage у structured-вызовов, таблица agent_steps, /api/runs/{id}
+4. **Э4 handoff (A)**: conversations.active_agent, интент → специалист, handoff()/handoff_back(),
+   бейдж в чате, директивы интентов — в промпты специалистов
+5. **Э5 слой контекста (B, включая R-12)**: резюме tool-результатов в истории, компактация
+   conversation.summary, токен-бюджет под кириллицу, ленивые схемы инструментов
+6. **Э6 eval-каркас (F)**: золотые сценарии tests/evals + расширение линтера промптов
 
 ## Критерии готовности
 
