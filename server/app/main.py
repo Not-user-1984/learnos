@@ -2,12 +2,14 @@
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 from .bootstrap import MODULES, build_container
+from .kernel.clock import now_iso
 from .kernel.errors import AppError, NotFound
 from .kernel.tools.mcp_adapter import build_mcp_server
 
@@ -24,25 +26,57 @@ def get_container():
     return _CONTAINER
 
 
-def migrate_db(container) -> None:
-    """Применить миграции Alembic; при ошибке — схема из метаданных (дев/тесты)."""
+def _backup_sqlite(container) -> Path | None:
+    """Консистентный бэкап БД перед миграцией (sqlite3 .backup, R-21/G аудита).
+
+    Копия файла без -wal может быть неконсистентной — используем API бэкапа.
+    """
+    url = container.settings.db_url
+    if not url.startswith("sqlite:///"):
+        return None
+    db_path = Path(url.removeprefix("sqlite:///"))
+    if not db_path.exists():
+        return None
+    backup_dir = Path(container.settings.data_dir) / "db-backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = now_iso(container.clock)[:19].replace(":", "").replace("-", "")
+    target = backup_dir / f"learnos-{stamp}-pre-migrate.db"
+    import sqlite3
+
+    src = sqlite3.connect(db_path)
     try:
-        from alembic import command
-        from alembic.config import Config
+        dst = sqlite3.connect(target)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+    finally:
+        src.close()
+    # ротация: последние 10
+    old = sorted(backup_dir.glob("learnos-*-pre-migrate.db"))[:-10]
+    for stale in old:
+        stale.unlink(missing_ok=True)
+    log.info("бэкап БД перед миграцией: %s", target.name)
+    return target
 
-        from .kernel.config import SERVER_DIR
 
-        alembic_cfg = Config(str(SERVER_DIR / "alembic.ini"))
-        alembic_cfg.set_main_option("script_location", str(SERVER_DIR / "migrations"))
-        alembic_cfg.set_main_option("sqlalchemy.url", container.settings.db_url)
-        command.upgrade(alembic_cfg, "head")
-    except Exception:  # noqa: BLE001 — миграций нет/ошибка: честная схема из метаданных
-        log.warning("alembic upgrade не удался, создаю схему из метаданных", exc_info=True)
-        from .kernel.db import metadata
+def migrate_db(container) -> None:
+    """Миграции Alembic (fail-fast, R-21/G): перед прогоном — бэкап БД.
 
-        engine = create_engine(container.settings.db_url)
-        metadata.create_all(bind=engine)
-        engine.dispose()
+    Тихий fallback на create_all раньше прятал дрейф схемы: таблицы не
+    меняются у существующих колонок, падения вылезали позже и страннее.
+    Первая схема (БД нет) создаётся миграцией 0001 — fallback не нужен.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    from .kernel.config import SERVER_DIR
+
+    _backup_sqlite(container)
+    alembic_cfg = Config(str(SERVER_DIR / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(SERVER_DIR / "migrations"))
+    alembic_cfg.set_main_option("sqlalchemy.url", container.settings.db_url)
+    command.upgrade(alembic_cfg, "head")
 
 
 @asynccontextmanager

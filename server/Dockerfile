@@ -7,7 +7,9 @@ ENV PYTHONUNBUFFERED=1 \
     LEARNOS_KB_DIR=/kb \
     LEARNOS_SKILLS_DIR=/app/skills
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# пин версии uv (G аудита: latest ломается без предупреждения)
+ARG UV_VERSION=0.6.6
+COPY --from=ghcr.io/astral-sh/uv:$UV_VERSION /uv /usr/local/bin/uv
 
 # ffmpeg + deno: yt-dlp требует JS-runtime для YouTube (PO-токены), иначе субтитры падают на 429
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl unzip \

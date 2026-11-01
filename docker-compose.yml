@@ -35,6 +35,13 @@ services:
       - ./deploy/repo-mask/data:/repo/data:ro
     ports:
       - "8765:8765"
+    # G аудита: контейнер честно сообщает о себе (depends_on web ждёт живой сервер)
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8765/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -53,7 +60,8 @@ services:
     container_name: learnos-web
     restart: unless-stopped
     depends_on:
-      - server
+      server:
+        condition: service_healthy
     environment:
       LEARNOS_API_URL: http://server:8765
       # R-07: прокси добавляет bearer на сервере; браузер токен не видит

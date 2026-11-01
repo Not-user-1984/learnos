@@ -15,3 +15,5 @@ server/.ruff_cache/
 server/.mypy_cache/
 server/htmlcov/
 server/dist/
+# знания — отдельный git-репо на проде (D аудита), не в коде
+kb/
