@@ -144,19 +144,18 @@ def _allow_local_http(monkeypatch):
 
 def test_from_url_rejects_private_addresses(container):
     """SSRF-защита: loopback и LAN-адреса не скачиваются (ревью T-042)."""
-    from urllib.parse import urlsplit
 
     import pytest as _pytest
 
     from app.kernel.errors import ValidationFailed
+    from app.kernel.netguard import assert_public_http_url
 
-    svc = container.library
-    svc._settings.allow_private_url_fetch = False  # в модуле autouse-флаг для локального http
     for url in (
         "http://localhost:8765/api/health",
         "http://127.0.0.1:8006/",
         "http://192.168.0.105:8006/",
         "http://router.local/admin",
+        "http://[::1]:8765/",
     ):
         with _pytest.raises(ValidationFailed):
-            svc._assert_public_http_url(urlsplit(url))
+            assert_public_http_url(url, allow_private=False)

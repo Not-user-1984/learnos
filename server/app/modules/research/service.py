@@ -266,13 +266,18 @@ class ResearchService:
     # --- извлечение страницы ---
 
     def _fetch(self, url: str) -> tuple[str, object]:
-        """Страница → (title, очищенный root-узел). Title достаём до среза body/main."""
-        r = httpx.get(
+        """Страница → (title, очищенный root-узел). Title достаём до среза body/main.
+
+        SSRF-защита: URL и каждый редирект-hop проверяются на публичность (R-08).
+        """
+        from ...kernel.netguard import checked_get
+
+        r = checked_get(
             url,
-            headers={"User-Agent": UA},
-            timeout=25,
-            follow_redirects=True,
+            allow_private=self._settings.allow_private_url_fetch,
             proxy=(getattr(self._settings, "web_proxy", "") or "") or None,
+            timeout=25,
+            headers={"User-Agent": UA},
         )
         r.raise_for_status()
         ctype = r.headers.get("content-type", "")

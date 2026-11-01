@@ -1,10 +1,8 @@
 """Сервис библиотеки: источники, главы, jobs, upload."""
 
-import ipaddress
 import json
 import logging
 import shutil
-import socket
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -733,12 +731,13 @@ class LibraryService:
         content-type/magic-байты ответа) → скачивание и upload-путь книг; прочий
         URL → web-статья. Ответ сразу: uid, kind и job обработки.
         """
+        from ...kernel.netguard import assert_public_http_url
         from .domain import is_youtube_url
 
         parts = urlsplit(url)
         if parts.scheme not in ("http", "https") or not parts.hostname:
             raise ValidationFailed("нужна http(s)-ссылка на видео, PDF или статью")
-        self._assert_public_http_url(parts)
+        assert_public_http_url(url, allow_private=self._settings.allow_private_url_fetch)
         if is_youtube_url(url):
             return self._start_url_source("video", url)
         data = self._probe_pdf(url)
@@ -770,32 +769,13 @@ class LibraryService:
             "processing": bool(proc.get("ok")),
         }
 
-    def _assert_public_http_url(self, parts) -> None:
-        """SSRF-защита: внутренние адреса (loopback/LAN/линк-локал) не скачиваются по ссылке.
-
-        Контент попадает в LLM-обработку — внутренние админки/метаданные выкачивать нельзя.
-        allow_private_url_fetch в настройках снимает запрет для доверенной LAN (ревью T-042).
-        """
-        if self._settings.allow_private_url_fetch:
-            return
-        host = (parts.hostname or "").lower()
-        if host == "localhost" or host.endswith((".local", ".internal", ".lan", ".home.arpa")):
-            raise ValidationFailed("внутренние адреса недоступны для загрузки по ссылке")
-        try:
-            infos = socket.getaddrinfo(host, None)
-        except OSError:
-            return  # локально не резолвится (сеть решит на соединении; прокси-случай)
-        for info in infos:
-            ip = ipaddress.ip_address(info[4][0])
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-                raise ValidationFailed("внутренние адреса недоступны для загрузки по ссылке")
-
     def _probe_pdf(self, url: str) -> bytes | None:
         """GET по ссылке: байты PDF или None, если ответ не похож на книгу.
 
         Решение по расширению .pdf, content-type и magic-байтам %PDF- в первом
         килобайте (трекеры отдают файлы без расширения и с битым content-type).
         """
+        from ...kernel.netguard import checked_stream
         from .domain import is_pdf_url
 
         proxy = (getattr(self._settings, "web_proxy", "") or "") or None
@@ -803,13 +783,12 @@ class LibraryService:
         size = 0
         looks_pdf = is_pdf_url(url)
         try:
-            with httpx.stream(
-                "GET",
+            with checked_stream(
                 url,
-                headers={"User-Agent": URL_UA},
-                timeout=URL_TIMEOUT,
-                follow_redirects=True,
+                allow_private=self._settings.allow_private_url_fetch,
                 proxy=proxy,
+                timeout=URL_TIMEOUT,
+                headers={"User-Agent": URL_UA},
             ) as r:
                 r.raise_for_status()
                 looks_pdf = looks_pdf or (r.headers.get("content-type") or "").lower().startswith(
