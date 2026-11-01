@@ -69,13 +69,27 @@ def migrate_db(container) -> None:
     """
     from alembic import command
     from alembic.config import Config
+    from sqlalchemy import create_engine, inspect
 
     from .kernel.config import SERVER_DIR
 
-    _backup_sqlite(container)
     alembic_cfg = Config(str(SERVER_DIR / "alembic.ini"))
     alembic_cfg.set_main_option("script_location", str(SERVER_DIR / "migrations"))
     alembic_cfg.set_main_option("sqlalchemy.url", container.settings.db_url)
+
+    engine = create_engine(container.settings.db_url)
+    try:
+        has_version = inspect(engine).has_table("alembic_version")
+        has_schema = inspect(engine).has_table("blocks")
+    finally:
+        engine.dispose()
+    if not has_version and has_schema:
+        # схема создана из метаданных (dev/тесты) — помечаем head без прогона;
+        # источник схемы тот же код, расхождения нет
+        command.stamp(alembic_cfg, "head")
+        return
+
+    _backup_sqlite(container)
     command.upgrade(alembic_cfg, "head")
 
 
