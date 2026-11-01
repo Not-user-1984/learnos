@@ -22,3 +22,18 @@ export function modeIcon(mode: string): string {
   if (mode === "root") return "hub";
   return mode === "quick" ? "bolt" : mode === "session" ? "school" : mode === "tuning" ? "tune" : "chat";
 }
+
+
+const AGENT_LABEL: Record<string, string> = {
+  root: "root · оркестратор",
+  quick_reviewer: "быстрый разбор",
+  session_tutor: "тьютор урока",
+  free_chat: "свободный чат",
+  repo_scout: "idea-scout",
+};
+
+/** Короткая подпись агента, ведущего разговор (handoff, T-050). */
+export function agentLabel(agent: string | null | undefined): string {
+  if (!agent) return "";
+  return AGENT_LABEL[agent] ?? `агент ${agent}`;
+}

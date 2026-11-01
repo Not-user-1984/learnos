@@ -60,6 +60,10 @@ class ConversationRepository:
                 c["messages_count"] = int(counts.get(c["id"], 0))
         return convs
 
+    def set_active_agent(self, session: Session, conv_id: int, agent: str | None) -> None:
+        """Сменить агента, ведущего разговор (handoff, T-050 Э4)."""
+        session.execute(update(conversations).where(conversations.c.id == conv_id).values(active_agent=agent))
+
     def update(self, session: Session, conv_id: int, **values) -> None:
         session.execute(update(conversations).where(conversations.c.id == conv_id).values(**values))
 
@@ -110,6 +114,7 @@ def _conv_dict(r) -> dict:
         "uid": r.uid,
         "title": r.title,
         "mode": r.mode,
+        "active_agent": r.active_agent,
         "activity_id": r.activity_id,
         "chapter_idx": r.chapter_idx,
         "focus_block_uid": r.focus_block_uid,

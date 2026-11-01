@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { modeLabel } from "@/lib/format";
+import { agentLabel, modeLabel } from "@/lib/format";
 
 type ToolChip = {
   call_id: string;
@@ -58,6 +58,10 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   const [reviewProgress, setReviewProgress] = useState<ReviewProgress | null>(conversation.review_progress ?? null);
   const [input, setInput] = useState("");
   const [title, setTitle] = useState(conversation.title);
+  // T-050: кого показывает бейдж «ведёт: …» (обновляется событием handoff)
+  const [activeAgent, setActiveAgent] = useState<string | null | undefined>(
+    conversation.active_agent
+  );
   const [reconnecting, setReconnecting] = useState(false);
   const [agentState, setAgentState] = useState<AgentState | null>(conversation.agent_state ?? null);
   const [courseBusy, setCourseBusy] = useState(false);
@@ -158,6 +162,10 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           break;
         case "title":
           setTitle(ev.data.title);
+          break;
+        case "handoff":
+          // T-050: разговор передан специалисту — бейдж «ведёт: …» обновится с conversation
+          setActiveAgent(ev.data.agent);
           break;
         case "review_progress":
           // mark_chapter_done/finish_session двигают курсор книги — полоса обновляется
@@ -351,6 +359,11 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
             {conversation.scenario || modeLabel(conversation.mode)}
           </span>
+          {activeAgent && activeAgent !== "root" && (
+            <span className="rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs text-primary">
+              ведёт: {agentLabel(activeAgent)}
+            </span>
+          )}
           <ConfirmDeleteButton
             endpoint={`/conversations/${conversation.uid}`}
             title="Удалить разговор?"

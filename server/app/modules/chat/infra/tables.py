@@ -18,6 +18,8 @@ conversations = Table(
     Column("uid", Text, nullable=False, unique=True),
     Column("title", Text, nullable=False, server_default="Новый разговор"),
     Column("mode", Text, nullable=False, server_default="free"),
+    # handoff (T-050 Э4): агент, который ведёт разговор; NULL — по mode (легаси)
+    Column("active_agent", Text, nullable=True),
     Column("activity_id", Integer, ForeignKey("activities.id")),
     Column("chapter_idx", Integer),
     Column("focus_block_uid", Text),

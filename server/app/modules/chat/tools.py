@@ -30,6 +30,17 @@ class ListAgentsArgs(BaseModel):
     """Без аргументов."""
 
 
+class HandoffArgs(BaseModel):
+    """handoff: передать разговор специалисту (он будет вести следующие ходы)."""
+
+    agent: str
+    reason: str = ""
+
+
+class HandoffBackArgs(BaseModel):
+    """handoff_back: вернуть разговор корневому агенту."""
+
+
 class OfferActionArgs(BaseModel):
     """Аргументы предложения-карточки (T-036)."""
 
@@ -101,6 +112,37 @@ def chat_tools(c) -> list[ToolSpec]:
         ]
         return {"agents": agents}
 
+    def handoff(args: HandoffArgs, ctx: ToolContext) -> dict:
+        """Передать разговор специалисту: дальше он ведёт по своему промпту (T-050 Э4)."""
+        if not ctx.conversation_uid:
+            return {"error": "no_conversation", "message": "handoff работает только внутри разговора"}
+        try:
+            spec = c.agent_registry.get(args.agent)
+        except KeyError:
+            return {"error": "unknown_agent", "message": f"агент '{args.agent}' не найден (list_agents)"}
+        if args.agent == ctx.agent_name:
+            return {"ok": True, "agent": args.agent, "note": "разговор уже ведёт этот агент"}
+        c.chat.handoff_conversation(ctx.conversation_uid, args.agent)
+        return {
+            "ok": True,
+            "agent": args.agent,
+            "description": spec.description,
+            "note": f"разговор ведёт {args.agent}; следующий ход — его. Вернуть себе: handoff_back()",
+            "_card": {
+                "type": "handoff",
+                "agent": args.agent,
+                "reason": args.reason[:200],
+            },
+        }
+
+    def handoff_back(args: HandoffBackArgs, ctx: ToolContext) -> dict:
+        """Вернуть разговор корневому агенту-оркестратору."""
+        del args
+        if not ctx.conversation_uid:
+            return {"error": "no_conversation", "message": "handoff_back работает только внутри разговора"}
+        c.chat.handoff_conversation(ctx.conversation_uid, "root")
+        return {"ok": True, "agent": "root", "note": "разговор снова ведёт root"}
+
     def run_agent(args: RunAgentArgs, ctx: ToolContext) -> dict:
         if ctx.depth >= MAX_SUBAGENT_DEPTH:
             return {
@@ -166,6 +208,28 @@ def chat_tools(c) -> list[ToolSpec]:
         }
 
     return [
+        ToolSpec(
+            name="handoff",
+            module="chat",
+            description=(
+                "Передать разговор специалисту (T-050): дальше он ведёт диалог по своему "
+                "промпту — для многоходовых сценариев (разбор книги, урок). agent — имя из "
+                "list_agents (например quick_reviewer или session_tutor), reason — зачем."
+            ),
+            args_model=HandoffArgs,
+            handler=handoff,
+            channels=frozenset({"agent"}),
+            label="Передаю разговор",
+        ),
+        ToolSpec(
+            name="handoff_back",
+            module="chat",
+            description="Вернуть разговор корневому агенту (root) после завершения сценария.",
+            args_model=HandoffBackArgs,
+            handler=handoff_back,
+            channels=frozenset({"agent"}),
+            label="Возвращаю root",
+        ),
         ToolSpec(
             name="run_agent",
             module="chat",

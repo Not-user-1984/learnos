@@ -93,6 +93,7 @@ quick_reviewer = AgentSpec(
             "send_telegram_text",
             "send_block_to_telegram",
             "send_chapter_to_telegram",
+            "handoff_back",
         }
     ),
     # длинные видео: транскрипт листается десятками порций read_chapter
@@ -125,6 +126,8 @@ session_tutor = AgentSpec(
             "send_telegram_text",
             "send_block_to_telegram",
             "send_chapter_to_telegram",
+            # T-050 Э4: вернуть разговор root или передать коллеге
+            "handoff_back",
         }
     ),
     max_steps=40,
@@ -160,7 +163,7 @@ root = AgentSpec(
     prompt_path=AGENTS_DIR / "root" / "prompt.md",
     tools=(
         free_chat.tools
-        | {"run_agent", "list_agents", "propose_change"}
+        | {"run_agent", "list_agents", "propose_change", "handoff", "handoff_back"}
         | SESSION_TOOLS
         | ENTRY_TOOLS
         | {"get_session_state", "mark_chapter_done", "get_review_queue", "answer_review"}

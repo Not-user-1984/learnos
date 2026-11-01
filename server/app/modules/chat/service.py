@@ -100,6 +100,26 @@ INTENT_DIRECTIVES = {
 }
 
 
+# handoff (T-050 Э4): интент первого сообщения передаёт разговор специалисту,
+# дальше он ведёт по своему промпту — директива больше не «одноразовая вставка»
+INTENT_AGENT = {
+    "review": "quick_reviewer",
+    "session": "session_tutor",
+}
+
+
+def _agent_for_conversation(registry, conv: dict) -> str:
+    """Кто ведёт разговор: active_agent (handoff/интент), иначе режим (легаси)."""
+    active = conv.get("active_agent")
+    if active:
+        try:
+            registry.get(active)
+            return active
+        except KeyError:
+            pass  # агента удалили — падаем обратно на режим, разговор не теряем
+    return _agent_for_mode(registry, conv["mode"])
+
+
 def _agent_for_mode(registry, mode: str) -> str:
     """Имя агента по режиму разговора: дефолтные режимы — из таблицы, agent:<name> — кастомный."""
     if mode.startswith("agent:"):
@@ -300,6 +320,14 @@ class ChatService:
         session = self._learning.session_for_conversation(conv["id"])
         if session is None and (conv["mode"] == "session" or intent == "session"):
             session = self._create_session_for(conv)
+        # handoff: интент-сценарий передаёт разговор специалисту (review/session);
+        # legасy-режимы (mode=quick/session) ведутся как раньше — без active_agent
+        specialist = INTENT_AGENT.get(intent or "")
+        if specialist and not conv.get("active_agent") and conv["mode"] in {"root", "free"}:
+            with self._uow() as uow:
+                self._convs.set_active_agent(uow.session, conv["id"], specialist)
+            conv = {**conv, "active_agent": specialist}
+            yield SseEvent("handoff", {"agent": specialist, "reason": f"интент {intent}"})
         if session:
             yield _session_event(session)
 
@@ -332,6 +360,12 @@ class ChatService:
             raise Conflict("нет сообщения без ответа — продолжать нечего")
         self.ensure_idle(conv["uid"])
 
+    def handoff_conversation(self, uid: str, agent: str) -> None:
+        """Сменить агента, ведущего разговор (интент-сценарий или инструмент handoff)."""
+        conv = self.get_conversation(uid)
+        with self._uow() as uow:
+            self._convs.set_active_agent(uow.session, conv["id"], agent)
+
     def ensure_idle(self, uid: str) -> None:
         """Разговор не генерирует ответ сейчас; иначе 409 — пользователь ждёт,
         а не получает тихий отказ с дублем сообщения в истории.
@@ -363,7 +397,7 @@ class ChatService:
     ) -> AsyncIterator[SseEvent]:
         """Общий цикл генерации ответа (сообщение и resume): контекст, агент, сохранение."""
         uid = conv["uid"]
-        agent_name = _agent_for_mode(self._agents, conv["mode"])
+        agent_name = _agent_for_conversation(self._agents, conv)
         spec: AgentSpec = self._agents.get(agent_name)
         system_extra = self._context_block(conv, session)
         # претрекер контента: заметка о ссылках/ID в сообщении — агенту, без LLM

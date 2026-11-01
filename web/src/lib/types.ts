@@ -86,6 +86,7 @@ export type ActivityCard = {
 export type ConversationItem = {
   uid: string;
   title: string;
+  active_agent?: string | null;
   mode: string;
   /** Человекочитаемый сценарий («Разбор видео», «Сессия · глава 3») от бэкенда. */
   scenario?: string | null;
@@ -145,6 +146,7 @@ export type ConversationDetail = {
   uid: string;
   title: string;
   mode: string;
+  active_agent?: string | null;
   scenario?: string | null;
   activity_id: number | null;
   chapter_idx: number | null;
@@ -291,6 +293,7 @@ export interface Card {
 /** SSE-события чата. */
 export type SseEvent =
   | { event: "user_saved"; data: { message_id: number } }
+  | { event: "handoff"; data: { agent: string; reason?: string } }
   | { event: "delta"; data: { text: string } }
   | { event: "tool_start"; data: { call_id: string; name: string; args: Record<string, unknown>; label: string } }
   | { event: "tool_end"; data: { call_id: string; name: string; ok: boolean; summary: string } }
