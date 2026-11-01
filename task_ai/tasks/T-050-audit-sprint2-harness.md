@@ -64,7 +64,9 @@ created: 2026-11-01
       base_changed у override, data_dir из Settings; mcp_* сразу в spec.tools root
 - [x] Э3 (R-24) — 69bac4e: usage у structured-вызовов, таблица agent_steps (0013),
       /api/runs и /api/runs/{id} (шаги + дочерние субагенты)
-- [ ] Э4 handoff (A) — следующий заход: миграция active_agent, интенты → специалист
+- [x] Э4 handoff (A) — 9ae6515: conversations.active_agent (миграция 0014), интенты
+      review/session передают разговор специалисту, handoff()/handoff_back(), бейдж в вебе,
+      легаси-режимы по mode; R-13 закрыт
 - [ ] Э5 слой контекста (B, R-12)
 - [ ] Э6 eval-каркас (F) + веб-экран трасс (/api/runs уже отдаёт данные)
 
