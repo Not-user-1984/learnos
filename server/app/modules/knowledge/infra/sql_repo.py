@@ -144,7 +144,8 @@ class BlockRepository:
             "weak": blocks.c.weak_spots_count,
         }.get(sort, blocks.c.created_at)
         stmt = stmt.order_by(column.desc() if order == "desc" else column.asc()).limit(limit).offset(offset)
-        return [self._row_to_meta(r) for r in session.execute(stmt)]
+        metas = [self._row_to_meta(r) for r in session.execute(stmt)]
+        return self._attach_relations(session, metas)
 
     def count(self, session: Session) -> int:
         return int(session.execute(select(func.count()).select_from(blocks)).scalar_one())
@@ -235,6 +236,44 @@ class BlockRepository:
             weak_spots_count=row.weak_spots_count,
             path=row.path,
         )
+
+    def _attach_relations(self, session: Session, metas: list[BlockMeta]) -> list[BlockMeta]:
+        """Теги/источники/связи для списка блоков: 3 запроса IN вместо N×3 (R-09).
+
+        Без этого list_blocks всегда отдавал пустые tags/sources — главы курсов
+        не отмечались пройденными, карточки БЗ шли без источника.
+        """
+        if not metas:
+            return metas
+        uids = [m.uid for m in metas]
+        tags_by: dict[str, list[str]] = {}
+        for uid, tag in session.execute(
+            select(block_tags.c.block_uid, block_tags.c.tag).where(block_tags.c.block_uid.in_(uids))
+        ):
+            tags_by.setdefault(uid, []).append(tag)
+        src_by: dict[str, list[BlockSource]] = {}
+        for uid, src, ch in session.execute(
+            select(block_sources.c.block_uid, block_sources.c.source_uid, block_sources.c.chapter_idx).where(
+                block_sources.c.block_uid.in_(uids)
+            )
+        ):
+            src_by.setdefault(uid, []).append(BlockSource(source=src, chapter=ch))
+        links_by: dict[str, list[str]] = {}
+        for uid, to in session.execute(
+            select(block_links.c.from_uid, block_links.c.to_uid).where(block_links.c.from_uid.in_(uids))
+        ):
+            links_by.setdefault(uid, []).append(to)
+        return [
+            BlockMeta(
+                **{
+                    **_meta_dict(m),
+                    "tags": tuple(tags_by.get(m.uid, ())),
+                    "sources": tuple(src_by.get(m.uid, ())),
+                    "links": tuple(links_by.get(m.uid, ())),
+                }
+            )
+            for m in metas
+        ]
 
     def meta_with_relations(self, session: Session, meta: BlockMeta) -> BlockMeta:
         """Дополнить метаданные тегами/источниками/связями из таблиц."""
