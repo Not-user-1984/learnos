@@ -198,6 +198,49 @@ class LibraryService:
 
     # --- выполнение jobs (вызывает воркер) ---
 
+    def fail_stuck_job(self, job_id: int, source_uid: str | None, error: str) -> None:
+        """Job → failed и связанный источник из processing → failed (R-10).
+
+        Без этого падение воркера оставляло источник «обрабатывается» навсегда:
+        process_source не даёт повтор без force, а UI его не передаёт.
+        """
+        from sqlalchemy import update
+
+        from .infra.tables import jobs as jobs_t
+
+        now = now_iso(self._clock)
+        with self._uow() as uow:
+            uow.session.execute(
+                update(jobs_t)
+                .where(jobs_t.c.id == job_id)
+                .values(status="failed", error=str(error)[:500], updated_at=now)
+            )
+            if not source_uid:
+                return
+            try:
+                src = self._sources.get(uow.session, source_uid)
+            except NotFound:
+                return
+            if src["status"] == "processing":
+                self._sources.update(uow.session, src["id"], status="failed", updated_at=now)
+
+    def recover_stuck_jobs(self) -> dict:
+        """Старт сервиса: jobs running (убило рестартом) → failed, их источники тоже.
+
+        Идемпотентен; вызывается из lifespan воркера.
+        """
+        from sqlalchemy import select
+
+        from .infra.tables import jobs as jobs_t
+
+        with self._uow() as uow:
+            rows = uow.session.execute(
+                select(jobs_t.c.id, jobs_t.c.target).where(jobs_t.c.status == "running")
+            ).all()
+        for job_id, target in rows:
+            self.fail_stuck_job(job_id, target, "воркер перезапущен во время обработки")
+        return {"ok": True, "recovered_jobs": len(rows)}
+
     def run_job(self, job: dict) -> dict:
         """Выполнить один job: process_source → скилл → summarize_chapters."""
         if job["kind"] == "process_source":

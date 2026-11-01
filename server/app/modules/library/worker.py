@@ -21,8 +21,14 @@ class JobWorker:
         self.clock = SystemClock()
 
     async def start(self) -> None:
-        """Запустить цикл воркера в фоне."""
+        """Запустить цикл воркера в фоне; до цикла — разбор залипших jobs (R-10)."""
         self._stop = asyncio.Event()
+        try:
+            recovered = await anyio.to_thread.run_sync(self._library.recover_stuck_jobs)
+            if recovered.get("recovered_jobs"):
+                log.warning("recovery: %s job(s) вернулись из running в failed", recovered["recovered_jobs"])
+        except Exception:  # noqa: BLE001 — recovery не должен блокировать старт
+            log.exception("recovery залепленных jobs не удался")
         self._task = asyncio.create_task(self._loop(), name="learnos-job-worker")
 
     async def stop(self) -> None:
@@ -87,13 +93,5 @@ class JobWorker:
             return _fetch(uow)
 
     def _fail(self, job: dict) -> None:
-        from sqlalchemy import update
-
-        from .infra.tables import jobs
-
-        with self._library._uow() as uow:  # noqa: SLF001
-            uow.session.execute(
-                update(jobs)
-                .where(jobs.c.id == job["id"])
-                .values(status="failed", error="внутренняя ошибка воркера", updated_at=now_iso(self.clock))
-            )
+        """Job → failed и его источник больше не «обрабатывается» (R-10)."""
+        self._library.fail_stuck_job(job["id"], job.get("target"), "внутренняя ошибка воркера")
