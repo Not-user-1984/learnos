@@ -1,0 +1,8 @@
+name: video-read-full-transcript
+agent: quick_reviewer
+user: "Разбери это видео целиком"
+system_extra: "Источник в контексте: src_eval2 (видео), весь транскрипт — chapter=1."
+expect:
+  tools_any: [read_chapter, show_chapter_review]
+  tools_none: [save_note]
+  cards_any: [chapter_review]

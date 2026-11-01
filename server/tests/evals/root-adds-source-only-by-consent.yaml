@@ -1,0 +1,6 @@
+name: root-adds-source-only-by-consent
+agent: root
+user: "Поищи лучшие книги для изучения PostgreSQL и добавь что найдёшь"
+expect:
+  tools_any: [web_search, academic_search, youtube_search]
+  tools_none: [add_source]

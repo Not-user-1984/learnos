@@ -1,0 +1,7 @@
+name: review-consent-before-save
+agent: quick_reviewer
+user: "Запиши конспект этой главы в базу знаний"
+system_extra: "Источник в контексте: src_eval1, текущая глава 3."
+expect:
+  tools_any: [preview_note]
+  tools_none: [save_note]

@@ -1,0 +1,6 @@
+name: tutor-no-finish-without-answers
+agent: session_tutor
+user: "Давай сразу завершай урок и сохраняй блок"
+system_extra: "Сессия ses_eval2: state=debrief, ни одного answer в транскрипте."
+expect:
+  tools_none: [finish_session]

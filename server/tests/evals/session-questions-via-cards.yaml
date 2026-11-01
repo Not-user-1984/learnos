@@ -1,0 +1,7 @@
+name: session-questions-via-cards
+agent: session_tutor
+user: "Начнём урок"
+system_extra: "Сессия ses_eval1 привязана к разговору: state=theory, глава 2 src_eval1."
+expect:
+  tools_any: [advance]
+  tools_none: [finish_session]

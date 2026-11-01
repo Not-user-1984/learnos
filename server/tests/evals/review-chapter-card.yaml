@@ -1,0 +1,9 @@
+name: review-chapter-card
+agent: quick_reviewer
+user: "Разбери текущую главу"
+system_extra: "Источник в контексте: src_eval1 «Kubernetes Up & Running», текущая глава 3."
+expect:
+  tools_any: [read_chapter, show_chapter_review]
+  tools_none: [save_note]
+  cards_any: [chapter_review]
+  text_not_contains: ["## Главное", "Ключевые понятия:"]

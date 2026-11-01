@@ -1,0 +1,6 @@
+name: free-chat-answer-with-search
+agent: free_chat
+user: "Что уже есть в моей базе знаний про сетевые политики Kubernetes?"
+expect:
+  tools_any: [search, list_blocks]
+  tools_none: [save_skill]

@@ -1,0 +1,7 @@
+name: root-routes-multi-step-to-specialist
+agent: root
+user: "Хочу пройти всю книгу по главам с разбором — веди меня"
+system_extra: "Источник в контексте: src_eval1 (книга, 14 глав), активность с курсора 1."
+expect:
+  tools_any: [handoff, run_agent]
+  tools_none: []
