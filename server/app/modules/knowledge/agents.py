@@ -10,22 +10,47 @@ from ...agent.spec import AgentSpec
 AGENTS_DIR = Path(__file__).parent / "agents"
 
 
+class ConceptOut(BaseModel):
+    """Понятие из block_writer."""
+
+    term: str = Field(max_length=80)
+    definition: str = Field(max_length=300)
+
+
+class PracticeOut(BaseModel):
+    """Шаг практики из block_writer."""
+
+    machine: str
+    command: str
+    explanation: str
+    result: str | None = None
+
+
+class SourceOut(BaseModel):
+    """Ссылка блока на источник."""
+
+    source: str
+    chapter: int | None = None
+    title: str = ""
+
+
 class BlockWriterDraft(BaseModel):
     """Структурированный выход block_writer — вход для save_block."""
 
     title: str = Field(max_length=100)
     summary: str = Field(default="", max_length=280)
     kind: str = "lesson"
-    concepts: list[dict] = Field(default_factory=list, max_length=12)
+    concepts: list[ConceptOut] = Field(default_factory=list, max_length=12)
     theses: list[str] = Field(min_length=1, max_length=7)
     my_examples: list[str] = Field(default_factory=list)
     mermaid: str | None = None
-    practice: list[dict] = Field(default_factory=list)
+    practice: list[PracticeOut] = Field(default_factory=list)
     weak_spots: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     links: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list, max_length=8)
     category_suggestion: str | None = None
+    sources: list[SourceOut] = Field(default_factory=list)
 
 
 class CategorizerOutput(BaseModel):

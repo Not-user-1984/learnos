@@ -267,6 +267,30 @@ class KnowledgeService:
                 ).scalar_one()
             )
 
+    def block_card_for_session(self, session_uid: str) -> dict | None:
+        """Карточка уже сохранённого блока сессии (идемпотентный повтор finish_session).
+
+        Возвращает тот же формат, что и LearningService._write_block, или None.
+        """
+        with self._uow() as uow:
+            meta = self._blocks.get_by_session(uow.session, session_uid)
+            if meta is None:
+                return None
+            return {
+                "block_uid": meta.uid,
+                "path": meta.path,
+                "_card": {
+                    "type": "block_saved",
+                    "block_uid": meta.uid,
+                    "kind": meta.kind,
+                    "title": meta.title,
+                    "summary": meta.summary,
+                    "category": meta.category_path,
+                    "category_status": meta.category_status,
+                    "version": meta.version,
+                },
+            }
+
     def delete_block(self, uid: str) -> dict:
         """Удалить блок: индекс, версии, MD-файл и поисковую строку.
 
@@ -662,13 +686,11 @@ def _writer_out_to_draft(out, kind: str) -> BlockDraft:
         title=out.title,
         summary=out.summary,
         kind=kind if kind in {"lesson", "note", "runbook"} else "lesson",
-        concepts=tuple(Concept(c["term"], c["definition"]) for c in out.concepts),
+        concepts=tuple(Concept(c.term, c.definition) for c in out.concepts),
         theses=tuple(out.theses),
         my_examples=tuple(out.my_examples),
         mermaid=out.mermaid,
-        practice=tuple(
-            PracticeStep(p["machine"], p["command"], p["explanation"], p.get("result")) for p in out.practice
-        ),
+        practice=tuple(PracticeStep(p.machine, p.command, p.explanation, p.result) for p in out.practice),
         weak_spots=tuple(out.weak_spots),
         open_questions=tuple(out.open_questions),
         links=tuple(link for link in out.links if link.startswith("blk_")),
@@ -676,9 +698,9 @@ def _writer_out_to_draft(out, kind: str) -> BlockDraft:
         category_suggestion=out.category_suggestion,
         # источник — только реальный uid (модель любит подставить заголовок)
         sources=tuple(
-            BlockSource(source=s["source"], chapter=s.get("chapter"), title=s.get("title", ""))
+            BlockSource(source=s.source, chapter=s.chapter, title=s.title)
             for s in getattr(out, "sources", []) or []
-            if str(s.get("source", "")).startswith("src_")
+            if str(s.source).startswith("src_")
         ),
     )
 

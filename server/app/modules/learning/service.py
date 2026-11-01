@@ -278,6 +278,9 @@ class LearningService:
     def finish_session(self, session_ref: int | str, block_draft: dict | None = None) -> dict:
         """Завершить сессию (только из debrief) и сохранить блок в KB.
 
+        Порядок: сначала блок (генерация может упасть — сессия останется в debrief,
+        и finish можно повторить), потом закрытие. Если блок по сессии уже сохранён
+        (прошлый финиш упал после записи) — повтор идемпотентен: блока-дубля не будет.
         Без block_draft блок генерируется из транскрипта (block_writer через knowledge).
         """
         now = now_iso(self._clock)
@@ -287,11 +290,14 @@ class LearningService:
                 can_finish(s["state"], s["status"])
             except ValueError as e:
                 raise InvalidState(str(e)) from e
-            self._sessions.update(uow.session, s["id"], status="finished", state="done", ended_at=now)
 
-        block = self._write_block(s, block_draft)
+        # 1) блок знаний — до закрытия: сбой LLM не должен стоить урока (R-03)
+        block = self._knowledge.block_card_for_session(s["uid"]) or self._write_block(s, block_draft)
         (self._maybe_write_runbook(s, block["block_uid"]) or {}).get("block_uid")
+
+        # 2) закрытие сессии + курсор активности + события
         with self._uow() as uow:
+            self._sessions.update(uow.session, s["id"], status="finished", state="done", ended_at=now)
             activity = self._acts.find(uow.session, s["activity_id"]) if s["activity_id"] else None
             if activity:
                 from sqlalchemy import func, select

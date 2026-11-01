@@ -88,6 +88,13 @@ class BlockRepository:
         )
         return Block(meta=meta, content="")
 
+    def get_by_session(self, session: Session, session_uid: str) -> BlockMeta | None:
+        """Первый блок сессии (для идемпотентного завершения после сбоя)."""
+        row = session.execute(
+            select(blocks).where(blocks.c.session_uid == session_uid).order_by(blocks.c.id).limit(1)
+        ).first()
+        return self._row_to_meta(row) if row else None
+
     def list(
         self,
         session: Session,
