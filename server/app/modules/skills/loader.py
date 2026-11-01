@@ -34,9 +34,45 @@ _TYPES = {
 # файлы скилла; переопределение builtin-скилла — теми же именами в data/skill-overrides
 SKILL_FILES = ("SKILL.md", "run.py")
 
+# что видно subprocess-скиллу из окружения сервиса: никакого ZAI_API_KEY/TAVILY/…
+# (R-06: раньше env наследовался целиком — инжект через save_skill мог слить ключи)
+_ENV_ALLOWLIST = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TMPDIR",
+        "PYTHONIOENCODING",
+        "PYTHONDONTWRITEBYTECODE",
+        "SSL_CERT_FILE",
+        "REQUESTS_CA_BUNDLE",
+    }
+)
+
+
+def _sandbox_env(args_json: str, result_path: str, write_dir: Path) -> dict[str, str]:
+    """Env для subprocess-скилла: только рабочий минимум + LEARNOS_SKILL_* и WRITE_DIR."""
+    env = {k: v for k, v in os.environ.items() if k in _ENV_ALLOWLIST or k.startswith("LEARNOS_SKILL_")}
+    env.update(
+        {
+            "LEARNOS_SKILL_ARGS": args_json,
+            "LEARNOS_SKILL_RESULT": result_path,
+            "LEARNOS_WRITE_DIR": str(write_dir),
+        }
+    )
+    return env
+
+
 # протокол subprocess-песочницы: run.py.main(**LEARNOS_SKILL_ARGS) → JSON в LEARNOS_SKILL_RESULT
 _RUNNER = """\
 import importlib.util, json, os, sys
+try:  # лимит памяти песочницы (linux; на mac RLIMIT_AS не работает — пропускаем)
+    import resource
+    resource.setrlimit(resource.RLIMIT_AS, (768 * 1024 * 1024,) * 2)
+except Exception:
+    pass
 spec = importlib.util.spec_from_file_location("agent_skill", sys.argv[1])
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
@@ -238,12 +274,10 @@ class SkillLoader:
         timeout = self._settings.skill_exec_timeout
         fd, result_path = tempfile.mkstemp(suffix=".json", prefix="learnos-skill-")
         os.close(fd)
-        env = {
-            **os.environ,
-            "LEARNOS_SKILL_ARGS": json.dumps(kwargs, ensure_ascii=False, default=str),
-            "LEARNOS_SKILL_RESULT": result_path,
-            "LEARNOS_WRITE_DIR": str(Path(self._settings.data_dir)),
-        }
+        # своя песочница на скилл: пишут только сюда; learnos.db больше не сосед
+        write_dir = Path(self._settings.data_dir) / "skill-work" / (skill["owner"] or "_") / skill["name"]
+        write_dir.mkdir(parents=True, exist_ok=True)
+        env = _sandbox_env(json.dumps(kwargs, ensure_ascii=False, default=str), result_path, write_dir)
         try:
             try:
                 # код скилла агент пишет сам; изоляция — subprocess + таймаут + контейнер на проде

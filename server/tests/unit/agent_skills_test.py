@@ -65,7 +65,8 @@ def test_agent_skill_runs_subprocess_and_writes_to_allowed_dir(tmp_path):
     assert out["greeting"] == "Привет, Дмитрий!"
     assert out["exit_code"] == 0
     assert "пишу файл" in out["stdout"]
-    assert (tmp_path / "greet.txt").read_text(encoding="utf-8") == "Дмитрий"
+    # песочница R-06: запись только в персональный WORK_DIR, не в корень data/
+    assert (tmp_path / "skill-work" / "root" / "hello" / "greet.txt").read_text(encoding="utf-8") == "Дмитрий"
 
 
 def test_agent_skill_timeout_kills_process(tmp_path):
