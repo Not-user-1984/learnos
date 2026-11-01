@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from ..kernel.clock import SystemClock, now_iso
 from ..kernel.db import UnitOfWorkFactory
-from .infra_tables import agent_runs_table
+from .infra_tables import agent_runs_table, agent_steps_table
 
 # живые запуски старше этого возраста считаем мусором от прошлых процессов
 ACTIVE_RUN_MAX_AGE = datetime.timedelta(hours=2)
@@ -65,6 +65,38 @@ class DbRunRecorder:
                 agent_runs_table.update()
                 .where(agent_runs_table.c.id == run_id, agent_runs_table.c.status == "running")
                 .values(steps=steps, tool_calls=tool_calls, current_tool=current)
+            )
+
+    def step(
+        self,
+        run_id: int,
+        *,
+        idx: int,
+        kind: str,
+        name: str,
+        args_json: str | None = None,
+        result_summary: str | None = None,
+        ok: bool = True,
+        ms: int | None = None,
+        tokens_in: int = 0,
+        tokens_out: int = 0,
+    ) -> None:
+        """Один шаг запуска: llm-вызов / инструмент / structured-вызов (R-24)."""
+        with self._uow() as uow:
+            uow.session.execute(
+                agent_steps_table.insert().values(
+                    run_id=run_id,
+                    idx=idx,
+                    kind=kind,
+                    name=name,
+                    args_json=args_json,
+                    result_summary=result_summary,
+                    ok=ok,
+                    ms=ms,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    created_at=now_iso(SystemClock()),
+                )
             )
 
     def finish(

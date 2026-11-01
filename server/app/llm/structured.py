@@ -22,11 +22,17 @@ async def structured_output(
     output: type[BaseModel],
     *,
     temperature: float | None = None,
-) -> BaseModel:
-    """Гарантированно получить экземпляр pydantic-модели от LLM (до 2 повторов при невалидном JSON)."""
+) -> tuple[BaseModel, tuple[int, int]]:
+    """Гарантированно получить экземпляр pydantic-модели от LLM (до 2 повторов
+    при невалидном JSON).
+
+    Возвращает (модель, (input_tokens, output_tokens)) — usage нужен трейсу
+    (R-24): раньше токены structured-вызовов терялись и писались нулями.
+    """
     schema = output.model_json_schema()
     attempt_messages = list(messages)
     last_error: Exception | None = None
+    tokens_in = tokens_out = 0
     for attempt in range(_MAX_ATTEMPTS):
         request = LLMRequest(
             messages=tuple(attempt_messages),
@@ -34,8 +40,10 @@ async def structured_output(
             temperature=temperature,
         )
         response = await provider.complete(model, request)
+        tokens_in += response.usage.input_tokens
+        tokens_out += response.usage.output_tokens
         try:
-            return output.model_validate_json(_extract_json(response.text))
+            return output.model_validate_json(_extract_json(response.text)), (tokens_in, tokens_out)
         except ValidationError as e:
             last_error = e
             log.warning("structured attempt %d invalid: %s", attempt, e.error_count())

@@ -43,6 +43,9 @@ class ListRecorder:
     def finish(self, run_id: int, **kwargs) -> None:
         self.runs[run_id - 1].update(kwargs)
 
+    def step(self, run_id: int, **kwargs) -> None:
+        self.runs[run_id - 1].setdefault("trace", []).append(kwargs)
+
 
 def make_tools() -> ToolRegistry:
     """Реестр с одним инструментом echo, возвращающим _card."""

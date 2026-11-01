@@ -169,6 +169,9 @@ class NullRecorder:
     def progress(self, run_id: int, **kwargs: Any) -> None:
         pass
 
+    def step(self, run_id: int, **kwargs: Any) -> None:
+        pass
+
 
 class AgentRegistryLike(Protocol):
     """Порт реестра агентов: актуальный spec по имени (для горячей перезагрузки)."""
@@ -234,6 +237,14 @@ class AgentRuntime:
                     elif event.type == "usage" and event.usage:
                         input_tokens += event.usage.input_tokens
                         output_tokens += event.usage.output_tokens
+                        self._recorder.step(
+                            run_id,
+                            idx=steps,
+                            kind="llm",
+                            name="chat",
+                            tokens_in=event.usage.input_tokens,
+                            tokens_out=event.usage.output_tokens,
+                        )
                         yield AgentEvent(
                             type="usage", usage=(event.usage.input_tokens, event.usage.output_tokens)
                         )
@@ -254,6 +265,7 @@ class AgentRuntime:
                     yield AgentEvent(
                         type="tool_start", call_id=call.id, name=call.name, args=call.arguments, label=label
                     )
+                    tool_t0 = time.monotonic()
                     if known:
                         try:
                             # офлоад: инструмент синхронный, долгий (сеть, субагент)
@@ -270,6 +282,7 @@ class AgentRuntime:
                             "error": "unknown_tool",
                             "message": f"инструмент '{call.name}' недоступен этому агенту",
                         }
+                    tool_ms = int((time.monotonic() - tool_t0) * 1000)
                     for card in ([result.get("_card")] if result.get("_card") is not None else []) + list(
                         result.get("_cards") or []
                     ):
@@ -280,6 +293,16 @@ class AgentRuntime:
                         or result.get("summary")
                         or result.get("title")
                         or ("ок" if ok else "ошибка")
+                    )
+                    self._recorder.step(
+                        run_id,
+                        idx=steps,
+                        kind="tool",
+                        name=call.name,
+                        args_json=json.dumps(call.arguments, ensure_ascii=False, default=str)[:2000],
+                        result_summary=str(summary)[:200],
+                        ok=ok,
+                        ms=tool_ms,
                     )
                     yield AgentEvent(
                         type="tool_end", call_id=call.id, name=call.name, ok=ok, summary=str(summary)[:200]
@@ -361,8 +384,9 @@ class AgentRuntime:
             conversation_uid=ctx.conversation_uid,
             parent_run_id=ctx.parent_run_id,
         )
+        tokens = (0, 0)
         try:
-            return await structured_output(
+            out, tokens = await structured_output(
                 provider,
                 model,
                 [
@@ -372,6 +396,15 @@ class AgentRuntime:
                 spec.output_model,
                 temperature=spec.temperature,
             )
+            self._recorder.step(
+                run_id,
+                idx=1,
+                kind="structured",
+                name=spec.output_model.__name__,
+                tokens_in=tokens[0],
+                tokens_out=tokens[1],
+            )
+            return out
         except Exception as e:  # noqa: BLE001
             status, error_text = "error", str(e)
             raise
@@ -381,8 +414,8 @@ class AgentRuntime:
                 status=status,
                 steps=1,
                 tool_calls=0,
-                input_tokens=0,
-                output_tokens=0,
+                input_tokens=tokens[0],
+                output_tokens=tokens[1],
                 duration_ms=int((time.monotonic() - started) * 1000),
                 error=error_text,
             )

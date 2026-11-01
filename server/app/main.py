@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine, text
 
 from .bootstrap import MODULES, build_container
-from .kernel.errors import AppError
+from .kernel.errors import AppError, NotFound
 from .kernel.tools.mcp_adapter import build_mcp_server
 
 log = logging.getLogger("learnos.main")
@@ -150,6 +150,59 @@ def create_app() -> FastAPI:
             "llm_reason": llm.get("reason"),
             "worker_running": container.job_worker.running if container.job_worker else False,
             "tools": len(container.tools.all()),
+        }
+
+    @app.get("/api/runs", tags=["system"])
+    def runs(limit: int = 50, agent: str | None = None, status: str | None = None):
+        """Трейсы запусков агентов (агрегаты): что, когда, сколько токенов (R-24)."""
+        from sqlalchemy import select
+
+        from .agent.infra_tables import agent_runs_table
+
+        stmt = select(agent_runs_table).order_by(agent_runs_table.c.id.desc()).limit(min(limit, 200))
+        if agent:
+            stmt = stmt.where(agent_runs_table.c.agent == agent)
+        if status:
+            stmt = stmt.where(agent_runs_table.c.status == status)
+        with container.uow() as uow:
+            rows = uow.session.execute(stmt).mappings().all()
+        return [dict(r) for r in rows]
+
+    @app.get("/api/runs/{run_id}", tags=["system"])
+    def run_detail(run_id: int):
+        """Запуск целиком: агрегаты + трасса шагов + дочерние запуски субагентов (R-24)."""
+        from sqlalchemy import select
+
+        from .agent.infra_tables import agent_runs_table, agent_steps_table
+
+        with container.uow() as uow:
+            run = (
+                uow.session.execute(select(agent_runs_table).where(agent_runs_table.c.id == run_id))
+                .mappings()
+                .first()
+            )
+            if run is None:
+                raise NotFound(f"запуск {run_id} не найден")
+            steps = (
+                uow.session.execute(
+                    select(agent_steps_table)
+                    .where(agent_steps_table.c.run_id == run_id)
+                    .order_by(agent_steps_table.c.id)
+                )
+                .mappings()
+                .all()
+            )
+            children = (
+                uow.session.execute(
+                    select(agent_runs_table).where(agent_runs_table.c.parent_run_id == run_id)
+                )
+                .mappings()
+                .all()
+            )
+        return {
+            "run": dict(run),
+            "steps": [dict(st) for st in steps],
+            "children": [dict(ch) for ch in children],
         }
 
     for module in MODULES:

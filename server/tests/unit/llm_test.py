@@ -61,7 +61,7 @@ async def test_fake_provider_stream_yields_words_and_finish():
 async def test_structured_output_valid_json_first_attempt():
     fake = FakeLLMProvider()
     fake.queue(FakeTurn(text='{"title": "Заметка", "tags": ["a"]}'))
-    out = await structured_output(fake, "m", _messages(), Note)
+    out, usage = await structured_output(fake, "m", _messages(), Note)
     assert isinstance(out, Note)
     assert out.title == "Заметка" and out.tags == ["a"]
     assert len(fake.requests) == 1
@@ -70,7 +70,7 @@ async def test_structured_output_valid_json_first_attempt():
 async def test_structured_output_retries_invalid_then_valid():
     fake = FakeLLMProvider()
     fake.queue(FakeTurn(text="это не JSON"), FakeTurn(text='{"title": "Со второй попытки"}'))
-    out = await structured_output(fake, "m", _messages(), Note)
+    out, usage = await structured_output(fake, "m", _messages(), Note)
     assert out.title == "Со второй попытки"
     assert len(fake.requests) == 2
     # во второй запрос ушла подсказка об ошибке
@@ -81,8 +81,9 @@ async def test_structured_output_retries_invalid_then_valid():
 async def test_structured_output_unwraps_fenced_json():
     fake = FakeLLMProvider()
     fake.queue(FakeTurn(text='Ответ:\n```json\n{"title": "Из забора"}\n```\nконец'))
-    out = await structured_output(fake, "m", _messages(), Note)
+    out, usage = await structured_output(fake, "m", _messages(), Note)
     assert out.title == "Из забора"
+    assert usage == (10, 10)  # usage возвращен вместе с моделью (R-24)
 
 
 async def test_structured_output_exhausts_attempts_and_raises():

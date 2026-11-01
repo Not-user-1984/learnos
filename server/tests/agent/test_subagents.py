@@ -38,6 +38,9 @@ class ListRecorder:
     def finish(self, run_id: int, **kwargs) -> None:
         self.runs[run_id - 1].update(kwargs)
 
+    def step(self, run_id: int, **kwargs) -> None:
+        self.runs[run_id - 1].setdefault("steps_trace", []).append(kwargs)
+
 
 def make_world(fake: FakeLLMProvider, tmp_path: Path, *, worker_tools: frozenset[str]):
     """Мир для субагентов: реестр агентов + инструменты chat на фейковом LLM."""
