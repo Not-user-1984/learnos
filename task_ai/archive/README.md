@@ -44,6 +44,7 @@
 | 2026-11-01 | T-020: repo_scout работает, live-прогон был; остатки опциональны | [T-020](T-020-idea-scout.md) | — |
 | 2026-11-01 | T-050: аудит спринт 2 harness — R-11 идемпотентные активности+слияние, R-14 safe-рендер промптов, R-15 целостность правок, R-24 трейсы agent_steps+/api/runs, R-29 mcp_*→root, Э4 handoff (active_agent, R-13), Э5 слой контекста (R-12, компактация), Э6 eval-каркас | [T-050](T-050-audit-sprint2-harness.md) | efb8c1d..a15d03b |
 | 2026-11-01 | T-051: аудит спринт 3 обучение — фейнман-гейт+verified (R-18), SRS-фиксы (R-17), поиск OR/bm25/префиксы+инкремент (R-19), ингест: код fenced+map-reduce (R-20), concepts/assessments (C) | [T-051](T-051-audit-sprint3-learning.md) | 988c7b8..4043a6e |
+| 2026-11-01 | T-052: аудит спринт 4 эксплуатация — fail-fast миграции+бэкап БД, healthcheck, kb вне репо, R-16/R-23/R-25..R-31, ensure_backups (kb-git + daily backup) | [T-052](T-052-audit-sprint4-ops.md) | d023349..ad6ad72 + proxmox 0b9858c |
 | 2026-11-01 | T-048: аудит 2026-11-01 спринт 0 — P0-hotfix R-01..R-04/R-09/R-10/R-22 (обрезка окон чтения, round-trip блока, finish_session, промпт↔tools линтер, связи list_blocks, recovery воркера, Telegram); тесты 327→361 | [T-048](T-048-audit-sprint0-hotfix.md) | 5fa067f..045c408 |
 | 2026-11-01 | T-049: аудит спринт 1 — безопасность R-05..R-08 (карточки субагентов, песочница скиллов env+WORK_DIR+/repo-маски, bearer LEARNOS_API_TOKEN+CORS, SSRF netguard); токен включён на проде | [T-049](T-049-audit-sprint1-security.md) | e2cc2a3..7f1e02a |
 
