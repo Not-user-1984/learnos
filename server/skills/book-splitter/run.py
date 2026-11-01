@@ -22,7 +22,8 @@ _RENDER_DPI = 150
 
 
 def _clean(text: str) -> str:
-    text = text.replace("\u00ad", "-").replace("\xa0", " ")
+    # мягкий перенос — невидимый символ вёрстки: удаляем, не превращаем в дефис (R-20)
+    text = text.replace("\u00ad", "").replace("\xa0", " ")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
@@ -38,14 +39,59 @@ def _block_text(block: dict) -> str:
     return "\n".join(lines)
 
 
+def _mono_ratio(block: dict) -> float:
+    """Доля символов моноширинных спанов (flags & 8) в блоке — детектор кода (R-20)."""
+    mono = total = 0
+    for line in block.get("lines", []):
+        for span in line.get("spans", []):
+            n = len(span.get("text", "").strip())
+            if n:
+                total += n
+                if int(span.get("flags", 0)) & 8:
+                    mono += n
+    return mono / total if total else 0.0
+
+
 def _text_paragraph(block_text: str) -> str | None:
-    """Блок PDF → абзац (строки пробелом); чистый шум отбрасывается."""
+    """Блок PDF → абзац; чистый шум отбрасывается.
+
+    Переносы слов в конце строк склеиваются («про-\nцесс» → «процесс», R-20).
+    Моноширинный блок (код/команды) не сплющивается пробелом — уходит fenced-
+    блоком, иначе листинги схлопывались в одну строку.
+    """
     if not block_text:
         return None
-    lines = [ln.strip() for ln in block_text.splitlines() if ln.strip()]
-    if not lines or all(_NOISE.match(ln) for ln in lines):
+    lines = [ln.rstrip() for ln in block_text.splitlines()]
+    lines = [ln for ln in lines if ln.strip()]
+    if not lines or all(_NOISE.match(ln.strip()) for ln in lines):
         return None
-    return " ".join(lines)
+    return _join_lines(lines)
+
+
+def _join_lines(lines: list[str]) -> str:
+    """Склеить строки абзаца: переносы слов — без дефиса и пробела."""
+    out = ""
+    for ln in lines:
+        if not out:
+            out = ln
+            continue
+        if out.endswith("-") and ln[:1].islower():
+            out = out[:-1] + ln  # пере-нос: «про-» + «цесс» → «процесс»
+        else:
+            out += " " + ln
+    return out
+
+
+def _mono_paragraph(block: dict) -> str | None:
+    """Моноширинный блок → fenced-код; отступы строк сохраняются (R-20)."""
+    lines = []
+    for line in block.get("lines", []):
+        raw = "".join(span.get("text", "") for span in line.get("spans", []))
+        if raw.strip():
+            lines.append(raw.rstrip())
+    if not lines:
+        return None
+    return "```\n" + "\n".join(lines) + "\n```"
 
 
 class _PageRenderer:
@@ -66,7 +112,10 @@ class _PageRenderer:
                     page_images += 1
                     out.append(("img", md))
                 continue
-            paragraph = _text_paragraph(_block_text(block))
+            if _mono_ratio(block) >= 0.6:
+                paragraph = _mono_paragraph(block)  # листинг кода — как код (R-20)
+            else:
+                paragraph = _text_paragraph(_block_text(block))
             if paragraph:
                 out.append(("p", paragraph))
         return out

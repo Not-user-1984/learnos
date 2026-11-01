@@ -468,30 +468,18 @@ class LibraryService:
         """Summary по каждой главе через chapter_summarizer + обзор источника."""
         if self._runtime is None:
             return {"ok": True, "note": "LLM не настроен, summary пропущены"}
-        from .agents import chapter_summarizer
-
         src_uid = job["target"]
         with self._uow() as uow:
             src = self._sources.get(uow.session, src_uid)
             chapter_list = self._chapters.list(uow.session, src["id"])
             self._jobs.update(uow.session, job["id"], status="running", updated_at=now_iso(self._clock))
 
-        from ...kernel.asyncio_bridge import run_coro_sync
-
         summaries: list[str] = []
         done = 0
         for ch in chapter_list:
-            text = Path(ch["path"]).read_text(encoding="utf-8")[:12000]
+            text = Path(ch["path"]).read_text(encoding="utf-8")
             try:
-                out = run_coro_sync(
-                    self._runtime.run_structured(
-                        chapter_summarizer,
-                        AgentContext(
-                            system_extra=f"Источник: {src['title']}\nГлава {ch['idx']}: {ch['title']}"
-                        ),
-                        text,
-                    )
-                )
+                out = self._summarize_text(src["title"], ch["idx"], ch["title"], text)
                 summary, key_points, has_ex = out.summary, out.key_points, out.has_exercises
             except Exception as e:  # noqa: BLE001 — без LLM оставляем заглушки
                 log.warning("chapter summary failed: %s", e)
@@ -516,6 +504,43 @@ class LibraryService:
             self._sources.update(uow.session, src["id"], summary=overview, updated_at=now)
             self._jobs.update(uow.session, job["id"], status="done", progress=done, updated_at=now)
         return {"ok": True, "chapters": done}
+
+    def _summarize_text(self, src_title: str, idx: int, title: str, text: str):
+        """Сводка главы: короткая — один вызов, длинная — map-reduce по чанкам (R-20).
+
+        Раньше брались первые 12k символов: summary длинной главы писалось по
+        её началу. Теперь чанки по 8k (до 6) сводятся отдельным вызовом.
+        """
+        from ...kernel.asyncio_bridge import run_coro_sync
+        from .agents import chapter_summarizer
+
+        def _call(user_prompt: str):
+            return run_coro_sync(
+                self._runtime.run_structured(
+                    chapter_summarizer,
+                    AgentContext(system_extra=f"Источник: {src_title}\nГлава {idx}: {title}"),
+                    user_prompt,
+                )
+            )
+
+        if len(text) <= 16000:
+            return _call(text[:16000])
+
+        chunks = [text[i : i + 8000] for i in range(0, min(len(text), 6 * 8000), 8000)]
+        partial: list[str] = []
+        for i, chunk in enumerate(chunks, 1):
+            try:
+                out = _call(
+                    f"Фрагмент {i}/{len(chunks)} длинной главы (продолжение посередине текста):\n{chunk}"
+                )
+                partial.append(out.summary or "")
+            except Exception:  # noqa: BLE001 — фрагмент без выжимки не роняет главу
+                log.warning("summary фрагмента %d главы %s не удался", i, title)
+        merged = "\n\n".join(f"Фрагмент {i}: {p}" for i, p in enumerate(partial, 1) if p)
+        return _call(
+            "Выжимки фрагментов одной длинной главы — собери целостный итог главы "
+            "(summary, key_points, упражнения):\n\n" + merged
+        )
 
     def _generate_overview(self, title: str, chapter_summaries: list[str], front_matter: str = "") -> str:
         """Цельный обзор книги из конспектов глав (source_overviewer); фолбэк — склейка.
