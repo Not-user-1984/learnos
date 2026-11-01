@@ -1,5 +1,6 @@
 """REST ревизии (T-038): список подготовленных веток и отклонение agent/*."""
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,10 @@ from fastapi.testclient import TestClient
 from app.kernel.config import Settings
 from app.modules.revision import service as revision_service
 from app.modules.revision.service import RevisionService
+
+# гейт деплоя гоняет pytest в контейнере без git (python-slim): ревизионные
+# тесты требуют git (init/worktree) — пропускаются, в GitHub Actions гоняются
+pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="нужен git")
 
 NOOP_CHECKS = (("noop", [sys.executable, "-c", "pass"], 30),)
 
