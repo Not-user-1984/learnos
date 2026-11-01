@@ -296,7 +296,7 @@ class ResearchService:
         text = _normalize(root.get_text("\n"))
         return {"title": title, "text": text, "chars": len(text)}
 
-    def window(self, text: str, offset: int = 0, limit: int = 12000) -> dict:
+    def window(self, text: str, offset: int = 0, limit: int = 6000) -> dict:
         """Окно текста для контекста агента: {text, next_offset, total_chars}."""
         chunk = text[offset : offset + limit]
         return {

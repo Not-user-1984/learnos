@@ -39,6 +39,9 @@ class ToolSpec:
     channels: frozenset[str] = field(default=frozenset({"mcp", "agent"}))
     modes: frozenset[str] = field(default=frozenset({"free", "quick", "session"}))
     label: str | Callable[[dict[str, Any]], str] = ""  # подпись чипа; может зависеть от args
+    # оконные инструменты (read_chapter, web_read) сами отвечают за размер порции через
+    # limit и отдают согласованный next_offset — обрезать их результат нельзя
+    truncatable: bool = True
 
     def json_schema(self) -> dict[str, Any]:
         """JSON Schema аргументов для MCP и LLM."""

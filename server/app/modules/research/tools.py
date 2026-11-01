@@ -24,7 +24,7 @@ class ReadArgs(BaseModel):
 
     url: str = Field(max_length=500)
     offset: int = 0
-    limit: int = 12000
+    limit: int = Field(default=6000, ge=500, le=24000)
 
 
 class RepoArgs(BaseModel):
@@ -225,6 +225,7 @@ def research_tools(c) -> list[ToolSpec]:
             args_model=ReadArgs,
             handler=web_read,
             label="Читаю страницу",
+            truncatable=False,
         ),
         ToolSpec(
             name="github_repo",

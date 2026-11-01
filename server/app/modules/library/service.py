@@ -529,7 +529,7 @@ class LibraryService:
                 for ch in self._chapters.list(uow.session, src["id"])
             ]
 
-    def read_chapter(self, ref: str | int, chapter: int, offset: int = 0, limit: int = 12000) -> dict:
+    def read_chapter(self, ref: str | int, chapter: int, offset: int = 0, limit: int = 6000) -> dict:
         """Порция текста главы (контекст LLM не захламляем)."""
         with self._uow() as uow:
             src = self._sources.get(uow.session, ref)

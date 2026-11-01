@@ -95,7 +95,7 @@ class ToolRegistry:
         except AppError as e:
             return {"error": e.code, "message": e.message}
         payload = _to_jsonable(result)
-        if ctx.channel == "agent":
+        if ctx.channel == "agent" and spec.truncatable:
             if not isinstance(payload, dict):
                 # списки оборачиваем для агента: дальше словарь (обрезка, _card); MCP отдаёт как есть
                 payload = {"result": payload}
@@ -114,19 +114,64 @@ def _to_jsonable(value: Any) -> Any:
 
 
 def _truncate(payload: dict[str, Any], max_chars: int) -> dict[str, Any]:
-    """Обрезка длинных строковых полей результата, чтобы не раздувать контекст LLM."""
+    """Обрезка длинных полей результата, чтобы не раздувать контекст LLM.
+
+    Строки режутся по длине, списки — по элементам (а не выбрасываются целиком):
+    агент получает первые элементы и счётчик выброшенных, чтобы уточнить фильтр,
+    а не решить, что данных нет. Оконные инструменты (truncatable=False) не проходят
+    сюда вовсе — их offset/next_offset всегда согласованы с отданным текстом.
+    """
     card = payload.pop("_card", None)
-    text = str(payload)
-    if len(text) <= max_chars:
+
+    def restore(p: dict[str, Any]) -> dict[str, Any]:
         if card is not None:
-            payload["_card"] = card
-        return payload
-    trimmed = {
-        k: (v[: max_chars // 2] + "…" if isinstance(v, str) and len(v) > max_chars // 2 else v)
-        for k, v in payload.items()
-        if not isinstance(v, (list, dict)) or len(str(v)) < max_chars // 2
-    }
+            p["_card"] = card
+        return p
+
+    if len(str(payload)) <= max_chars:
+        return restore(payload)
+    budget = max_chars // 2
+    trimmed: dict[str, Any] = {}
+    dropped = 0
+    for k, v in payload.items():
+        new_v, drop = _fit(v, budget)
+        trimmed[k] = new_v
+        dropped += drop
     trimmed["truncated"] = True
-    if card is not None:
-        trimmed["_card"] = card
-    return trimmed
+    if dropped:
+        trimmed["truncated_items"] = dropped
+        trimmed["hint"] = "часть элементов скрыта — уточни фильтр или листай порциями"
+    return restore(trimmed)
+
+
+def _fit(value: Any, budget: int) -> tuple[Any, int]:
+    """Уложить значение в budget символов: строки режем, списки ужимаем по элементам.
+
+    Возвращает (новое значение, число отброшенных элементов списка).
+    """
+    if isinstance(value, str):
+        return ((value[:budget] + "…") if len(value) > budget else value), 0
+    if isinstance(value, list):
+        fitted = [_fit(item, budget)[0] for item in value]
+        if len(str(fitted)) <= budget:
+            return fitted, 0
+        kept: list[Any] = []
+        used = 2
+        for i, item in enumerate(fitted):
+            item_len = len(str(item))
+            if kept and used + item_len + 2 > budget:
+                return kept, len(fitted) - i
+            kept.append(item)
+            used += item_len + 2
+        return kept, 0
+    if isinstance(value, dict):
+        if len(str(value)) <= budget:
+            return value, 0
+        out: dict[str, Any] = {}
+        dropped = 0
+        for k, v in value.items():
+            new_v, drop = _fit(v, budget)
+            out[k] = new_v
+            dropped += drop
+        return out, dropped
+    return value, 0

@@ -608,9 +608,9 @@ class ChatService:
                 if src["kind"] == "video":
                     parts.append(
                         "Режим видео: весь транскрипт — одна запись (chapter=1). Прочитай его ЦЕЛИКОМ: "
-                        "read_chapter(chapter=1, limit=24000, offset=…), листай offset, пока next_offset "
-                        "не станет null. Разбирай видео как единое целое; не говори «глава» — только "
-                        "«видео»/«транскрипт»."
+                        "read_chapter(chapter=1, limit=6000, offset=…), листай offset по next_offset, "
+                        "пока next_offset не станет null. Разбирай видео как единое целое; "
+                        "не говори «глава» — только «видео»/«транскрипт»."
                     )
                 elif chapters:
                     ch = chapters[0]

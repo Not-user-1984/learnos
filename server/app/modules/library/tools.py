@@ -1,6 +1,6 @@
 """Инструменты модуля library (MCP + агенты)."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...kernel.tools.spec import ToolContext, ToolSpec
 from .schemas import SourceCreate
@@ -31,7 +31,7 @@ class ReadChapterArgs(BaseModel):
     source_id: str | int
     chapter: int
     offset: int = 0
-    limit: int = 12000
+    limit: int = Field(default=6000, ge=500, le=24000)
 
 
 class ResearchArgs(BaseModel):
@@ -149,10 +149,14 @@ def library_tools(c) -> list[ToolSpec]:
         ToolSpec(
             name="read_chapter",
             module="library",
-            description="Текст главы порционно: offset/next_offset. Не грузи весь источник.",
+            description=(
+                "Текст главы порционно: offset/next_offset (листай, пока next_offset не null). "
+                "Не грузи весь источник."
+            ),
             args_model=ReadChapterArgs,
             handler=read_chapter,
             label=read_chapter_label,
+            truncatable=False,
         ),
         ToolSpec(
             name="research_sources",
