@@ -3,6 +3,8 @@
 from dataclasses import replace
 from pathlib import Path
 
+from pydantic import BaseModel, Field
+
 from ...agent.registry import AgentRegistry
 from ...agent.spec import AgentSpec
 
@@ -134,6 +136,22 @@ session_tutor = AgentSpec(
 )
 
 
+class SummaryOut(BaseModel):
+    """Сжатие истории разговора (conversation_summarizer)."""
+
+    summary: str = Field(max_length=1500)
+
+
+conversation_summarizer = AgentSpec(
+    name="conversation_summarizer",
+    description="Сжимает старую часть истории разговора в выжимку для контекста (компактация).",
+    prompt_path=AGENTS_DIR / "conversation_summarizer" / "prompt.md",
+    model_role="fast",
+    output_model=SummaryOut,
+    max_steps=1,
+)
+
+
 repo_scout = AgentSpec(
     name="repo_scout",
     description=(
@@ -200,3 +218,4 @@ def register_agents(c) -> None:
     registry.register(quick_reviewer)
     registry.register(session_tutor)
     registry.register(repo_scout)
+    registry.register(conversation_summarizer)

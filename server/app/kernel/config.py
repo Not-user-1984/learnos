@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     log_format: str = "text"
     tool_result_max_chars: int = 8000
     context_budget_tokens: int = 24000
+    # кириллица тяжелее латиницы: ~2.5 символа на токен, не 3.5 (R-12 аудита)
+    context_chars_per_token: float = 2.5
     db_echo: bool = False
     # LLM: cooldown ключа цепочки после ошибки квоты/авторизации, секунды (T-040)
     llm_key_cooldown: int = 600

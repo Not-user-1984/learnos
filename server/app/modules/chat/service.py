@@ -7,6 +7,8 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
 from typing import Any
 
+from sqlalchemy import update
+
 from ...agent.runtime import AgentRuntime
 from ...agent.spec import AgentContext, AgentSpec, CancellationToken
 from ...kernel.asyncio_bridge import run_coro_sync
@@ -18,6 +20,7 @@ from ...llm.types import Message
 from .agents import REVIEW_TOOLS, SESSION_TOOLS
 from .domain import content_note
 from .infra.sql_repo import ConversationRepository, MessageRepository
+from .infra.tables import conversations as conversations_table
 from .schemas import INTENTS, MODES
 
 log = logging.getLogger("learnos.chat")
@@ -106,6 +109,29 @@ INTENT_AGENT = {
     "review": "quick_reviewer",
     "session": "session_tutor",
 }
+
+
+def _history_notes(m: dict) -> str:
+    """Компактное дополнение сообщения для контекста LLM: карточки и трасса инструментов (R-12).
+
+    Пользователь их уже видел в UI; агент на следующих ходах должен помнить,
+    что показал и чем закончились вызовы инструментов (сейчас — забывал).
+    """
+    notes: list[str] = []
+    cards = m.get("cards") or []
+    for c in cards[:4]:
+        kind = c.get("type", "?")
+        key = c.get("title") or c.get("task") or c.get("summary") or c.get("path") or ""
+        note = f"[карточка {kind}" + (f": {str(key)[:90]}" if key else "") + "]"
+        notes.append(note)
+    trace = m.get("tool_calls") or []
+    if trace:
+        done = "; ".join(
+            f"{t.get('name')}({'ок' if t.get('ok') else 'ошибка'}: {t.get('summary', '')[:60]})"
+            for t in trace[:8]
+        )
+        notes.append(f"[инструменты: {done}]")
+    return ("\n" + " ".join(notes)) if notes else ""
 
 
 def _agent_for_conversation(registry, conv: dict) -> str:
@@ -331,6 +357,10 @@ class ChatService:
         if session:
             yield _session_event(session)
 
+        # компактация (R-12): история переросла бюджет — старое уходит в summary
+        compacted = await self.maybe_compact(conv)
+        if compacted:
+            conv = {**conv, **compacted}
         # conv прочитан до вставки user-сообщения: добавляем его сами, иначе первый
         # запрос разговора уйдёт без единого user-сообщения (z.ai отвечает 1214)
         history = await self._build_history(conv) + [Message(role="user", content=content)]
@@ -418,6 +448,7 @@ class ChatService:
 
         text_parts: list[str] = []
         cards: list[dict] = []
+        tool_trace: list[dict] = []
         assistant_id: int | None = None
         after_tools = False  # после tool-шага новый текст начинаем с абзаца
         try:
@@ -431,6 +462,9 @@ class ChatService:
                     yield SseEvent("delta", {"text": piece})
                 elif ev.type == "tool_end":
                     after_tools = True
+                    # компактная трасса хода: чтозвали и чем кончилось (R-12) —
+                    # сохраняется с ответом, подмешивается в историю LLM
+                    tool_trace.append({"name": ev.name, "ok": ev.ok, "summary": (ev.summary or "")[:160]})
                     yield SseEvent(
                         "tool_end",
                         {"call_id": ev.call_id, "name": ev.name, "ok": ev.ok, "summary": ev.summary},
@@ -466,6 +500,9 @@ class ChatService:
                         role="assistant",
                         content=text,
                         cards_json=json.dumps(cards, ensure_ascii=False),
+                        tool_calls_json=(
+                            json.dumps(tool_trace[:12], ensure_ascii=False) if tool_trace else None
+                        ),
                         created_at=now2,
                     )
                     self._convs.update(uow.session, conv["id"], updated_at=now2)
@@ -525,12 +562,25 @@ class ChatService:
         return cards, note
 
     async def _build_history(self, conv: dict) -> list[Message]:
-        """История с бюджетом ~24k токенов; старая половина сжимается в summary."""
-        all_msgs = [m for m in conv["messages"] if m["role"] in {"user", "assistant"} and m["content"]]
-        budget_chars = int(self._settings.context_budget_tokens * 3.5)
+        """История для LLM с бюджетом; карточки и трасса инструментов не теряются (R-12).
+
+        Бюджет в символах честен для кириллицы (~2.5 симв/токен, не 3.5): старое
+        сжимается в conversations.summary (conversation_summarizer), в контексте —
+        summary + последние сообщения.
+        """
+        enriched: list[dict] = []
+        for m in conv["messages"]:
+            if m["role"] not in {"user", "assistant"}:
+                continue
+            content = m["content"] or ""
+            notes = _history_notes(m)
+            if not content and not notes:
+                continue
+            enriched.append({"role": m["role"], "content": (content + notes).strip()})
+        budget_chars = int(self._settings.context_budget_tokens * self._settings.context_chars_per_token)
         recent: list[dict] = []
         total = 0
-        for m in reversed(all_msgs):
+        for m in reversed(enriched):
             if total + len(m["content"]) > budget_chars and recent:
                 break
             recent.insert(0, m)
@@ -542,6 +592,49 @@ class ChatService:
         return [
             Message(role="user" if m["role"] == "user" else "assistant", content=m["content"]) for m in recent
         ]
+
+    async def maybe_compact(self, conv: dict) -> dict:
+        """Сжать старую часть истории в conversations.summary, когда бюджет превышен (R-12).
+
+        Возвращает словарь-обновление разговора (summary) или пустой. Сбой LLM
+        не роняет чат: остаётся прежнее поведение (обрезка старого).
+        """
+        budget_chars = int(self._settings.context_budget_tokens * self._settings.context_chars_per_token)
+        total = sum(len(m["content"] or "") for m in conv["messages"] if m["role"] in {"user", "assistant"})
+        if total <= budget_chars:
+            return {}
+        older = [
+            m for m in conv["messages"] if m["role"] in {"user", "assistant"} and (m["content"] or "").strip()
+        ][:-16]
+        if not older:
+            return {}
+        try:
+            summary = await self._summarize_older(conv, older)
+        except Exception:  # noqa: BLE001 — компактация не должна ломать ответ
+            log.warning("conversation_summarizer не справился — история без сжатия", exc_info=True)
+            return {}
+        with self._uow() as uow:
+            uow.session.execute(
+                update(conversations_table)
+                .where(conversations_table.c.id == conv["id"])
+                .values(summary=summary)
+            )
+        return {"summary": summary}
+
+    async def _summarize_older(self, conv: dict, older: list[dict]) -> str:
+        """fast-агент сжимает старые сообщения (с учётом прежнего summary)."""
+        from .agents import conversation_summarizer
+
+        dialog = "\n".join(f"{m['role']}: {m['content']}" for m in older)[-16000:]
+        base = f"Прежнее сжатие:\n{conv['summary']}" if conv.get("summary") else ""
+        out = run_coro_sync(
+            self._runtime.run_structured(
+                conversation_summarizer,
+                AgentContext(conversation_uid=conv["uid"]),
+                f"{base}\n\nДиалог:\n{dialog}".strip(),
+            )
+        )
+        return out.summary
 
     def _activity_source_kind(self, conv: dict) -> str | None:
         """Тип источника активности разговора (для сценария «Разбор видео/материала»)."""
