@@ -22,7 +22,6 @@ function ShareForm() {
   const url = urlDraft ?? sharedUrl;
   const title = sharedTitle;
   const isYoutube = /youtu\.?be/i.test(url);
-  const kind = isYoutube ? "video" : "web";
 
   const save = async () => {
     setStatus("saving");
