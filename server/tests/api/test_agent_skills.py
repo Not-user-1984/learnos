@@ -56,7 +56,8 @@ def test_save_run_and_hot_edit_lifecycle(container):
     assert result["ok"] is True
     assert result["greeting"] == "Привет, Дмитрий!"
     assert "пишу файл" in result["stdout"]
-    assert (container.settings.data_dir / "greet.txt").read_text(encoding="utf-8") == "Дмитрий"
+    greet = container.settings.data_dir / "skill-work" / "root" / "greeter" / "greet.txt"
+    assert greet.read_text(encoding="utf-8") == "Дмитрий"
 
     # правка скрипта подхватывается повторным save_skill — без рестарта
     edited = _save(container, "root", "greeter", run_py=RUN_PY_V2)
@@ -165,4 +166,5 @@ def test_root_saves_and_calls_skill_in_same_chat(client, fake_llm, container):
     ends = {d["name"]: d for name, d in events if name == "tool_end"}
     assert ends["save_skill"]["ok"] is True
     assert ends["greeter"]["ok"] is True  # не unknown_tool — hot reload сработал внутри запуска
-    assert (container.settings.data_dir / "greet.txt").exists()
+    # R-06: запись скилла — в персональную песочницу, не в корень data/
+    assert (container.settings.data_dir / "skill-work" / "root" / "greeter" / "greet.txt").exists()
