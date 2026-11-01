@@ -12,6 +12,16 @@ AGENTS_DIR = Path(__file__).parent / "agents"
 # созданную по интенту «session» (сессия привязана к разговору)
 SESSION_TOOLS = frozenset({"start_session", "advance", "practice_step", "finish_session"})
 
+# библиотечный цикл «предложил → согласие → добавил → обработал»: без них промпты
+# и хинты претрекера посылают агента вызывать несуществующие для него инструменты (R-04)
+LIBRARY_TOOLS = frozenset({"add_source", "process_source", "get_job"})
+
+# сценарии единого входа, которые root ведёт сам: превью конспекта (апрув перед
+# записью), активность-разбор по источнику, сборка курса из найденного
+ENTRY_TOOLS = frozenset(
+    {"preview_note", "start_activity", "create_course", "add_course_item", "list_courses"}
+)
+
 # инструменты, двигающие курсор книги (активность разговора): после них статус-бар
 # быстрого разбора обновляется событием review_progress
 REVIEW_TOOLS = frozenset({"mark_chapter_done", "finish_session"})
@@ -50,7 +60,9 @@ free_chat = AgentSpec(
             "offer_replies",
             "save_skill",
         }
-    ),
+    )
+    | LIBRARY_TOOLS
+    | {"preview_note"},
     max_steps=30,
 )
 
@@ -150,6 +162,7 @@ root = AgentSpec(
         free_chat.tools
         | {"run_agent", "list_agents", "propose_change"}
         | SESSION_TOOLS
+        | ENTRY_TOOLS
         | {"get_session_state", "mark_chapter_done", "get_review_queue", "answer_review"}
         # разбор главы карточкой: root ведёт интент «review» (единый вход) сам
         | {"show_chapter_review"}
