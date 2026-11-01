@@ -31,5 +31,5 @@ class SearchModule(Module):
         bus.subscribe(BlockSaved.name(), lambda e: c.search.on_block_saved(e.block_uid))
         bus.subscribe(BlockUpdated.name(), lambda e: c.search.on_block_saved(e.block_uid))
         bus.subscribe(BlockDeleted.name(), lambda e: c.search.on_block_deleted(e.block_uid))
-        bus.subscribe(SourceProcessed.name(), lambda e: c.search.reindex_chapters())
-        bus.subscribe(SourceDeleted.name(), lambda e: c.search.reindex_chapters())
+        bus.subscribe(SourceProcessed.name(), lambda e: c.search.reindex_chapters(e.source_uid))
+        bus.subscribe(SourceDeleted.name(), lambda e: c.search.drop_source_index(e.source_uid))

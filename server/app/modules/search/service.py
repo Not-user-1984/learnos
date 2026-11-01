@@ -54,7 +54,8 @@ class SearchService:
                 block.meta.title,
                 block.meta.summary or "",
                 body,
-                " ".join(block.meta.tags),
+                # категория входит в индекс: поиск «kubernetes» находит блоки ветки (R-19)
+                " ".join([*block.meta.tags, block.meta.category_path or ""]),
             )
 
     def on_block_deleted(self, block_uid: str) -> None:
@@ -62,10 +63,15 @@ class SearchService:
         with self._uow() as uow:
             self._fts.delete_block(uow.session, block_uid)
 
-    def reindex_chapters(self) -> None:
-        """Пересобрать индекс глав (событие SourceProcessed или вручную)."""
+    def reindex_chapters(self, source_uid: str | None = None) -> None:
+        """Пересобрать индекс глав: один источник или все (вручную)."""
         with self._uow() as uow:
-            self._fts.reindex_chapters(uow.session)
+            self._fts.reindex_chapters(uow.session, source_uid)
+
+    def drop_source_index(self, source_uid: str) -> None:
+        """Убрать главы источника из индекса (SourceDeleted — без полной пересборки)."""
+        with self._uow() as uow:
+            self._fts.delete_source(uow.session, source_uid)
 
     def reindex_blocks(self) -> None:
         """Пересобрать индекс блоков из базы знаний."""
