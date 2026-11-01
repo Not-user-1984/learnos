@@ -14,6 +14,7 @@ class AnswerArgs(BaseModel):
 
     block_uid: str
     answer: str
+    question: str | None = None  # что спрашивали — экзаменатору нужен контекст (R-17)
 
 
 def review_tools(c) -> list[ToolSpec]:
@@ -26,7 +27,7 @@ def review_tools(c) -> list[ToolSpec]:
 
     def answer_review(args: AnswerArgs, ctx: ToolContext):
         del ctx
-        return svc.answer(args.block_uid, args.answer)
+        return svc.answer(args.block_uid, args.answer, question=args.question)
 
     return [
         ToolSpec(

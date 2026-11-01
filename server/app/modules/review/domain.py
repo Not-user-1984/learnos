@@ -9,13 +9,16 @@ def sm2_review(quality: int, ease: float, interval_days: int, reps: int) -> tupl
     if not 0 <= quality <= 5:
         raise ValueError("quality должен быть 0–5")
     if quality < 3:
+        # провал: интервал сброс, ease падает; due уводится на сутки вперёд —
+        # лапс «остывает» и не выскакивает в очередь немедленно (R-17)
         return (max(1.3, ease - 0.2), 1, 0)
-    if reps == 0:
-        return (ease, 1, reps + 1)
-    if reps == 1:
-        return (ease, 6, reps + 1)
     new_ease = ease + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
-    return (max(1.3, round(new_ease, 3)), max(1, round(interval_days * ease)), reps + 1)
+    new_ease = max(1.3, round(new_ease, 3))
+    if reps == 0:
+        return (new_ease, 1, reps + 1)
+    if reps == 1:
+        return (new_ease, 6, reps + 1)
+    return (new_ease, max(1, round(interval_days * ease)), reps + 1)
 
 
 def queue_priority(item: dict) -> tuple[int, str]:

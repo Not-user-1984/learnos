@@ -2,11 +2,7 @@
 
 import json
 import logging
-import os
-import subprocess
-from dataclasses import dataclass
 from datetime import timedelta
-from typing import Protocol
 
 from ...agent.spec import AgentContext
 from ...kernel.clock import Clock, now_iso
@@ -15,46 +11,6 @@ from ...kernel.errors import NotFound
 from .domain import queue_priority, sm2_review
 
 log = logging.getLogger("learnos.review")
-
-BRIDGE = os.path.expanduser("~/.config/opencode/tools/telegram_bridge.py")
-
-
-class Messenger(Protocol):
-    """Порт отправки сообщений повторений (мост Telegram на маке)."""
-
-    def send(self, text: str) -> int:
-        """Отправить HTML-сообщение, вернуть message_id."""
-        ...
-
-
-class TelegramBridgeMessenger:
-    """Отправка через CLI моста (демон остаётся единственным поллером)."""
-
-    def send(self, text: str) -> int:
-        proc = subprocess.run(
-            ["python3", BRIDGE, "send", "--to", "dmitry", "--parse-mode", "HTML", "--no-preview", "--stdin"],
-            input=text,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if proc.returncode != 0:
-            raise RuntimeError(f"мост не отправил: {proc.stderr[-200:]}")
-        # "Sent message_id=49 chat_id=..."
-        for part in proc.stdout.split():
-            if part.startswith("message_id="):
-                return int(part.split("=")[1])
-        return 0
-
-
-@dataclass
-class ReviewQuestion:
-    """Вопрос дня по блоку."""
-
-    block_uid: str
-    title: str
-    question: str
-    message_id: int | None = None
 
 
 class ReviewService:
@@ -69,10 +25,11 @@ class ReviewService:
         self._clock = clock
 
     def ensure_items(self) -> None:
-        """Создать элементы повторения для блоков со «Дозакрепить», которых ещё нет."""
+        """Элементы повторения для всех блоков (R-17): зрелое знание тоже закрепляется.
+
+        Блоки со «Дозакрепить» просто стоят в очереди раньше (queue_priority).
+        """
         for meta in self._kb.list_blocks(limit=500):
-            if meta.weak_spots_count < 1:
-                continue
             with self._uow() as uow:
                 if self._repo.get(uow.session, meta.uid) is None:
                     self._repo.upsert(
@@ -93,7 +50,9 @@ class ReviewService:
             items = self._repo.all(uow.session)
         enriched = []
         for it in items:
-            if it["due_at"] > now and it.get("reps", 0) > 0:
+            # созревание честное для всех: проваленный блок (reps=0) тоже ждёт
+            # своего due_at — лапс остывает (R-17)
+            if str(it["due_at"] or "") > now:
                 continue
             try:
                 block = self._kb.get_block(it["block_uid"])
@@ -105,25 +64,12 @@ class ReviewService:
         enriched.sort(key=queue_priority)
         return enriched[:limit]
 
-    def ask(self, block_uid: str | None = None, messenger: Messenger | None = None) -> ReviewQuestion:
-        """Сформулировать вопрос (review_examiner) и отправить в Telegram."""
-        target = block_uid or (self.queue(1) or [None])[0]
-        if not target:
-            raise NotFound("очередь повторений пуста")
-        uid = target if isinstance(target, str) else target["block_uid"]
-        block = self._kb.get_block(uid)
-        question = self._make_question(block)
-        messenger = messenger or TelegramBridgeMessenger()
-        public_url = "http://localhost:3000"
-        html = (
-            f"<b>Повторение · {block.meta.title}</b>\n\n{question}\n\n"
-            f'Ответь reply на это сообщение. <a href="{public_url}/kb/{uid}">блок</a>'
-        )
-        message_id = messenger.send(html)
-        return ReviewQuestion(block_uid=uid, title=block.meta.title, question=question, message_id=message_id)
+    def answer(self, block_uid: str, answer_text: str, question: str | None = None) -> dict:
+        """Оценить ответ (0–5), применить SM-2, слабые ответы дописывают «Дозакрепить».
 
-    def answer(self, block_uid: str, answer_text: str) -> dict:
-        """Оценить ответ (0–5), применить SM-2, слабые ответы дописывают «Дозакрепить»."""
+        question — что именно спрашивали (R-17): экзаменатор оценивает ответ
+        относительно вопроса, а не блока в целом.
+        """
         from ...kernel.asyncio_bridge import run_coro_sync
         from .agents import review_examiner
 
@@ -131,13 +77,14 @@ class ReviewService:
         ctx = AgentContext(
             system_extra=f"Блок: {block.meta.title}\nСлабые места: {block.meta.weak_spots_count}"
         )
+        asked = f"Вопрос, который был задан:\n{question}\n\n" if question else ""
         verdict = run_coro_sync(
             self._runtime.run_structured(
                 review_examiner,
                 ctx,
                 "Слабые места блока: "
                 f"{json.dumps(block.content[:2000], ensure_ascii=False)}\n\n"
-                f"Вопрос был задан по блоку. Ответ пользователя:\n{answer_text}",
+                f"{asked}Ответ пользователя:\n{answer_text}",
             )
         )
         quality = max(0, min(5, verdict.quality))
@@ -156,7 +103,7 @@ class ReviewService:
             self._repo.upsert(
                 uow.session,
                 block_uid=block_uid,
-                ease=int(ease10 * 10),
+                ease=round(ease10 * 10),  # без усечения (R-17)
                 interval_days=interval,
                 due_at=due,
                 last_quality=quality,
