@@ -20,7 +20,6 @@ function ShareForm() {
   const [result, setResult] = useState<{ uid: string; kind: string; processed: boolean } | null>(null);
 
   const url = urlDraft ?? sharedUrl;
-  const title = sharedTitle;
   const isYoutube = /youtu\.?be/i.test(url);
 
   const save = async () => {
