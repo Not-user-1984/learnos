@@ -50,7 +50,16 @@ def test_allowed_events_debrief_contains_finish():
 
 
 def test_can_finish_happy_path():
-    can_finish("debrief", "active")  # не бросает
+    can_finish("debrief", "active", answers=2)  # не бросает
+
+
+def test_can_finish_requires_feynman_answers():
+    """Фейнман-гейт (R-18): без единого answer сессию закрыть нельзя."""
+    import pytest
+
+    with pytest.raises(ValueError, match="фейнмана"):
+        can_finish("debrief", "active", answers=0)
+    can_finish("debrief", "active", answers=1)  # один проговор уже честен
 
 
 def test_can_finish_rejects_wrong_state():

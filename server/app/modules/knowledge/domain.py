@@ -127,6 +127,7 @@ class BlockMeta:
     path: str = ""
     versions_count: int = 0
     back_links: tuple[str, ...] = ()
+    verified: bool = False  # «проговорённое» знание: блок из сессии, не конспект (R-18)
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +214,7 @@ def draft_to_markdown(uid: str, draft: BlockDraft, meta_extra: dict) -> str:
         "created": meta_extra.get("created", ""),
         "updated": meta_extra.get("updated", ""),
         "version": meta_extra.get("version", 1),
+        "verified": bool(meta_extra.get("verified", False)),
         "review": meta_extra.get("review") or {"ease": 2.5, "interval": 1, "due": None},
     }
     fm = yaml.safe_dump(frontmatter, allow_unicode=True, sort_keys=False).strip()

@@ -51,11 +51,13 @@ def test_full_learning_cycle_creates_block(client, container):
 
     # 5. переходы стейт-машины
     states = [
+        client.post(f"/api/sessions/{ref}/advance", json={"event": "ask"}).json()["state"],
+        client.post(f"/api/sessions/{ref}/advance", json={"event": "answer"}).json()["state"],
         client.post(f"/api/sessions/{ref}/advance", json={"event": "theory_done"}).json()["state"],
         client.post(f"/api/sessions/{ref}/advance", json={"event": "go_practice"}).json()["state"],
         client.post(f"/api/sessions/{ref}/advance", json={"event": "practice_done"}).json()["state"],
     ]
-    assert states == ["check", "practice", "debrief"]
+    assert states == ["theory", "theory", "check", "practice", "debrief"]
 
     # 6. финиш с драфтом блока (тело запроса = сам драфт)
     draft = {**DRAFT, "sources": [{"source": src["uid"], "chapter": 1, "title": "K8s Book"}]}

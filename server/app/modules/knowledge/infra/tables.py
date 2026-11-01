@@ -1,6 +1,7 @@
 """Таблицы модуля knowledge."""
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Index,
     Integer,
@@ -36,6 +37,7 @@ blocks = Table(
     Column("conversation_uid", Text),
     Column("activity_uid", Text),
     Column("weak_spots_count", Integer, nullable=False, server_default="0"),
+    Column("verified", Boolean, nullable=False, server_default="0"),  # блок из сессии (R-18)
     Column("version", Integer, nullable=False, server_default="1"),
     Column("review_json", Text, nullable=False, server_default="{}"),
     Column("created_at", Text, nullable=False),

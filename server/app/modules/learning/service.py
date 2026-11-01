@@ -302,8 +302,9 @@ class LearningService:
         now = now_iso(self._clock)
         with self._uow() as uow:
             s = self._get(uow.session, session_ref)
+            answers = sum(1 for e in (s.get("transcript") or []) if e.get("event") == "answer")
             try:
-                can_finish(s["state"], s["status"])
+                can_finish(s["state"], s["status"], answers=answers)
             except ValueError as e:
                 raise InvalidState(str(e)) from e
 
@@ -407,6 +408,7 @@ class LearningService:
         """Блок из явного драфта или генерация из транскрипта."""
         from ..knowledge.schemas import BlockDraftIn
 
+        # блок из сессии — «проговорённое знание» (R-18): отличаем от конспекта
         if draft:
             draft_in = BlockDraftIn.model_validate(draft)
             domain_draft = draft_in.to_domain()
@@ -417,10 +419,13 @@ class LearningService:
                 session_uid=s["uid"],
                 activity_uid=None,
                 category_status="confirmed",
+                verified=True,
             )
         else:
             generated = self._knowledge.generate_from_transcript(s)
-            block = self._knowledge.save_block(generated, session_uid=s["uid"], category_status="confirmed")
+            block = self._knowledge.save_block(
+                generated, session_uid=s["uid"], category_status="confirmed", verified=True
+            )
         return {
             "block_uid": block.meta.uid,
             "path": block.meta.path,

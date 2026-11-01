@@ -65,6 +65,7 @@ class KnowledgeService:
         conversation_uid: str | None = None,
         activity_uid: str | None = None,
         category_status: str = "suggested",
+        verified: bool = False,
     ) -> Block:
         """Записать новый блок: MD-файл + индекс; категория — предложенная агентом или None."""
         uid = self._ids.new("blk")
@@ -84,6 +85,7 @@ class KnowledgeService:
                 "updated": now,
                 "version": 1,
                 "category_status": category_status,
+                "verified": verified,
             },
         )
         meta = BlockMeta(
@@ -104,6 +106,7 @@ class KnowledgeService:
             links=draft.links,
             weak_spots_count=draft.weak_spots_count(),
             path=stem,
+            verified=verified,
         )
         with self._uow() as uow:
             self._blocks.save(uow.session, meta)
@@ -140,8 +143,10 @@ class KnowledgeService:
                     "created": block.meta.created,
                     "updated": now,
                     "version": version,
-                    # подтверждённая категория и SRS-состояние переживают пересборку файла
+                    # подтверждённая категория, SRS-состояние и «проговорённость»
+                    # переживают пересборку файла
                     "category_status": meta_raw.get("category_status", block.meta.category_status),
+                    "verified": bool(meta_raw.get("verified", block.meta.verified)),
                     "review": meta_raw.get("review"),
                 },
                 existing_name=block.meta.path,
@@ -724,6 +729,7 @@ def _dict_of(meta: BlockMeta) -> dict:
         "links": meta.links,
         "weak_spots_count": meta.weak_spots_count,
         "path": meta.path,
+        "verified": meta.verified,
     }
 
 

@@ -15,7 +15,8 @@ from app.modules.knowledge.domain import BlockDraft
 
 def _to_debrief(client, ref: str) -> None:
     """Провести сессию по стейт-машине до debrief (theory→check→practice→debrief)."""
-    for event in ("theory_done", "go_practice", "practice_done"):
+    # фейнман-гейт (R-18): без проговора сессию не закрыть — добавляем ask/answer
+    for event in ("ask", "answer", "theory_done", "go_practice", "practice_done"):
         r = client.post(f"/api/sessions/{ref}/advance", json={"event": event, "payload": {}})
         assert r.status_code == 200, r.text
 

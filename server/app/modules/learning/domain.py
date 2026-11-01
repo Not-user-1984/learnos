@@ -45,16 +45,25 @@ def transition(state: str, event: str) -> str | None:
     raise ValueError(f"событие '{event}' недопустимо в состоянии '{state}'")
 
 
-def can_finish(state: str, status: str) -> None:
+def can_finish(state: str, status: str, answers: int = 0) -> None:
     """Проверить, что сессию можно завершить.
 
+    Фейнман-гейт (R-18 аудита): ядро продукта — «знание рождается через
+    понимание», поэтому сессия не закрывается без единого проговора
+    (answer-события); раньше это держалось только промптом агента.
+
     Raises:
-        ValueError: не из debrief или уже закрыта.
+        ValueError: не из debrief, уже закрыта или не было ни одного ответа.
     """
     if status != "active":
         raise ValueError(f"сессия уже {status}")
     if state != "debrief":
         raise ValueError(f"finish allowed only from state 'debrief' (сейчас '{state}')")
+    if answers < 1:
+        raise ValueError(
+            "урок нельзя закрыть без единого ответа фейнмана — задай вопрос и выслушай ответ "
+            "(или продолжи урок позже)"
+        )
 
 
 def transcript_entry(state: str, event: str, payload: dict, ts: str) -> dict:

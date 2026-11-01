@@ -28,6 +28,7 @@ class BlockRepository:
                 conversation_uid=meta.conversation_uid,
                 activity_uid=meta.activity_uid,
                 weak_spots_count=meta.weak_spots_count,
+                verified=meta.verified,
                 version=meta.version,
                 created_at=meta.created or meta.updated,
                 updated_at=meta.updated,
@@ -48,6 +49,7 @@ class BlockRepository:
                 category_status=meta.category_status,
                 path=meta.path,
                 weak_spots_count=meta.weak_spots_count,
+                verified=meta.verified,
                 version=meta.version,
                 updated_at=meta.updated,
             )
@@ -234,6 +236,7 @@ class BlockRepository:
             created=row.created_at,
             updated=row.updated_at,
             weak_spots_count=row.weak_spots_count,
+            verified=bool(row.verified),
             path=row.path,
         )
 
