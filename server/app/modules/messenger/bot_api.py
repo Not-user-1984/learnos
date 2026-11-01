@@ -61,7 +61,8 @@ class TelegramBotGateway:
         for proxy in routes:
             try:
                 timeout = httpx.Timeout(60, connect=8)
-                async with httpx.AsyncClient(proxy=proxy, timeout=timeout) as client:
+                # "" означает «прямой маршрут» — для httpx это None (Proxy("") бросает ValueError)
+                async with httpx.AsyncClient(proxy=proxy or None, timeout=timeout) as client:
                     resp = await client.post(url, data=data, files=files)
                     body = resp.json()
                 if resp.status_code == 200 and body.get("ok"):

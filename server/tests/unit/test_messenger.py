@@ -36,3 +36,47 @@ def test_md_to_telegram_html():
 def test_html_escaping():
     html = md_to_telegram_html("a < b & c > d")
     assert "&lt;" in html and "&amp;" in html and "&gt;" in html
+
+
+def test_html_chunks_fit_telegram_limit_after_conversion():
+    """Куски считаются ПОСЛЕ конвертации в HTML: экрелирование и теги не толкают за 4096 (R-22)."""
+    from app.modules.messenger.service import _html_chunks
+
+    text = "\n\n".join(f"Параграф {i}: a < b & c > d **жирный** `код` " + "слово " * 80 for i in range(20))
+    chunks = _html_chunks(text)
+    assert len(chunks) >= 2
+    assert all(len(c) <= 3800 for c in chunks)
+
+
+def test_direct_route_survives_second_call(monkeypatch):
+    """После успешной прямой отправки маршрут «""» не ломает следующий вызов (R-22)."""
+    import asyncio
+
+    import httpx
+
+    import app.modules.messenger.bot_api as bot_api
+    from app.modules.messenger.bot_api import TelegramBotGateway
+
+    class _Settings:
+        telegram_token = "t"
+        telegram_chat_id = "1"
+        telegram_proxy = None
+
+    gw = TelegramBotGateway(_Settings())  # type: ignore[arg-type]
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"ok": True, "result": {"message_id": 42}})
+    )
+    real_client = httpx.AsyncClient
+
+    def patched_client(**kw):
+        kw["transport"] = transport
+        return real_client(**kw)
+
+    monkeypatch.setattr(bot_api.httpx, "AsyncClient", patched_client)
+
+    async def call_twice() -> None:
+        await gw.send_message("первое")
+        await gw.send_message("второе")  # раньше падало: Proxy("") → ValueError
+
+    asyncio.run(call_twice())
+    assert gw._route == ""  # noqa: SLF001 — прямой маршрут запомнен

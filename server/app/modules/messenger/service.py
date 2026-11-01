@@ -31,8 +31,8 @@ class MessengerService:
     def send_text(self, text: str) -> dict:
         """Текст одним-несколькими сообщениями (читаемыми кусками)."""
         ids = []
-        for chunk in chunk_for_telegram(text):
-            ids.append(run_coro_sync(self._gw.send_message(md_to_telegram_html(chunk))))
+        for html in _html_chunks(text):
+            ids.append(run_coro_sync(self._gw.send_message(html)))
         return {"ok": True, "message_ids": ids, "chunks": len(ids)}
 
     def send_block(self, knowledge, block_uid: str) -> dict:
@@ -61,10 +61,8 @@ class MessengerService:
         )
         ids = [run_coro_sync(self._gw.send_message(head))]
         text = library.read_chapter(source_ref, chapter, 0, 10_000_000)["text"]
-        for chunk in chunk_for_telegram(text)[
-            1:6
-        ]:  # первая порция дублирует выноску меньше; читаем до 6 кусков
-            ids.append(run_coro_sync(self._gw.send_message(md_to_telegram_html(chunk))))
+        for html in _html_chunks(text)[:6]:  # читаем до 6 кусков, с первого
+            ids.append(run_coro_sync(self._gw.send_message(html)))
         doc_id = run_coro_sync(
             self._gw.send_document(
                 _chapter_file(library, source_ref, chapter),
@@ -73,6 +71,23 @@ class MessengerService:
         )
         ids.append(doc_id)
         return {"ok": True, "message_ids": ids}
+
+
+def _html_chunks(md_text: str, limit: int = 3800) -> list[str]:
+    """HTML-куски ≤ limit: конвертация в Telegram-HTML раздувает текст (экранирование,
+
+    теги <b>/<code>), поэтому режем ПОСЛЕ конвертации, а не до (R-22).
+    """
+    out: list[str] = []
+    for chunk in chunk_for_telegram(md_text, limit=2000):
+        html = md_to_telegram_html(chunk)
+        while len(html) > limit:
+            cut = html.rfind("\n", 0, limit)
+            cut = cut if cut > 0 else limit
+            out.append(html[:cut])
+            html = html[cut:].lstrip("\n")
+        out.append(html)
+    return out
 
 
 def _esc(text: str) -> str:
