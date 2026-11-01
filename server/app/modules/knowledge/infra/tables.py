@@ -3,6 +3,7 @@
 from sqlalchemy import (
     Boolean,
     Column,
+    ForeignKey,
     Index,
     Integer,
     Table,
@@ -81,3 +82,14 @@ block_versions = Table(
     Column("conversation_uid", Text),
     Column("created_at", Text, nullable=False),
 )
+concepts = Table(
+    "concepts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("uid", Text, nullable=False, unique=True),
+    Column("block_uid", Text, ForeignKey("blocks.block_uid"), nullable=False),
+    Column("term", Text, nullable=False),
+    Column("definition", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+)
+Index("ix_concepts_block", concepts.c.block_uid)

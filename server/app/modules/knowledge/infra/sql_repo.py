@@ -13,8 +13,8 @@ from .tables import block_links, block_sources, block_tags, block_versions, bloc
 class BlockRepository:
     """Индекс блоков (строки blocks + связанные таблицы)."""
 
-    def save(self, session: Session, meta: BlockMeta) -> None:
-        """Вставить или обновить индекс блока вместе с тегами, источниками и связями."""
+    def save(self, session: Session, meta: BlockMeta, concepts: tuple = ()) -> None:
+        """Вставить или обновить индекс блока вместе с понятиями, тегами, связями."""
         session.execute(
             insert(blocks).values(
                 block_uid=meta.uid,
@@ -34,10 +34,11 @@ class BlockRepository:
                 updated_at=meta.updated,
             )
         )
+        self._rewrite_concepts(session, meta.uid, concepts)
         self._rewrite_relations(session, meta)
 
-    def update_row(self, session: Session, meta: BlockMeta) -> None:
-        """Обновить существующую строку индекса."""
+    def update_row(self, session: Session, meta: BlockMeta, concepts: tuple = ()) -> None:
+        """Обновить существующую строку индекса (включая понятия)."""
         session.execute(
             update(blocks)
             .where(blocks.c.block_uid == meta.uid)
@@ -57,7 +58,29 @@ class BlockRepository:
         session.execute(delete(block_tags).where(block_tags.c.block_uid == meta.uid))
         session.execute(delete(block_sources).where(block_sources.c.block_uid == meta.uid))
         session.execute(delete(block_links).where(block_links.c.from_uid == meta.uid))
+        self._rewrite_concepts(session, meta.uid, concepts)
         self._rewrite_relations(session, meta)
+
+    def _rewrite_concepts(self, session: Session, block_uid: str, concepts: tuple) -> None:
+        """Понятия блока в таблице concepts (модель знания, T-051 Э5): rewrite."""
+        import hashlib
+        from datetime import UTC, datetime
+
+        from .tables import concepts as concepts_t
+
+        session.execute(concepts_t.delete().where(concepts_t.c.block_uid == block_uid))
+        now = datetime.now(UTC).isoformat(timespec="seconds")
+        for c in concepts:
+            uid = "cpt_" + hashlib.md5(f"{block_uid}:{c.term}".encode()).hexdigest()[:12]
+            session.execute(
+                concepts_t.insert().values(
+                    uid=uid,
+                    block_uid=block_uid,
+                    term=c.term,
+                    definition=c.definition,
+                    created_at=now,
+                )
+            )
 
     def _rewrite_relations(self, session: Session, meta: BlockMeta) -> None:
         if meta.tags:

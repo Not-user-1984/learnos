@@ -109,7 +109,7 @@ class KnowledgeService:
             verified=verified,
         )
         with self._uow() as uow:
-            self._blocks.save(uow.session, meta)
+            self._blocks.save(uow.session, meta, concepts=draft.concepts)
             uow.emit(BlockSaved(block_uid=uid, kind=draft.kind, title=draft.title, category_path=category))
         return Block(meta=meta, content=self._files.read(stem))
 
@@ -166,7 +166,7 @@ class KnowledgeService:
                     "path": stem,
                 }
             )
-            self._blocks.update_row(uow.session, new_meta)
+            self._blocks.update_row(uow.session, new_meta, concepts=new_draft.concepts)
             uow.emit(BlockUpdated(block_uid=uid, version=version, reason=reason))
             return Block(meta=new_meta, content=self._files.read(stem))
 

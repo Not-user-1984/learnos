@@ -43,3 +43,16 @@ sessions = Table(
     Column("transcript_json", Text, nullable=False, server_default="[]"),
 )
 Index("ix_sessions_conversation", sessions.c.conversation_id)
+assessments = Table(
+    "assessments",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("block_uid", Text, nullable=False),
+    Column("session_uid", Text, nullable=False),
+    Column("question", Text, nullable=False),
+    Column("answer", Text),
+    Column("verdict", Text),  # ok | partial | missed — по возможности от агента
+    Column("quality", Integer),
+    Column("created_at", Text, nullable=False),
+)
+Index("ix_assessments_block", assessments.c.block_uid)

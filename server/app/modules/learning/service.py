@@ -312,7 +312,10 @@ class LearningService:
         block = self._knowledge.block_card_for_session(s["uid"]) or self._write_block(s, block_draft)
         (self._maybe_write_runbook(s, block["block_uid"]) or {}).get("block_uid")
 
-        # 2) закрытие сессии + курсор активности + события
+        # 2) фейнман-пары уходят в assessments — структурная история проговора (T-051 Э5)
+        self._record_assessments(s, block["block_uid"])
+
+        # 3) закрытие сессии + курсор активности + события
         with self._uow() as uow:
             self._sessions.update(uow.session, s["id"], status="finished", state="done", ended_at=now)
             activity = self._acts.find(uow.session, s["activity_id"]) if s["activity_id"] else None
@@ -344,6 +347,48 @@ class LearningService:
             "path": block.get("path"),
             "_card": block.get("_card"),
         }
+
+    def _record_assessments(self, s: dict, block_uid: str) -> None:
+        """Пары ask→answer из транскрипта — в таблицу assessments (модель знания).
+
+        Раньше проговор жил только в transcript_json: экзаменатор и reinforce
+        не могли выбрать «самое слабое» запросом. verdict/quality — если агент
+        передал их в payload ответа.
+        """
+        from .infra.tables import assessments as assessments_t
+
+        pairs: list[dict] = []
+        pending_question: str | None = None
+        for e in s.get("transcript") or []:
+            ev, payload = e.get("event"), e.get("payload") or {}
+            if ev == "ask":
+                pending_question = str(payload.get("question") or payload.get("text") or "").strip()
+            elif ev == "answer" and pending_question:
+                pairs.append(
+                    {
+                        "question": pending_question,
+                        "answer": str(payload.get("answer") or payload.get("text") or "").strip(),
+                        "verdict": payload.get("verdict"),
+                        "quality": payload.get("quality"),
+                    }
+                )
+                pending_question = None
+        if not pairs:
+            return
+        now = now_iso(self._clock)
+        with self._uow() as uow:
+            for p in pairs:
+                uow.session.execute(
+                    assessments_t.insert().values(
+                        block_uid=block_uid,
+                        session_uid=s["uid"],
+                        question=p["question"][:500],
+                        answer=(p["answer"] or "")[:2000] or None,
+                        verdict=p["verdict"],
+                        quality=p["quality"],
+                        created_at=now,
+                    )
+                )
 
     def mark_chapter_done(
         self,
