@@ -36,4 +36,4 @@ RUN mkdir -p /data /kb
 VOLUME ["/data", "/kb"]
 
 EXPOSE 8765
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8765"]
+CMD ["uv", "run", "--frozen", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8765"]
