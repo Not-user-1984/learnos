@@ -75,7 +75,8 @@ cd web && npm install && npm run dev                              # LEARNOS_API_
 **Прод-стенд LearnOS (с 2026-10-17): CT 132 `learnos` — web http://192.168.0.132:3000, API http://192.168.0.132:8765 (LAN).**
 
 - Развёрнут `~/my_dev/my_servak/proxmox/scripts/deploy/deploy-learnos-container.sh` (4c/6G/30G SSD256, docker compose внутри CT; ZAI_API_KEY и GitHub-токен проброшены на CT файлами через `sec exec`, не печатаются)
-- **Разработка = git push**: на CT таймер `learnos-deploy.timer` каждые 2 мин делает fetch; есть новые коммиты в main → reset/build/up + health. Логи: `journalctl -u learnos-deploy.service`, `/var/log/learnos-deploy.log`
+- **Разработка = git push**: на CT таймер `learnos-deploy.timer` каждые 2 мин делает fetch; есть новые коммиты в main → reset → build → **CI-гейт (ruff+lint-imports+pytest в свежем образе; фейл → откат на прежний коммит, прод остаётся на старом коде)** → up + health. Логи: `journalctl -u learnos-deploy.service`, `/var/log/learnos-deploy.log`
+- **Репозитории-зеркала**: origin на маке пушит сразу в GitHub (`Not-user-1984/learnos`, основной — там GitHub Actions CI: server ruff/lint-imports/pytest + web eslint/tsc/build на каждый push/PR, `.github/workflows/ci.yml`) и GitVerse (`NotUser1984/learnos`, зеркало). CT тянет деплой с GitHub
 - Данные (`/opt/learnos/{data,kb}` на CT) в git не попадают; отчёты idea-scout — в `data/ideas/`
 - **API-токен прода** (2026-11-01): включён — прямой доступ к `:8765` (REST/MCP) требует `Authorization: Bearer <LEARNOS_API_TOKEN>`; значение — `sec reveal LEARNOS_API_TOKEN` на маке (также в `/opt/learnos/.env` на CT). Веб `:3000` работает без токена (Next-прокси)
 - Прокси и ключи поиска — из UI (Настройки → «Прокси и поиск», таблица `app_settings`): vless-ключ → xray-sidecar (сервис `learnos-xray`, socks5://xray:1080), socks5/http → напрямую; применяются на лету без рестарта. env (`TAVILY_API_KEY`, `SERPER_API_KEY`, `LEARNOS_TELEGRAM_TOKEN` в `/opt/learnos/.env`) — fallback
