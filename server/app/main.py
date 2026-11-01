@@ -103,14 +103,36 @@ def create_app() -> FastAPI:
 
     from fastapi.middleware.cors import CORSMiddleware
 
-    # локальный сервис: веб-чат ходит напрямую, CORS открыт для локальных источников
+    settings = container.settings
+
+    # локальный сервис: веб-чат ходит через Next-прокси (same-origin); CORS открыт
+    # для перечисленных источников (LEARNOS_CORS_ORIGINS), по умолчанию — как раньше
+    origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()] or ["*"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=origins,
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["mcp-session-id"],
     )
+
+    if settings.api_token:
+
+        @app.middleware("http")
+        async def require_bearer_token(request: Request, call_next):  # noqa: ANN202
+            """R-07: без токена /api и /mcp открыты всей LAN и DNS-rebinding'у.
+
+            /api/health остаётся открытым (мониторинг деплоя), preflight — тоже.
+            """
+            open_paths = ("/api/health",)
+            if request.method != "OPTIONS" and not request.url.path.startswith(open_paths):
+                expected = f"Bearer {settings.api_token}"
+                if request.headers.get("authorization") != expected:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"error": "unauthorized", "message": "нужен Authorization: Bearer <токен>"},
+                    )
+            return await call_next(request)
 
     @app.exception_handler(AppError)
     async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:

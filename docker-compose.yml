@@ -54,5 +54,7 @@ services:
       - server
     environment:
       LEARNOS_API_URL: http://server:8765
+      # R-07: прокси добавляет bearer на сервере; браузер токен не видит
+      LEARNOS_API_TOKEN: ${LEARNOS_API_TOKEN:-}
     ports:
       - "3000:3000"

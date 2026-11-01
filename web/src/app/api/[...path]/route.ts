@@ -8,6 +8,9 @@ async function proxy(req: Request): Promise<Response> {
   const headers = new Headers(req.headers);
   headers.delete("host");
   headers.delete("connection");
+  // R-07: токен живёт на сервере (env), браузер его не видит
+  const token = process.env.LEARNOS_API_TOKEN;
+  if (token) headers.set("authorization", `Bearer ${token}`);
   const init: RequestInit = {
     method: req.method,
     headers,

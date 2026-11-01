@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     allow_private_url_fetch: bool = (
         False  # from-url: разрешить внутренние адреса (LAN) — по умолчанию SSRF-защита
     )
+    # Auth (R-07): bearer-токен для /api и /mcp; пусто — проверка выключена
+    # (личный сервис в LAN). Задан — все запросы, кроме /api/health, требуют
+    # Authorization: Bearer <токен>. Веб-прокси Next добавляет его на сервере.
+    api_token: str = ""
+    # CORS: список origin через запятую; пусто — «*» (как раньше)
+    cors_origins: str = ""
     yt_proxy: str = ""  # прокси yt-dlp (YouTube); из настроек связи (UI) или env LEARNOS_YT_PROXY
 
     @property
