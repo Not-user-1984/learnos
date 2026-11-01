@@ -31,6 +31,8 @@ COPY migrations ./migrations
 COPY config ./config
 COPY skills ./skills
 COPY app ./app
+# тесты нужны в образе: CI-гейт деплоя гоняет pytest в свежесобранном образе до up
+COPY tests ./tests
 
 RUN mkdir -p /data /kb
 VOLUME ["/data", "/kb"]
