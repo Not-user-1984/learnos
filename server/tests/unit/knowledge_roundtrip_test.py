@@ -160,3 +160,18 @@ def test_review_state_survives_update(container):
     content2 = k._files.read(updated.meta.path)  # noqa: SLF001
     meta2, _ = parse_markdown(content2)
     assert meta2["review"] == {"ease": 2.9, "interval": 12, "due": "2026-12-01"}
+
+
+def test_categories_yaml_restored_from_db_when_file_lost(container):
+    """Файл категорий пропал (чистый сброс данных) — восстанавливается из БД (T-052)."""
+    from app.modules.knowledge.infra.md_store import MdBlockStore
+
+    k = container.knowledge
+    yaml_path = MdBlockStore(container.settings.kb_dir).blocks_dir.parent / "categories.yaml"
+    yaml_path.write_text("", encoding="utf-8")
+    yaml_path.unlink()
+
+    k.ensure_categories_default()
+    assert yaml_path.exists()
+    content = yaml_path.read_text(encoding="utf-8")
+    assert "infra" in content and "programming" in content

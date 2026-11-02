@@ -351,10 +351,16 @@ class KnowledgeService:
         return roots
 
     def ensure_categories_default(self) -> None:
-        """Записать стартовое дерево, если категорий нет вообще (миграция/первый старт)."""
+        """Записать стартовое дерево, если категорий нет вообще (миграция/первый старт).
+
+        Если категории в БД есть, а YAML-файл пропал (чистый сброс данных) —
+        восстанавливаем файл из БД, чтобы kb/ не расходился с деревом.
+        """
         with self._uow() as uow:
             existing = self._cats.all(uow.session)
             if existing:
+                if not (self._files.blocks_dir.parent / "categories.yaml").exists():
+                    self._files.write_categories(existing)
                 return
             cats = default_categories()
             for cat in cats:
