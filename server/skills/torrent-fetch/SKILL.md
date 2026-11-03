@@ -7,15 +7,15 @@ created: 2026-10-22
 params:
   action:
     type: str
-    desc: "search (поиск+кандидаты), add (добавить по номеру/hash/magnet), status (список торрентов), books (поиск книг)"
+    desc: "search (поиск+кандидаты), add (добавить по номеру/hash/magnet), auto (найти и добавить лучшего), import (завершённую раздачу книг — в библиотеку LearnOS), status (список торрентов), books (поиск книг)"
   query:
     type: str
     optional: true
-    desc: поисковый запрос (для search/books)
+    desc: поисковый запрос (для search/books/auto; для import — подстрока имени раздачи)
   title:
     type: str
     optional: true
-    desc: alias запроса для books
+    desc: alias запроса для books/import
   num:
     type: int
     optional: true
@@ -34,6 +34,10 @@ params:
     type: str
     optional: true
     desc: magnet-ссылка или info-hash (для add напрямую)
+  hash:
+    type: str
+    optional: true
+    desc: info-hash раздачи (для import)
   limit:
     type: int
     optional: true
@@ -53,10 +57,21 @@ params:
 ```
 search  {query: "Пелевин", cat: "books"}                  → candidates + table, потом add {num: N}
 search  {query: "Dune 2021", cat: "movies", auto: true}   → качает лучшего сразу
+auto    {query: "Радченко 1С 8.3", cat: "books"}          → search с auto=true одним вызовом
 books   {query: "Fluent Python"}                          → то же для книг
-add     {num: 3} | {magnet: "magnet:?..."}                → qBit
+add     {num: 3} | {magnet: "magnet:?..."}                → qBit (409 = уже добавлен, duplicate=true)
+import  {hash: "d47e..."} | {query: "Радченко"}           → завершённая раздача → библиотека LearnOS
 status  {}                                                → раздачи с прогрессом
 ```
+
+## Импорт книг (import)
+
+Fallback hook'а на media-CT: заливает PDF завершённой раздачи (категория
+`learnos-books` или без категории) в библиотеку — `data/sources/<uid>/original.pdf`
++ job `process_source` (нарезка глав) напрямую в БД. Идемпотентен: существующий
+source с тем же title не дублируется (`existed: true`). Файл раздачи должен быть
+виден по `content_path` там, где работает сервис; если qBit на другом хосте —
+`file_unreachable` с подсказкой (книгу зальёт hook).
 
 ## Конфиг
 
@@ -82,4 +97,5 @@ status  {}                                                → раздачи с 
 |---|---|
 | prowlarr 401 | сменился ApiKey — перечитать config.xml Prowlarr на media-CT |
 | qbit 403 | Bearer-ключ отозван — перечитать qBittorrent.conf |
-| книга скачалась, в библиотеке нет | лог hook: /var/log/learnos-qbit-hook.log на media-CT |
+| qbit 409 на torrents/add | не ошибка: раздача уже добавлена (`duplicate: true`); дальше `import` или `status` |
+| книга скачалась, в библиотеке нет | лог hook: /var/log/learnos-qbit-hook.log на media-CT; fallback — `import {hash}` |

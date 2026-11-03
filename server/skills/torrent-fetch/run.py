@@ -1,7 +1,7 @@
 """torrent-fetch: поиск книг/фильмов/музыки (Prowlarr) + загрузка (qBittorrent, libgen).
 
 CLI: search "query" [--cat books|movies|music|tv] [--auto] | books "title" [--auto]
-     add <N|hash|magnet> | status
+     auto "query" | add <N|hash|magnet> | import <hash|подстрока имени> | status
 Программный вход: main(**kwargs) — используется скилл-загрузчиком LearnOS.
 """
 
@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -250,6 +251,127 @@ def do_status(cfg: dict, limit: int = 15) -> dict:
     return {"count": len(torrents), "table": "\n".join(table), "torrents": torrents}
 
 
+# минимальный размер PDF при выборе из каталога раздачи — как в hook на media-CT
+_IMPORT_MIN_PDF_BYTES = 100 * 1024
+
+
+def _import_app():
+    """(get_db, DATA_DIR, генератор uid) ядра LearnOS — import пишет source/job в БД.
+
+    Лениво: search/add/status работают без app.* рядом; корень сервера
+    добавляется в sys.path для subprocess-запуска run.py вне процесса сервиса.
+    """
+    root = str(Path(__file__).resolve().parent.parent.parent)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from app.db import get_db  # лениво: нужен только действию import
+    from app.kernel.clock import SystemClock, now_iso
+    from app.kernel.ids import UuidHexGenerator
+    from app.paths import DATA_DIR
+
+    return get_db, DATA_DIR, UuidHexGenerator(), now_iso, SystemClock()
+
+
+def _pick_pdf(content_path: str) -> Path | None:
+    """PDF раздачи: сам content_path-файл или крупнейший PDF в каталоге (>= 100 КБ)."""
+    cp = Path(content_path)
+    if cp.is_file():
+        return cp if cp.suffix.lower() == ".pdf" else None
+    if cp.is_dir():
+        pdfs = [p for p in cp.rglob("*.pdf") if p.is_file() and p.stat().st_size >= _IMPORT_MIN_PDF_BYTES]
+        return max(pdfs, key=lambda p: p.stat().st_size, default=None)
+    return None
+
+
+def do_import(cfg: dict, ref: str) -> dict:
+    """Импорт завершённой раздачи книг в библиотеку LearnOS — fallback hook'а.
+
+    ref — info-hash или подстрока имени раздачи. Допуск: категория learnos-books
+    или раздача без категории, обязательно завершённая. PDF — как в hook:
+    content_path-файл либо крупнейший PDF каталога. Source и job process_source
+    пишутся напрямую в БД (уровень app.db, без сервисного слоя — см. book-splitter);
+    существующий source с тем же title не дублируется (existed=True).
+    """
+    ref = ref.strip()
+    if not ref:
+        return {"error": "no_target", "message": "import требует hash или query/title раздачи"}
+    qbit = _mk_qbit(cfg)
+    try:
+        torrents = qbit.torrents(limit=500)
+    finally:
+        qbit.close()
+    ref_l = ref.lower()
+    matches = [t for t in torrents if t["hash"].lower() == ref_l] or [
+        t for t in torrents if ref_l in t["name"].lower()
+    ]
+    if not matches:
+        return {"error": "not_found", "message": f"раздача по «{ref}» в qBit не найдена (см. status)"}
+    t = matches[0]
+    if t["category"] and t["category"] != LEARNOS_BOOKS_CATEGORY:
+        return {
+            "error": "bad_category",
+            "message": f"категория «{t['category']}» — импортируются только книги "
+            f"({LEARNOS_BOOKS_CATEGORY} или без категории)",
+        }
+    if t["progress"] < 99.9 and not str(t["state"]).upper().endswith("UP"):
+        return {
+            "error": "not_finished",
+            "message": f"раздача ещё не завершена: {t['progress']}% ({t['state']}) — повтори import позже",
+        }
+
+    title = Path(t["name"]).stem or t["name"]
+    try:
+        get_db, data_dir, ids, now_iso, clock = _import_app()
+    except Exception as e:  # запуск вне окружения сервиса LearnOS
+        return {"error": "no_db", "message": f"БД LearnOS недоступна: {e}"}
+    conn = get_db()
+    try:
+        # идемпотентность: hook мог успеть залить книгу раньше (title с .pdf или без)
+        dup = conn.execute(
+            "SELECT uid, title, status FROM sources WHERE title IN (?, ?) AND status != 'failed' LIMIT 1",
+            (title, f"{title}.pdf"),
+        ).fetchone()
+        if dup:
+            return {
+                "ok": True,
+                "uid": dup["uid"],
+                "title": dup["title"],
+                "existed": True,
+                "source_status": dup["status"],
+            }
+        pdf = _pick_pdf(t.get("content_path") or "")
+        if pdf is None:
+            if t.get("content_path") and not Path(t["content_path"]).exists():
+                return {
+                    "error": "file_unreachable",
+                    "message": (
+                        f"файл раздачи «{t['content_path']}» не виден из сервиса "
+                        "(qBit на другом хосте — книгу зальёт hook на media-CT)"
+                    ),
+                }
+            return {"error": "no_pdf", "message": f"в раздаче «{t['name']}» нет PDF-файла"}
+        uid = ids.new("src")
+        out_dir = Path(data_dir) / "sources" / uid
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dst = out_dir / "original.pdf"
+        shutil.copyfile(pdf, dst)
+        now = now_iso(clock)
+        conn.execute(
+            "INSERT INTO sources(uid, kind, title, local_path, status, meta_json, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?)",
+            (uid, "book", title, str(dst), "chosen", "{}", now, now),
+        )
+        job_id = conn.execute(
+            "INSERT INTO jobs(kind, target, status, progress, total, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?)",
+            ("process_source", uid, "queued", 0, 1, now, now),
+        ).lastrowid
+        conn.commit()
+        return {"ok": True, "uid": uid, "title": title, "job_id": job_id, "existed": False}
+    finally:
+        conn.close()
+
+
 def main(
     action: str = "status",
     query: str = "",
@@ -258,10 +380,11 @@ def main(
     cat: str = "books",
     auto: bool = False,
     magnet: str = "",
+    hash: str = "",  # параметр скилла: info-hash раздачи для import
     limit: int = 20,
     **_,
 ) -> dict:
-    """Вход для скилл-загрузчика: action = search | add | status | books."""
+    """Вход для скилл-загрузчика: action = search | add | status | books | auto | import."""
     try:
         cfg = load_config()
     except SystemExit as e:
@@ -276,11 +399,17 @@ def main(
             if not q:
                 return {"error": "no_query", "message": "books требует query/title"}
             return do_search(cfg, q, cat="books", auto=auto, limit=limit)
+        if action == "auto":
+            if not query:
+                return {"error": "no_query", "message": "auto требует query"}
+            return do_search(cfg, query, cat=cat or "books", auto=True, limit=limit)
         if action == "add":
             target = magnet or (str(num) if num else "")
             if not target:
                 return {"error": "no_target", "message": "add требует num или magnet"}
             return do_add(cfg, target, cat=cat or "books")
+        if action == "import":
+            return do_import(cfg, hash or query or title)
         if action == "status":
             return do_status(cfg)
     except (ProwlarrError, QbitError, LibgenError) as e:
@@ -290,7 +419,7 @@ def main(
 
 def _cli() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("action", choices=["search", "books", "add", "status"])
+    parser.add_argument("action", choices=["search", "books", "auto", "add", "import", "status"])
     parser.add_argument("value", nargs="?", default="", help="query / № / hash / magnet")
     parser.add_argument("--cat", default="books", help="books | movies | music | tv")
     parser.add_argument("--auto", action="store_true", help="качать лучшего без вопроса")
@@ -300,8 +429,12 @@ def _cli() -> None:
     cfg = load_config()
     if args.action in ("search", "books"):
         res = do_search(cfg, args.value, cat=args.cat, auto=args.auto, limit=args.limit)
+    elif args.action == "auto":
+        res = do_search(cfg, args.value, cat=args.cat, auto=True, limit=args.limit)
     elif args.action == "add":
         res = do_add(cfg, args.value, cat=args.cat)
+    elif args.action == "import":
+        res = do_import(cfg, args.value)
     else:
         res = do_status(cfg)
     if res.get("table"):

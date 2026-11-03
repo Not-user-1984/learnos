@@ -56,8 +56,8 @@ class QbitClient:
     def add(self, link: str, category: str = "") -> dict:
         """Добавить торрент (magnet / torrent-url); категория — метка для хуков.
 
-        qBit отвечает 200 "Ok." на принятое и 202 на дубликат/флуд — оба
-        означают, что раздача в клиенте.
+        qBit отвечает 200 "Ok." на принятое и 202/409 на дубликат/флуд — все
+        три означают, что раздача в клиенте (в 5.x повторное добавление = 409).
         """
         data = {"urls": link}
         if category:
@@ -65,7 +65,7 @@ class QbitClient:
         resp = self._client.post(f"{self._url}/api/v2/torrents/add", data=data)
         if resp.status_code in (401, 403):
             raise QbitError(f"qbit {resp.status_code} на torrents/add: ключ/логин не принят")
-        if resp.status_code not in (200, 202):
+        if resp.status_code not in (200, 202, 409):
             raise QbitError(f"qbit {resp.status_code} на torrents/add")
         if resp.status_code == 200 and resp.text.strip().lower() not in ("ok.", ""):
             raise QbitError(f"qbit add отклонён: {resp.text.strip()[:100]}")
@@ -73,11 +73,11 @@ class QbitClient:
             "added": True,
             "category": category or None,
             "link": link[:80],
-            "duplicate": resp.status_code == 202,
+            "duplicate": resp.status_code in (202, 409),
         }
 
     def torrents(self, limit: int = 15) -> list[dict]:
-        """Активные и завершённые раздачи с прогрессом."""
+        """Активные и завершённые раздачи: прогресс + пути файлов (для import)."""
         resp = self._check(self._client.get(f"{self._url}/api/v2/torrents/info"), "torrents/info")
         rows = resp.json()
         rows.sort(key=lambda r: r.get("added_on", 0), reverse=True)
@@ -91,6 +91,8 @@ class QbitClient:
                     "state": r.get("state", "?"),
                     "size": int(r.get("size", 0)),
                     "hash": r.get("hash", ""),
+                    "content_path": r.get("content_path", ""),
+                    "save_path": r.get("save_path", ""),
                 }
             )
         return out
