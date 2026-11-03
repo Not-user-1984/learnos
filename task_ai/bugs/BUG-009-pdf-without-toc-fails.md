@@ -1,6 +1,6 @@
 # BUG-009 — PDF без закладок (TOC) валил ингест книги
 
-**Статус:** fixed → [T-053](../tasks/T-053-incident-torrent-bookfix.md) · найдено 2026-11-03 · свидетельство: «Django-4-Практика создания» (791 стр., get_toc() пуст) — 4 упавших jobs, source src_09a3ec0d в failed; book-splitter отвечал «PDF без закладок (TOC) — эвристика по заголовкам пока не реализована»
+**Статус:** fixed → [T-053](../archive/2026-11-04-T-053-incident-torrent-bookfix.md) · найдено 2026-11-03 · свидетельство: «Django-4-Практика создания» (791 стр., get_toc() пуст) — 4 упавших jobs, source src_09a3ec0d в failed; book-splitter отвечал «PDF без закладок (TOC) — эвристика по заголовкам пока не реализована»
 
 ## Корень
 

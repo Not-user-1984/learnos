@@ -1,10 +1,11 @@
 ---
 id: T-053
 title: Инцидент 2026-11-03 — torrent-fetch (auto/import/409) и book-splitter без TOC
-status: active
+status: done
 priority: high
 from: инцидент прода 2026-11-03 22:00–22:10 UTC (аудит ZCode)
 created: 2026-11-04
+closed: 2026-11-04
 ---
 
 ## Что нужно
@@ -48,3 +49,18 @@ qBit 409 на повторный add, нет действия import), а PDF «
   доступа к файлу.
 - Куратор структуры пропускается только в mode=pages (gate в
   `LibraryService._run_process`).
+
+## Сделано (2026-11-04)
+
+Коммиты ab6dbca (torrent-fetch: auto/import/409/пути), aade221 (book-splitter
+pages-режим + gate куратора), b227a61 (задача/баги). Тесты 417 → 427.
+
+Самопроверка прода (CT 132, деплой 22:44 UTC, health ok):
+
+- Django-4 src_09a3ec0d переобработан: `mode=pages`, 16 глав «Страницы 1–50» …
+  «Страницы 751–791» (1..791), lang=ru, source processed.
+- torrent_fetch import по hash d47efb28… (Радченко): `{"ok": true, "uid":
+  "src_5f3dbec4", "existed": true, "source_status": "processed"}` — идемпотентность
+  распознала книгу, залитую hook'ом (title с «.pdf»).
+- Вывод инцидента: add 409 больше не роняет сценарий агента; у агента есть
+  внятный action=auto и import с объяснимыми ошибками (file_unreachable → hook).

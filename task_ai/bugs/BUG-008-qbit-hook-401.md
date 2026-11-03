@@ -18,4 +18,4 @@ hook'а руками.
 
 ## Связи
 
-- [T-053](../tasks/T-053-incident-torrent-bookfix.md) — import/auto/409 в torrent-fetch
+- [T-053](../archive/2026-11-04-T-053-incident-torrent-bookfix.md) — import/auto/409 в torrent-fetch
