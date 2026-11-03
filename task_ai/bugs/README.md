@@ -13,3 +13,5 @@
 | [BUG-005](BUG-005-active-runs-window.md) | Подозрение: окно 2ч в active_runs не фильтрует старые запуски | fixed → [T-044](../archive/2026-10-28-T-044-chat-incident-fixes.md) |
 | [BUG-006](BUG-006-research-autoadds-sources.md) | Research сам добавляет источники в Библиотеку; нужно: список кандидатов на редактирование и апрув | fixed → [T-048](../archive/2026-10-28-T-048-research-profile-fixes.md) (карточка с чекбоксами — T-014 Э3) |
 | [BUG-007](BUG-007-profile-about-ignored.md) | «О себе» не влияет на ответы (девопс-аналогии при профиле Python-разработчика) | fixed → [T-048](../archive/2026-10-28-T-048-research-profile-fixes.md) |
+| [BUG-008](BUG-008-qbit-hook-401.md) | Hook заливки книг получал 401 от API (без bearer) — книги терялись после qBit | fixed (infra, proxmox 067d2bc; компенсирующий слой — [T-053](../tasks/T-053-incident-torrent-bookfix.md)) |
+| [BUG-009](BUG-009-pdf-without-toc-fails.md) | PDF без закладок (TOC) валил ингест книги целиком | fixed → [T-053](../tasks/T-053-incident-torrent-bookfix.md) |
