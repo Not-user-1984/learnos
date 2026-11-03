@@ -158,6 +158,30 @@ def test_curate_book_llm_incomplete_falls_back_to_heuristic(client, container, f
     assert len(rows) == 3 and rows[0]["title"] == "Введение"
 
 
+def test_run_process_skips_curator_for_pages_mode(client, container, monkeypatch):
+    """pages-режим (PDF без закладок): куратор не вызывается; в toc-режиме — вызывается."""
+    src = _add_book_source(container)
+    curator_calls = []
+    monkeypatch.setattr(
+        container.library, "_curate_book", lambda *a, **k: curator_calls.append(1) or {"curated": False}
+    )
+    monkeypatch.setattr(
+        container.library._skills,
+        "run",
+        lambda name, kw: {"ok": True, "mode": "pages", "chapters": [], "entries": []},
+    )
+    container.library._run_process({"id": 1, "target": src["uid"]})
+    assert curator_calls == []
+
+    monkeypatch.setattr(
+        container.library._skills,
+        "run",
+        lambda name, kw: {"ok": True, "mode": "toc", "chapters": [], "entries": ENTRIES},
+    )
+    container.library._run_process({"id": 2, "target": src["uid"]})
+    assert len(curator_calls) == 1
+
+
 def test_outline_from_db_with_sections_and_numbers(rest_app, client, container):
     """Новый ингест: страницы/номера/секции глав отдаются из БД (без матча по названиям)."""
     src = _add_book_source(container)

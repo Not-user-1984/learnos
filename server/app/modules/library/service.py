@@ -270,7 +270,8 @@ class LibraryService:
 
         if kind == "book":
             result = self._skills.run("book-splitter", {"source_id": source_id})
-            if result.get("ok"):
+            # pages-режим (PDF без закладок): куски равноценны, куратор не нужен
+            if result.get("ok") and result.get("mode") != "pages":
                 # куратор структуры: LLM-классификация top-записей → чистка мусора, номера глав
                 result = {**result, **self._curate_book(source_id, src_uid, result)}
         elif kind == "video" and url:

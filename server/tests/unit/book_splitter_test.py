@@ -179,6 +179,7 @@ def test_splitter_chapters_pages_sections_and_images(splitter, tmp_path):
 
     result = mod.main(source_id=1)
     assert result["ok"], result
+    assert result["mode"] == "toc"
     # все top-записи как есть — классификацию делает куратор в сервисе
     assert [e["title"] for e in result["entries"]] == [
         "Титул",
@@ -204,6 +205,74 @@ def test_splitter_chapters_pages_sections_and_images(splitter, tmp_path):
     assert "img_p7_0.png" in images
     assert not any(n.startswith("img_p8") for n in images), "декоративная мелкая картинка не рендерится"
     assert (data_dir / "sources" / "1" / "images" / "img_p7_0.png").stat().st_size > 0
+
+
+def test_splitter_no_toc_falls_back_to_page_chunks(splitter, tmp_path):
+    """PDF без закладок (Django-4): главы-куски по страницам, mode=pages, без секций."""
+    mod, db, data_dir = splitter
+    doc = fitz.open()
+    for i in range(23):
+        doc.new_page()
+        doc[i].insert_text((72, 72), f"Django page {i + 1}")
+    pdf = tmp_path / "notoc.pdf"
+    doc.save(pdf)
+    doc.close()
+    db.execute(
+        "INSERT INTO sources(uid, kind, title, local_path) VALUES ('src_notoc', 'book', ?, ?)",
+        ("Django-4-Практика создания", str(pdf)),
+    )
+    db.commit()
+
+    result = mod.main(source_id=1, chunk_pages=10)
+    assert result["ok"], result
+    assert result["mode"] == "pages" and result["pages"] == 23
+    # 23 стр. по 10: куски 1–10 и 11–20; хвост 21–23 (3 стр. < 5) входит в предыдущий
+    assert [c["title"] for c in result["chapters"]] == ["Страницы 1–10", "Страницы 11–23"]
+
+    rows = db.execute(
+        "SELECT idx, title, start_page, end_page, sections_json FROM chapters ORDER BY idx"
+    ).fetchall()
+    db.close()
+    assert [(r["start_page"], r["end_page"]) for r in rows] == [(1, 10), (11, 23)]
+    assert all(r["sections_json"] == "[]" for r in rows)
+    # главы-файлы на месте, глава начинается заголовком и содержит приклеенный хвост
+    ch2 = (data_dir / "sources" / "1" / "chapters" / "ch_02.md").read_text(encoding="utf-8")
+    assert ch2.startswith("# Страницы 11–23") and "Django page 21" in ch2
+
+
+def test_splitter_no_toc_clamps_chunk_pages(splitter, tmp_path):
+    """chunk_pages зажимается в 10..200: 3 → 10, 500 → 200."""
+    mod, db, _data = splitter
+    doc = fitz.open()
+    for i in range(25):
+        doc.new_page()
+        doc[i].insert_text((72, 72), f"page {i + 1}")
+    pdf = tmp_path / "small.pdf"
+    doc.save(pdf)
+    doc.close()
+    db.execute(
+        "INSERT INTO sources(uid, kind, title, local_path) VALUES ('src_clamp', 'book', ?, ?)",
+        ("Книга", str(pdf)),
+    )
+    db.commit()
+
+    result = mod.main(source_id=1, chunk_pages=3)
+    assert [c["title"] for c in result["chapters"]] == ["Страницы 1–10", "Страницы 11–20", "Страницы 21–25"]
+    db.execute("DELETE FROM chapters")
+    db.commit()
+    result2 = mod.main(source_id=1, chunk_pages=500)
+    assert [c["title"] for c in result2["chapters"]] == ["Страницы 1–25"]
+    db.close()
+
+
+def test_page_chunks_book_sized_layout(splitter):
+    """Формула кусков на объёме прод-книги: 791 стр. → 16 глав (последняя 751–791)."""
+    mod, _db, _data = splitter
+    chunks = mod._page_chunks(791, 50)
+    assert len(chunks) == 16
+    assert chunks[0] == ("Страницы 1–50", 1) and chunks[-1] == ("Страницы 751–791", 751)
+    # хвост 4 стр. — не отдельная глава, входит в предыдущий кусок
+    assert [t for t, _ in mod._page_chunks(104, 50)] == ["Страницы 1–50", "Страницы 51–104"]
 
 
 def test_splitter_reprocess_cleans_old_output(splitter, tmp_path):

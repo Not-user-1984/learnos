@@ -182,7 +182,27 @@ def _top_entries(toc: list[tuple[int, str, int]]) -> tuple[list[tuple[str, int]]
     return top1, 2
 
 
-def main(source_id: int) -> dict:
+# концевой кусок короче этого — не отдельная глава, приклеивается к предыдущей
+_TAIL_MERGE_PAGES = 5
+
+
+def _page_chunks(page_count: int, chunk: int) -> list[tuple[str, int]]:
+    """Главы-куски для PDF без закладок: равные диапазоны страниц.
+
+    Хвост короче 5 страниц не становится главой «Страницы 787–791» — он входит
+    в предыдущий кусок (последняя глава всегда до конца книги).
+    """
+    starts = list(range(1, page_count + 1, chunk))
+    if len(starts) > 1 and page_count - starts[-1] + 1 < _TAIL_MERGE_PAGES:
+        starts.pop()
+    out = []
+    for i, s in enumerate(starts):
+        end = starts[i + 1] - 1 if i + 1 < len(starts) else page_count
+        out.append((f"Страницы {s}–{end}", s))
+    return out
+
+
+def main(source_id: int, chunk_pages: int = 50) -> dict:
     conn = get_db()
     try:
         src = conn.execute("SELECT * FROM sources WHERE id = ?", (source_id,)).fetchone()
@@ -194,15 +214,17 @@ def main(source_id: int) -> dict:
 
         doc = fitz.open(pdf_path)
         toc = doc.get_toc()
-        if not toc:
-            return {
-                "error": "PDF без закладок (TOC) — эвристика по заголовкам пока не реализована",
-                "hint": "конвертировать с закладками или добавить TOC",
-            }
-
-        top, section_level = _top_entries(toc)
-        if section_level == 0:
-            toc = []  # уровни перемешаны — секции не строим
+        if toc:
+            mode = "toc"
+            top, section_level = _top_entries(toc)
+            if section_level == 0:
+                toc = []  # уровни перемешаны — секции не строим
+        else:
+            # PDF без закладок (Django-4, 791 стр.): главы — куски по страницам,
+            # секций нет, куратор структуры не нужен — куски уже равноценны
+            mode = "pages"
+            chunk = max(10, min(200, chunk_pages or 50))
+            top, section_level = _page_chunks(doc.page_count, chunk), 0
 
         src_dir = DATA_DIR / "sources" / str(source_id)
         out_dir = src_dir / "chapters"
@@ -300,6 +322,7 @@ def main(source_id: int) -> dict:
             "source_id": source_id,
             "uid": src["uid"],
             "title": src["title"],
+            "mode": mode,
             "lang": lang,
             "pages": doc.page_count,
             "chapters": chapters,
