@@ -12,8 +12,6 @@ function ShareForm() {
   const router = useRouter();
   // Android часто кладёт ссылку в text; достаём первый URL из text или url
   const sharedUrl = (sp.get("url") ?? "") || (sp.get("text") ?? "").match(/https?:\/\/\S+/)?.[0] || "";
-  const sharedTitle =
-    sp.get("title") || (sharedUrl.includes("youtu") ? "YouTube-видео" : sharedUrl ? "Ссылка" : "");
   // state — только пользовательская правка поля; изначальное значение производное от URL
   const [urlDraft, setUrlDraft] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
