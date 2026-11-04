@@ -100,20 +100,28 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
           </p>
         ) : (
           <ol className="flex flex-col">
-            {chapters.map((ch) => (
-              <li key={ch.idx} className="border-b last:border-b-0">
-                <div className="flex flex-wrap items-start gap-x-2 gap-y-2 py-3">
-                  <Icon name="book_2" size={16} className="mt-1 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1 basis-64">
-                    <div className="flex flex-wrap items-center gap-x-2">
-                      <Link
-                        href={`/library/${source.uid}/${ch.idx}`}
-                        className="font-medium hover:text-primary hover:underline"
-                      >
-                        {chapterLabel(ch.idx, ch.title, ch.number)}
-                      </Link>
-                      {ch.has_exercises && <Badge variant="secondary">упражнения</Badge>}
-                    </div>
+            {chapters.map((ch) => {
+              // курсор активности: глава позади него — прочитана (сама или разобрана, v1 не различает)
+              const isRead = activity !== undefined && ch.idx < activity.cursor_chapter;
+              return (
+                <li key={ch.idx} className="border-b last:border-b-0">
+                  <div className="flex flex-wrap items-start gap-x-2 gap-y-2 py-3">
+                    <Icon
+                      name={isRead ? "task_alt" : "book_2"}
+                      size={16}
+                      className={`mt-1 shrink-0 ${isRead ? "text-primary" : "text-muted-foreground"}`}
+                    />
+                    <div className="min-w-0 flex-1 basis-64">
+                      <div className="flex flex-wrap items-center gap-x-2">
+                        <Link
+                          href={`/library/${source.uid}/${ch.idx}`}
+                          className={`font-medium hover:text-primary hover:underline${isRead ? " text-muted-foreground" : ""}`}
+                        >
+                          {chapterLabel(ch.idx, ch.title, ch.number)}
+                        </Link>
+                        {isRead && <Badge variant="secondary">прочитано</Badge>}
+                        {ch.has_exercises && <Badge variant="secondary">упражнения</Badge>}
+                      </div>
                     {ch.summary && (
                       <p className="mt-1 text-sm leading-relaxed text-muted-foreground line-clamp-3 sm:line-clamp-none">
                         {ch.summary}
@@ -142,7 +150,8 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
                   </span>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ol>
         )}
       </div>

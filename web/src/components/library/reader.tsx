@@ -28,6 +28,8 @@ type Props = {
   isBook?: boolean;
   /** Режим из URL (?mode=pdf) — применяется один раз при монтировании. */
   initialMode?: string | null;
+  /** Прогресс книги по активной активности (null — у материала одна глава, кнопка «Прочитал» не нужна). */
+  progress?: { cursor: number; total: number } | null;
 };
 
 const FONT_KEY = "learnos-reader-font";
@@ -65,6 +67,7 @@ export function ChapterReader({
   nextIdx,
   isBook = false,
   initialMode = null,
+  progress = null,
 }: Props) {
   const router = useRouter();
   const [fontScale, changeFont] = useReaderFont();
@@ -75,8 +78,17 @@ export function ChapterReader({
   const [visiblePage, setVisiblePage] = useState<number | null>(null);
   const [selection, setSelection] = useState<string | null>(null);
   const [starting, setStarting] = useState<"chat" | "research" | null>(null);
+  // курсор книги монотонен: сервер — источник истины, локально помним только свою отметку
+  const [localCursor, setLocalCursor] = useState<number | null>(null);
+  const [marking, setMarking] = useState(false);
   const selTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const familyCss = FAMILIES.find((f) => f.value === family)?.css ?? FAMILIES[0].css;
+  const serverCursor = progress?.cursor ?? null;
+  const readCursor =
+    localCursor !== null && serverCursor !== null
+      ? Math.max(serverCursor, localCursor)
+      : (localCursor ?? serverCursor);
+  const chapterRead = readCursor !== null && chapter.idx < readCursor;
 
   // ссылка «открыть PDF» ведёт в режим pdf (запоминаем выбор)
   useEffect(() => {
@@ -130,9 +142,27 @@ export function ChapterReader({
     }
   };
 
+  /** «Прочитал сам»: глава идёт в прогресс книги без разбора агентом (идемпотентно, разговор не создаётся). */
+  const markRead = async () => {
+    setMarking(true);
+    try {
+      const out = await apiPost<{ cursor_chapter: number; total_chapters: number }>(
+        "/activities/mark-read",
+        { source: sourceUid, chapter: chapter.idx },
+      );
+      setLocalCursor(out.cursor_chapter);
+      toast.success(
+        `Глава ${chapter.idx} отмечена · прочитано ${Math.max(0, out.cursor_chapter - 1)} из ${out.total_chapters}`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "не удалось отметить главу");
+    } finally {
+      setMarking(false);
+    }
+  };
+
   /** Ресёрч по выделенному фрагменту — в новой вкладке, чтобы читалка осталась открытой. */
-  const researchSelection = async (quote: string) => {
-    setStarting("research");
+  const researchSelection = async (quote: string) => {    setStarting("research");
     try {
       const conv = await apiPost<{ uid: string }>("/conversations", {
         title: `Ресёрч: ${quote.slice(0, 50)}`,
@@ -216,6 +246,22 @@ export function ChapterReader({
             </span>
           )}
           <ChapterHistoryButton sourceUid={sourceUid} chapterIdx={chapter.idx} chapterTitle={chapter.title} />
+          {progress && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={marking || chapterRead}
+              title={chapterRead ? "Глава уже учтена в прогрессе книги" : "Отметить главу прочитанной"}
+              onClick={() => void markRead()}
+            >
+              {marking ? (
+                <Icon name="progress_activity" size={16} className="mr-1 animate-spin" />
+              ) : (
+                <Icon name="task_alt" size={16} className={chapterRead ? "mr-1 text-primary" : "mr-1"} />
+              )}
+              <span className="hidden sm:inline">{chapterRead ? "Прочитано" : "Прочитал"}</span>
+            </Button>
+          )}
           <Button size="sm" variant="outline" disabled={starting !== null} onClick={() => void openDiscussion(null)}>
             {starting === "chat" ? <Icon name="progress_activity" size={16} className="mr-1 animate-spin" /> : <Icon name="chat_bubble" size={16} className="mr-1" />}
             <span className="hidden sm:inline">Обсудить главу</span>

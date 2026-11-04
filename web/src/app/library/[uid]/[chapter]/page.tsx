@@ -2,7 +2,7 @@
 
 import { notFound } from "next/navigation";
 import { api } from "@/lib/api";
-import type { SourceDetail } from "@/lib/types";
+import type { ActivityCard, SourceDetail } from "@/lib/types";
 import { ChapterReader } from "@/components/library/reader";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +30,14 @@ export default async function ChapterReaderPage({
   const ch = (source.chapters ?? []).find((c) => c.idx === idx);
   const prev = (source.chapters ?? []).find((c) => c.idx === idx - 1);
   const next = (source.chapters ?? []).find((c) => c.idx === idx + 1);
+  // курсор активной активности — для «Прочитал»; одноглавые материалы (видео/статьи) кнопку не получают
+  const activity = (
+    await api<ActivityCard[]>("/activities?status=active").catch(() => [] as ActivityCard[])
+  ).find((a) => a.source_uid === source.uid);
+  const progress =
+    activity && (source.chapters ?? []).length > 1
+      ? { cursor: activity.cursor_chapter, total: activity.total_chapters }
+      : null;
 
   return (
     <ChapterReader
@@ -46,6 +54,7 @@ export default async function ChapterReaderPage({
       nextIdx={next?.idx ?? null}
       isBook={source.kind === "book"}
       initialMode={sp?.mode ?? null}
+      progress={progress}
     />
   );
 }
