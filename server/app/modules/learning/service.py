@@ -58,37 +58,18 @@ class LearningService:
             row = uow.session.execute(select(sources).where(_ref_cond(sources, source_ref))).first()
             if row is None:
                 raise NotFound(f"источник '{source_ref}' не найден")
-            existing = self._acts.find_active(uow.session, row.id, course_id)
-            if existing is not None:
-                return {
-                    "id": existing["id"],
-                    "uid": existing["uid"],
-                    "source_id": row.id,
-                    "title": existing["title"],
-                    "status": existing["status"],
-                    "cursor_chapter": existing["cursor_chapter"],
-                    "note": "изучение уже идёт — вернул действующую активность",
-                }
-            uid = self._ids.new("act")
-            act_id = self._acts.insert(
-                uow.session,
-                uid=uid,
-                source_id=row.id,
-                course_id=course_id,
-                title=row.title,
-                status="active",
-                cursor_chapter=1,
-                created_at=now,
-                updated_at=now,
-            )
-            return {
-                "id": act_id,
-                "uid": uid,
+            act, existing = self._find_or_create_activity(uow.session, row, course_id, now)
+            out = {
+                "id": act["id"],
+                "uid": act["uid"],
                 "source_id": row.id,
-                "title": row.title,
-                "status": "active",
-                "cursor_chapter": 1,
+                "title": act["title"],
+                "status": act["status"],
+                "cursor_chapter": act["cursor_chapter"],
             }
+            if existing:
+                out["note"] = "изучение уже идёт — вернул действующую активность"
+            return out
 
     def list_activities(self, status: str | None = None) -> list[dict]:
         """Активности с прогрессом (глав пройдено / всего)."""
@@ -424,28 +405,35 @@ class LearningService:
                 act = self._acts.get(uow.session, activity_id)
             else:
                 raise NotFound("активность не задана (activity или conversation)")
-            from sqlalchemy import func, select
-
-            from ..library.infra.tables import chapters as chapters_t
-
-            total = int(
-                uow.session.execute(
-                    select(func.count()).where(chapters_t.c.source_id == act["source_id"])
-                ).scalar_one()
-            )
+            total = self._total_chapters(uow.session, act["source_id"])
             target = chapter if chapter is not None and chapter > 0 else act["cursor_chapter"]
-            cursor = max(act["cursor_chapter"], target + 1)
-            status = "done" if cursor > total > 0 else act["status"]
-            self._acts.update(uow.session, act["id"], cursor_chapter=cursor, status=status, updated_at=now)
-            uow.emit(ActivityProgressed(activity_uid=act["uid"], cursor_chapter=cursor, total_chapters=total))
-        return {
-            "ok": True,
-            "activity": act["uid"],
-            "marked_chapter": target,
-            "cursor_chapter": cursor,
-            "total_chapters": total,
-            "status": status,
-        }
+            out = self._advance_cursor(uow, act, target, total, now)
+        return {"ok": True, **out}
+
+    def mark_read(self, source_ref: str | int, chapter: int) -> dict:
+        """«Прочитал сам»: глава прочитана в веб-читалке без разбора агентом.
+
+        Get-or-create активности (R-11) и курсор вперёд — одной транзакцией:
+        повторный клик идемпотентен, глава позади курсора его не двигает,
+        последняя глава завершает изучение. Разговор не создаётся.
+        """
+        from sqlalchemy import select
+
+        from ..library.infra.tables import sources
+
+        now = now_iso(self._clock)
+        with self._uow() as uow:
+            row = uow.session.execute(select(sources).where(_ref_cond(sources, source_ref))).first()
+            if row is None:
+                raise NotFound(f"источник '{source_ref}' не найден")
+            total = self._total_chapters(uow.session, row.id)
+            if total == 0:
+                raise InvalidState(f"у источника «{row.title}» нет глав — прогресс нечего двигать")
+            if not 1 <= chapter <= total:
+                raise InvalidState(f"номер главы должен быть от 1 до {total}")
+            act, _existing = self._find_or_create_activity(uow.session, row, None, now)
+            out = self._advance_cursor(uow, act, chapter, total, now)
+        return {"ok": True, **out}
 
     def session_for_conversation(self, conversation_id: int) -> dict | None:
         """Активная сессия разговора (для агента session-режима)."""
@@ -454,6 +442,55 @@ class LearningService:
             return self._state_out(s) if s else None
 
     # --- внутреннее ---
+
+    def _find_or_create_activity(
+        self, session, source_row, course_id: int | None, now: str
+    ) -> tuple[dict, bool]:
+        """Действующая активность источника или новая с курсором 1 (get-or-create, R-11).
+
+        Возвращает (активность, существовала ли): повторный старт не плодит
+        активности — один курсор на книгу.
+        """
+        existing = self._acts.find_active(session, source_row.id, course_id)
+        if existing is not None:
+            return existing, True
+        uid = self._ids.new("act")
+        act_id = self._acts.insert(
+            session,
+            uid=uid,
+            source_id=source_row.id,
+            course_id=course_id,
+            title=source_row.title,
+            status="active",
+            cursor_chapter=1,
+            created_at=now,
+            updated_at=now,
+        )
+        return self._acts.get(session, act_id), False
+
+    @staticmethod
+    def _total_chapters(session, source_id: int) -> int:
+        from sqlalchemy import func, select
+
+        from ..library.infra.tables import chapters
+
+        return int(
+            session.execute(select(func.count()).where(chapters.c.source_id == source_id)).scalar_one()
+        )
+
+    def _advance_cursor(self, uow, act: dict, target: int, total: int, now: str) -> dict:
+        """Курсор активности вперёд до target+1 (не назад); выход за total завершает."""
+        cursor = max(act["cursor_chapter"], target + 1)
+        status = "done" if cursor > total > 0 else act["status"]
+        self._acts.update(uow.session, act["id"], cursor_chapter=cursor, status=status, updated_at=now)
+        uow.emit(ActivityProgressed(activity_uid=act["uid"], cursor_chapter=cursor, total_chapters=total))
+        return {
+            "activity": act["uid"],
+            "marked_chapter": target,
+            "cursor_chapter": cursor,
+            "total_chapters": total,
+            "status": status,
+        }
 
     def _get(self, session, ref):
         if isinstance(ref, int) or (isinstance(ref, str) and ref.isdigit()):

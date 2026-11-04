@@ -11,6 +11,13 @@ class ActivityIn(BaseModel):
     course_id: int | None = None
 
 
+class MarkReadIn(BaseModel):
+    """«Прочитал сам»: глава прочитана в веб-читалке без разбора агентом."""
+
+    source: str | int
+    chapter: int
+
+
 class SessionIn(BaseModel):
     """Создание сессии."""
 
@@ -34,6 +41,10 @@ def make_router(svc) -> APIRouter:
     @r.post("/activities")
     def start_activity(body: ActivityIn):
         return svc.start_activity(body.source, body.course_id)
+
+    @r.post("/activities/mark-read")
+    def mark_read(body: MarkReadIn):
+        return svc.mark_read(body.source, body.chapter)
 
     @r.get("/activities")
     def list_activities(status: str | None = None):
