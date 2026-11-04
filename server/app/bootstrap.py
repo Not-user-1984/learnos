@@ -146,5 +146,21 @@ def build_container(settings: Settings | None = None, *, fake_llm=None) -> Conta
 
 
 def create_all_tables(engine) -> None:
-    """Создать все таблицы из метаданных (для тестов и дев-старта)."""
+    """Создать все таблицы из метаданных (для тестов и дев-старта).
+
+    Таблицы регистрируются в metadata импортом, а сервисы импортируют их
+    лениво внутри методов — поэтому сначала собираем tables-модули явно:
+    свежий процесс (одиночный pytest, дев-старт без миграций) должен получить
+    полную схему, иначе первый же профиль-запрос падает «no such table».
+    """
+    import importlib.util
+
+    for module in MODULES:
+        name = f"{type(module).__module__}.infra.tables"
+        try:
+            spec = importlib.util.find_spec(name)
+        except ModuleNotFoundError:
+            continue  # у модуля нет SQL-слоя (skills, research, export…)
+        if spec is not None:
+            importlib.import_module(name)
     metadata.create_all(engine)
