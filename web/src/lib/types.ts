@@ -194,14 +194,45 @@ export type Profile = {
   };
 };
 
-export type Health = {
-  ok: boolean;
-  llm_configured: boolean;
-  model: string | null;
+/** Детальный статус LLM (GET /api/llm/status): роли и цепочки ключей (BB-004). */
+export type LlmStatus = {
+  configured: boolean;
   provider: string | null;
-  llm_reason: string | null;
-  worker_running: boolean;
-  tools: number;
+  model: string | null;
+  keys: number;
+  reason: string | null;
+  roles: Record<
+    string,
+    {
+      provider: string;
+      model: string;
+      params: Record<string, unknown>;
+      keys: number;
+      configured: boolean;
+      reason?: string;
+    }
+  >;
+  providers: Record<
+    string,
+    {
+      type: string;
+      enabled: boolean;
+      keyless: boolean;
+      keys_total: number;
+      reason?: string;
+      keychain?: {
+        keys_total: number;
+        sticky: number | null;
+        keys: LlmKeyState[];
+      };
+    }
+  >;
+};
+
+export type LlmKeyState = {
+  index: number;
+  state: "active" | "ready" | "cooldown";
+  cooldown_seconds?: number;
 };
 
 /** Провайдеры поиска по категориям (GET /api/research/providers): где агент ищет. */

@@ -1,22 +1,19 @@
-/** Настройки: профиль, модели, MCP, обслуживание. */
+/** Настройки: профиль, агенты, MCP, LLM, связь, обслуживание. */
 
 import { api } from "@/lib/api";
-import type { Health, Profile } from "@/lib/types";
+import type { Profile } from "@/lib/types";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { AgentsSettings } from "@/components/settings/agents-settings";
 import { McpConnections } from "@/components/settings/mcp-connections";
 import { MaintenanceActions } from "@/components/settings/maintenance";
 import { TelegramTestButton } from "@/components/settings/integrations";
 import { ConnectivitySettings } from "@/components/settings/connectivity";
-import { Badge } from "@/components/ui/badge";
+import { LlmSettings } from "@/components/settings/llm-settings";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [profile, health] = await Promise.all([
-    api<Profile>("/settings/profile").catch(() => null),
-    api<Health>("/health").catch(() => null),
-  ]);
+  const profile = await api<Profile>("/settings/profile").catch(() => null);
 
   return (
     <div className="h-full overflow-y-auto">
@@ -36,25 +33,6 @@ export default async function SettingsPage() {
           ) : (
             <p className="text-sm text-muted-foreground">Профиль недоступен (ядро не отвечает)</p>
           )}
-        </section>
-
-        <section className="rounded-2xl border bg-card p-6">
-          <h2 className="font-medium">Модели</h2>
-          <p className="mb-4 mt-1 text-sm text-muted-foreground">Единый LLM-слой; роли читаются из llm.yaml</p>
-          {health && (
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-background/50 p-4 text-sm">
-              <Badge variant={health.llm_configured ? "secondary" : "destructive"}>
-                {health.llm_configured ? "LLM подключён" : "LLM не настроен"}
-              </Badge>
-              <span className="text-muted-foreground">
-                {health.provider} · {health.model}
-                {health.llm_reason ? ` · ${health.llm_reason}` : ""}
-              </span>
-            </div>
-          )}
-          <p className="mt-4 text-xs text-muted-foreground">
-            Ключ — через <code>sec exec ZAI_API_KEY</code>; смена ролей/моделей — правка <code>server/config/llm.yaml</code>.
-          </p>
         </section>
 
         <section className="rounded-2xl border bg-card p-6">
@@ -81,6 +59,14 @@ export default async function SettingsPage() {
             для агента (веб, научные статьи, видео)
           </p>
           <ConnectivitySettings />
+        </section>
+
+        <section className="rounded-2xl border bg-card p-6">
+          <h2 className="font-medium">LLM</h2>
+          <p className="mb-5 mt-1 text-sm text-muted-foreground">
+            Роли и модели из llm.yaml, состояние цепочки ключей (какой рабочий, кто в cooldown)
+          </p>
+          <LlmSettings />
         </section>
 
         <section className="rounded-2xl border bg-card p-6">
