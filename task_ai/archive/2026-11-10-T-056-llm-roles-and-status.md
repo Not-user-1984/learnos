@@ -55,15 +55,15 @@ created: 2026-11-10
 
 ## Критерии готовности
 
-- [ ] smoke z.ai: факт по glm-5.3-flash и thinking зафиксирован в «Заметках»
-- [ ] fast/structured на flash-модели, chat на думающей; params-механизм с тестами
-- [ ] bad_request на extra-параметр: дроп + один ретрай, без зацикливания (тест)
-- [ ] `GET /api/llm/status` под bearer; health без детализации
-- [ ] тул llm_status с reset_cooldown, виден root; тесты
-- [ ] блок «LLM» в настройках: роли, цепочка ключей, отсчёт cooldown
-- [ ] постановка T-057 (этап 10-B из UI) создана
-- [ ] server ruff/format/lint-imports/pytest + web lint/tsc/build зелёные
-- [ ] деплой, самопроверка прода
+- [x] smoke z.ai: факт по glm-5.3-flash и thinking зафиксирован в «Заметках»
+- [x] fast/structured на flash-модели, chat на думающей; params-механизм с тестами
+- [x] bad_request на extra-параметр: дроп + один ретрай, без зацикливания (тест)
+- [x] `GET /api/llm/status` под bearer; health без детализации
+- [x] тул llm_status с reset_cooldown, виден root; тесты
+- [x] блок «LLM» в настройках: роли, цепочка ключей, отсчёт cooldown
+- [x] постановка T-057 (этап 10-B из UI) создана
+- [x] server ruff/format/lint-imports/pytest + web lint/tsc/build зелёные
+- [x] деплой, самопроверка прода
 
 ## Заметки
 
@@ -94,3 +94,13 @@ created: 2026-11-10
 - Фикстура `token_client` перенесена из test_auth_token.py в conftest (переиспользование).
 
 **Сделано:** сервер + тесты (443), веб (lint/tsc/build зелёные), gen:api (74 пути).
+
+## Результат
+
+Коммиты `33e6b6c` (сервер: роли/params/статус/тул) и `dba474b` (веб: панель LLM).
+Проверки: ruff/format/lint-imports чистые, pytest 450 passed (было 436),
+web lint/tsc/build зелёные. Прод CT 132: деплой дошёл (health ok, tools 78,
+modules 16), `GET /api/llm/status` — 401 без токена / 200 с bearer и через
+веб-прокси `:3000` (роли с flash-моделями, 4 ключа, значений нет), блок «LLM»
+рендерится на /settings; живой smoke-llm (chat, glm-5.3): complete/stream/tool call.
+Постановка T-057 (полный этап 10-B из UI) — в tasks/.
