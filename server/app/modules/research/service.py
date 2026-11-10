@@ -8,6 +8,7 @@ import logging
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import httpx
@@ -182,15 +183,22 @@ class ResearchService:
         return self._cached("academic", query, limit, self._academic_agg)
 
     def _academic_agg(self, query: str, limit: int) -> dict:
+        """Три источника опрашиваются параллельно: latency равна самому медленному
+        звену, а не сумме; порядок групп и сводка — как в последовательной версии."""
+
+        def run(p):
+            try:
+                return p.search(query, limit)
+            except Exception as e:  # noqa: BLE001 — один провайдер не роняет агрегацию
+                return {"error": f"{p.name}: {str(e)[:120]}"}
+
+        providers = self._academic_providers
+        with ThreadPoolExecutor(max_workers=len(providers) or 1) as pool:
+            outs = list(pool.map(run, providers))
         groups: list[list[dict]] = []
         counts: dict[str, int] = {}
         failed: list[str] = []
-        for p in self._academic_providers:
-            try:
-                out = p.search(query, limit)
-            except Exception as e:  # noqa: BLE001 — один провайдер не роняет агрегацию
-                failed.append(f"{p.name}: {str(e)[:120]}")
-                out = {}
+        for p, out in zip(providers, outs, strict=True):
             if out.get("error"):
                 failed.append(f"{p.name}: {out['error']}")
             items = [dict(it, provider=p.name) for it in (out.get("results") or [])]

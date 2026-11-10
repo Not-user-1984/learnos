@@ -1,5 +1,6 @@
 """Research: кэш/single-flight поиска, извлечение статей в главы, окно текста."""
 
+import time
 from types import SimpleNamespace
 
 from bs4 import BeautifulSoup
@@ -113,6 +114,21 @@ class _Prov:
         return out
 
 
+class _DelayedProv(_Prov):
+    """Провайдер с искусственной задержкой — для проверки параллельности (BB-002)."""
+
+    def __init__(self, name, delay=0.0, results=None, error=None):
+        super().__init__(name, results=results, error=error)
+        self._delay = delay
+        self.calls = 0
+
+    def search(self, query, limit):
+        self.calls += 1
+        if self._delay:
+            time.sleep(self._delay)
+        return super().search(query, limit)
+
+
 def test_chain_falls_to_next_provider():
     from app.modules.research.providers import ChainProvider
 
@@ -139,6 +155,69 @@ def test_chain_survives_provider_crash():
     chain = ChainProvider([_Prov("boom", raises=True), _Prov("wiki", [{"title": "t", "url": "u"}])])
     out = chain.search("q", 5)
     assert out["count"] == 1 and out["provider"] == "chain/wiki"
+
+
+def test_chain_parallel_first_nonempty_wins():
+    """BB-002: звенья опрашиваются параллельно — медленное звено не блокирует
+    результат быстрого (латентность = самому быстрому живому звену)."""
+    from app.modules.research.providers import ChainProvider
+
+    slow = _DelayedProv("ddg", delay=0.4, results=[{"title": "поздно", "url": "https://late"}])
+    fast = _DelayedProv("wiki", results=[{"title": "быстро", "url": "https://fast"}])
+    chain = ChainProvider([slow, fast])
+    t0 = time.monotonic()
+    out = chain.search("q", 5)
+    elapsed = time.monotonic() - t0
+    assert out["provider"] == "chain/wiki" and out["count"] == 1
+    assert out["results"][0]["title"] == "быстро"
+    assert elapsed < 0.35  # последовательно было бы 0.4+
+
+
+def test_chain_single_pass_on_empty():
+    """BB-002: при полной пустоте звенья опрашиваются ровно один раз —
+    повторного сетевого прохода нет, ошибки собраны в error-строку."""
+    from app.modules.research.providers import ChainProvider
+
+    ddg = _DelayedProv("ddg", error="ddg 202")
+    wiki = _DelayedProv("wiki")
+    chain = ChainProvider([ddg, wiki])
+    out = chain.search("q", 5)
+    assert out["count"] == 0
+    assert ddg.calls == 1 and wiki.calls == 1
+    assert "ddg" in out.get("error", "")
+
+
+def test_chain_timeouts_trimmed(monkeypatch):
+    """BB-002: короткие таймауты звеньев цепочки (ddg 8 / wiki 6 / hn 6 / tavily 10 / serper 10)."""
+    from app.modules.research import providers as P
+
+    captured: dict[str, list] = {"post": [], "get": []}
+
+    class FakeResp:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {}
+
+    def fake_post(*a, **kw):
+        captured["post"].append(kw.get("timeout"))
+        return FakeResp()
+
+    def fake_get(*a, **kw):
+        captured["get"].append(kw.get("timeout"))
+        return FakeResp()
+
+    monkeypatch.setattr(P.httpx, "post", fake_post)
+    monkeypatch.setattr(P.httpx, "get", fake_get)
+    P.DdgHtmlProvider().search("q", 3)
+    P.WikipediaProvider().search("q", 3)
+    P.HackerNewsProvider().search("q", 3)
+    P.TavilyProvider("k").search("q", 3)
+    P.SerperProvider("k").search("q", 3)
+    assert captured["post"] == [8, 10, 10]  # ddg, tavily, serper
+    assert captured["get"] == [6, 6]  # wikipedia, hackernews
+    assert captured["get"] == [6, 6]  # wikipedia, hackernews
 
 
 ARXIV_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -390,6 +469,23 @@ def test_academic_limit_applies_to_merged(monkeypatch):
     assert out["count"] == 5
     # чередование: arxiv и openalex идут вперемешку
     assert [r["provider"] for r in out["results"][:4]] == ["arxiv", "openalex", "arxiv", "openalex"]
+
+
+def test_academic_agg_parallel():
+    """BB-002: arXiv/OpenAlex/S2 опрашиваются параллельно — латентность = max
+    звеньев, а не сумма; порядок групп и сводка counts не меняются."""
+    provs = [
+        _DelayedProv("arxiv", delay=0.3, results=[{"title": "A", "url": "https://a"}]),
+        _DelayedProv("openalex", delay=0.3, results=[{"title": "O", "url": "https://o"}]),
+        _DelayedProv("semantic_scholar", delay=0.3, results=[{"title": "S", "url": "https://s"}]),
+    ]
+    svc = _academic_service(provs)
+    t0 = time.monotonic()
+    out = svc.academic("параллельность агрегата", 5)
+    elapsed = time.monotonic() - t0
+    assert out["count"] == 3
+    assert out["providers"] == {"arxiv": 1, "openalex": 1, "semantic_scholar": 1}
+    assert elapsed < 0.75  # последовательно было бы ~0.9
 
 
 def test_providers_view_chain_and_keys(monkeypatch):

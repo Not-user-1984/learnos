@@ -2,10 +2,11 @@
 
 Реалии 2026: ключевые бесплатные HTML-поисковики (DDG, Bing, Mojeek) отдают анти-бот
 из бытовых сетей. Поэтому:
-- web_search идёт по цепочке [платный по ключу → ddg → wikipedia → hackernews] и
-  почти всегда даёт хотя бы что-то осмысленное;
+- web_search идёт по цепочке [платный по ключу → ddg → wikipedia → hackernews]:
+  звенья опрашиваются параллельно, первый непустой побеждает (BB-002) — почти
+  всегда что-то осмысленное приходит за время самого быстрого живого звена;
 - научные статьи — агрегат трёх ключлесс-API: arXiv (препринты), OpenAlex
-  (библиография), Semantic Scholar (цитирования) — см. ResearchService.academic;
+  (библиография), Semantic Scholar (цитирования) — параллельно, см. ResearchService.academic;
 - платные (Tavily/Serper) включаются автоматически при наличии ключа в env —
   это рекомендуемый апгрейд качества выдачи (см. T-019).
 """
@@ -13,6 +14,7 @@
 import logging
 import re
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Protocol
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
@@ -52,7 +54,7 @@ class DdgHtmlProvider:
             "https://html.duckduckgo.com/html/",
             data={"q": query},
             headers={"User-Agent": UA},
-            timeout=15,
+            timeout=8,
             follow_redirects=True,
             proxy=self._proxy,
         )
@@ -92,7 +94,7 @@ class WikipediaProvider:
                 "format": "json",
             },
             headers={"User-Agent": f"LearnOS/0.1 ({UA})"},
-            timeout=10,
+            timeout=6,
         )
         hits = (r.json().get("query") or {}).get("search") or []
         results = [
@@ -116,7 +118,7 @@ class HackerNewsProvider:
             "https://hn.algolia.com/api/v1/search",
             params={"query": query, "hitsPerPage": min(limit, 10), "tags": "story"},
             headers={"User-Agent": UA},
-            timeout=10,
+            timeout=6,
         )
         hits = r.json().get("hits") or []
         results = []
@@ -274,7 +276,7 @@ class TavilyProvider:
             "https://api.tavily.com/search",
             json={"api_key": self._key, "query": query, "max_results": limit, "search_depth": "basic"},
             headers={"User-Agent": UA},
-            timeout=20,
+            timeout=10,
         )
         data = r.json()
         if r.status_code != 200:
@@ -303,7 +305,7 @@ class SerperProvider:
             "https://google.serper.dev/search",
             json={"q": query, "num": limit},
             headers={"X-API-KEY": self._key, "User-Agent": UA},
-            timeout=20,
+            timeout=10,
         )
         data = r.json()
         if r.status_code != 200:
@@ -321,8 +323,10 @@ class SerperProvider:
 
 
 class ChainProvider:
-    """Ключлесс-спасение (паттерн Hermes): пробуем провайдеров по очереди до
-    первого непустого ответа; работающие смешиваются (top-N от каждого)."""
+    """Ключлесс-спасение (паттерн Hermes): все звенья опрашиваются параллельно,
+    первый непустый ответ побеждает — latency равна самому быстрому живому звену.
+    Падение звена не роняет цепочку (собирается в error-строку), при полной
+    пустоте — один проход, без повторных сетевых ходов."""
 
     name = "chain"
 
@@ -330,25 +334,30 @@ class ChainProvider:
         self._providers = providers
 
     def search(self, query: str, limit: int) -> dict[str, Any]:
-        errors = []
-        for p in self._providers:
-            try:
-                out = p.search(query, limit)
-            except Exception as e:  # noqa: BLE001 — цепочка должна пережить падение звена
-                errors.append(f"{p.name}: {e}")
-                continue
-            if out.get("count"):
-                out["provider"] = f"{self.name}/{p.name}"
-                return out
-            if out.get("error"):
-                errors.append(f"{p.name}: {out['error']}")
-        # полная пустота — смешиваем всё что есть
+        errors: list[str] = []
+        results: dict[str, list[dict]] = {}
+        pool = ThreadPoolExecutor(max_workers=len(self._providers) or 1)
+        try:
+            futures = {pool.submit(p.search, query, limit): p for p in self._providers}
+            for fut in as_completed(futures):
+                p = futures[fut]
+                try:
+                    out = fut.result()
+                except Exception as e:  # noqa: BLE001 — цепочка должна пережить падение звена
+                    errors.append(f"{p.name}: {e}")
+                    continue
+                results[p.name] = out.get("results") or []
+                if out.get("error"):
+                    errors.append(f"{p.name}: {out['error']}")
+                if out.get("count"):
+                    out["provider"] = f"{self.name}/{p.name}"
+                    return out
+        finally:
+            # победитель найден — недожданные запросы гасим, дозавершившиеся в фоне не важны
+            pool.shutdown(wait=False, cancel_futures=True)
         merged: list[dict] = []
         for p in self._providers:
-            try:
-                merged.extend(p.search(query, limit).get("results") or [])
-            except Exception:  # noqa: BLE001
-                continue
+            merged.extend(results.get(p.name) or [])
         out = _ok(query, merged[:limit], self.name)
         if not merged and errors:
             out["error"] = "; ".join(errors)[:200]
