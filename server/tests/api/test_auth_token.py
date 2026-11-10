@@ -1,20 +1,6 @@
 """R-07: опциональный bearer-токен — /api и /mcp закрыты от LAN и DNS-rebinding."""
 
-import pytest
-from fastapi.testclient import TestClient
-
-
-@pytest.fixture
-def token_client(container, monkeypatch):
-    """Приложение с включённым LEARNOS_API_TOKEN."""
-    container.settings.api_token = "secret-token-123"
-    import app.main as main_mod
-
-    monkeypatch.setattr(main_mod, "_CONTAINER", container)
-    app = main_mod.create_app()
-    app.state.mcp_servers = {}
-    with TestClient(app) as tc:
-        yield tc
+"""R-07: опциональный bearer-токен — /api и /mcp закрыты от LAN и DNS-rebinding."""
 
 
 def test_health_open_without_token(token_client):

@@ -128,6 +128,11 @@ def build_container(settings: Settings | None = None, *, fake_llm=None) -> Conta
     for module in MODULES:
         for spec in module.tools(container):
             container.tools.register(spec)
+    # системный инструмент LLM-слоя (не модуль): роли/модели и цепочка ключей (BB-005)
+    from .llm.tools import llm_tools
+
+    for spec in llm_tools(router):
+        container.tools.register(spec)
     for module in MODULES:
         module.subscribe(bus, container)
 

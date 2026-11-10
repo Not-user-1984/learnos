@@ -1,5 +1,6 @@
 """Нейтральные типы диалога с моделью — не привязаны к API конкретного провайдера."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -35,13 +36,19 @@ class ToolSchema:
 
 @dataclass(frozen=True, slots=True)
 class LLMRequest:
-    """Запрос к модели; провайдер переводит его в свой формат."""
+    """Запрос к модели; провайдер переводит его в свой формат.
+
+    extra_params — провайдер-специфичные параметры роли из llm.yaml (thinking,
+    top_p…): попадают в wire-запрос как есть и только если заданы конфигом.
+    Явные поля запроса (temperature/max_tokens) приоритетнее params роли.
+    """
 
     messages: tuple[Message, ...]
     tools: tuple[ToolSchema, ...] = ()
     temperature: float | None = None
     max_tokens: int | None = None
     response_schema: dict[str, Any] | None = None
+    extra_params: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)

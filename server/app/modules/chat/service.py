@@ -809,12 +809,13 @@ class ChatService:
     async def _make_title(self, conv: dict, first_reply: str) -> str | None:
         """Авто-заголовок разговора (роль fast)."""
         try:
-            provider, model = self._router.resolve("fast")
+            provider, model, role_params = self._router.resolve("fast")
             from ...llm.types import LLMRequest
 
             resp = await provider.complete(
                 model,
                 LLMRequest(
+                    extra_params=role_params,
                     messages=(
                         Message(
                             role="system",
@@ -829,7 +830,7 @@ class ChatService:
                             + "\n---\n"
                             + first_reply[:500],
                         ),
-                    )
+                    ),
                 ),
             )
             title = resp.text.strip().strip('"«»')[:60]

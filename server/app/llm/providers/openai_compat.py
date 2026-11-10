@@ -19,8 +19,21 @@ _RETRYABLE = {"timeout", "unavailable"}
 _ROTATABLE = {"rate_limit", "auth"}
 _ATTEMPTS = 2
 _QUOTA_MARKERS = ("quota", "insufficient", "превышен лимит")
+# служебные ключи wire-формата — extra-параметры роли их не переопределяют
+_RESERVED_WIRE = frozenset({"messages", "tools", "response_format", "stream", "stream_options"})
 
 T = TypeVar("T")
+
+
+def _normalize_param(key: str, value: Any) -> Any:
+    """Привести шорткат параметра к спецификации провайдера.
+
+    GLM допускает thinking только объектом: {'type': 'disabled'}; короткая
+    строка из llm.yaml ('disabled') разворачиваем сами (BB-003).
+    """
+    if key == "thinking" and isinstance(value, str):
+        return {"type": value}
+    return value
 
 
 def _map_error(e: Exception) -> LLMError:
@@ -74,6 +87,8 @@ class OpenAICompatProvider:
         self._cooldown_until: dict[int, float] = {}
         self._clients: dict[int | None, openai.AsyncOpenAI] = {}
         self._loop_id: int | None = None
+        # extra-параметры ролей, отвергнутые провайдером (bad_request) — не шлём до перезапуска
+        self._unsupported_extra: set[str] = set()
 
     # --- цепочка ключей ---
 
@@ -112,6 +127,40 @@ class OpenAICompatProvider:
             int(self._cooldown_seconds),
         )
 
+    def keychain_status(self) -> dict[str, Any]:
+        """Состояние цепочки ключей: sticky-индекс и cooldown-остатки (BB-004).
+
+        Ключи идентифицируются только номером; значения не отдаём нигде.
+        """
+        now = self._monotonic()
+        keys: list[dict[str, Any]] = []
+        for i in range(len(self._api_keys)):
+            until = self._cooldown_until.get(i)
+            remain = int(round(until - now)) if until is not None and until > now else 0
+            if remain > 0:
+                keys.append({"index": i + 1, "state": "cooldown", "cooldown_seconds": remain})
+            elif i == self._sticky:
+                keys.append({"index": i + 1, "state": "active"})
+            else:
+                keys.append({"index": i + 1, "state": "ready"})
+        return {
+            "keys_total": len(self._api_keys),
+            "sticky": (self._sticky + 1) if self._api_keys else None,
+            "keys": keys,
+        }
+
+    def reset_cooldown(self) -> int:
+        """Сбросить cooldown всех ключей (ручное «переключение ключа», BB-005).
+
+        Безопасно: просто очищает карту — следующий запрос берёт первый
+        свободный ключ цепочки. Возвращает число снятых cooldown.
+        """
+        dropped = len(self._cooldown_until)
+        self._cooldown_until.clear()
+        if dropped:
+            log.info("провайдер %s: cooldown снят у %d ключей", self.name, dropped)
+        return dropped
+
     async def _with_key_rotation(self, attempt: Callable[[int | None], Awaitable[T]]) -> T:
         """Выполнить запрос текущим ключом; при ошибке квоты — cooldown и следующий ключ."""
         while True:
@@ -144,7 +193,14 @@ class OpenAICompatProvider:
             self._clients[key_index] = client
         return client
 
-    def _to_wire(self, request: LLMRequest) -> dict[str, Any]:
+    def _to_wire(self, request: LLMRequest) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Собрать wire-запрос; возвращает (payload, extra-параметры роли).
+
+        extra-параметры из llm.yaml (BB-003) идут отдельным словарём — SDK не
+        принимает чужие kwargs, они уходят в тело запроса через extra_body.
+        Отдаются только если заданы конфигом, не дублируют явные поля запроса
+        (temperature/max_tokens) и не переопределяют служебные ключи wire-формата.
+        """
         messages: list[dict[str, Any]] = []
         for m in request.messages:
             entry: dict[str, Any] = {"role": m.role, "content": m.content}
@@ -192,40 +248,68 @@ class OpenAICompatProvider:
             payload["messages"] = [
                 {"role": "system", "content": f"Отвечай ТОЛЬКО валидным JSON по схеме:\n{schema_json}"}
             ] + messages
-        return payload
+        extra: dict[str, Any] = {}
+        for key, value in (request.extra_params or {}).items():
+            if key in self._unsupported_extra or key in _RESERVED_WIRE:
+                continue
+            if key == "temperature" and request.temperature is not None:
+                continue  # явное поле запроса приоритетнее params роли
+            if key == "max_tokens" and request.max_tokens is not None:
+                continue
+            extra[key] = _normalize_param(key, value)
+        return payload, extra
+
+    def _drop_extra(self, extra: dict[str, Any]) -> None:
+        """Запомнить extra-параметры как отвергнутые провайдером и убрать из запроса.
+
+        Вызывается после bad_request: параметр роли не должен зацикливать
+        ретраи — после снятия он больше не собирается в wire до перезапуска.
+        """
+        self._unsupported_extra.update(extra)
+        names = list(extra)
+        extra.clear()  # мутация: замыкание ротации видит дроп на всех ключах
+        log.warning(
+            "провайдер %s отверг параметры роли (%s) — убраны из запроса",
+            self.name,
+            ", ".join(names),
+        )
 
     async def complete(self, model: str, request: LLMRequest) -> LLMResponse:
         """Один ответ целиком: ротация ключей по квоте + ретраи временных ошибок."""
-        payload = self._to_wire(request)
-        return await self._with_key_rotation(lambda idx: self._complete_attempts(model, payload, idx))
+        payload, extra = self._to_wire(request)
+        return await self._with_key_rotation(lambda idx: self._complete_attempts(model, payload, extra, idx))
 
     async def _complete_attempts(
-        self, model: str, payload: dict[str, Any], key_index: int | None
+        self, model: str, payload: dict[str, Any], extra: dict[str, Any], key_index: int | None
     ) -> LLMResponse:
-        last_error: LLMError | None = None
-        for attempt in range(_ATTEMPTS):
+        attempt = 0
+        while True:
             try:
-                resp = await self._ensure_client(key_index).chat.completions.create(model=model, **payload)
+                call = {**payload, **({"extra_body": dict(extra)} if extra else {})}
+                resp = await self._ensure_client(key_index).chat.completions.create(model=model, **call)
                 return self._parse_response(resp)
             except Exception as e:  # noqa: BLE001 — граница к внешнему сервису
                 err = _map_error(e)
-                # bad_request тоже ретраим: z.ai иногда отвечает плавающим 1214 на валидный запрос
-                if (err.code in _RETRYABLE or err.code == "bad_request") and attempt < _ATTEMPTS - 1:
-                    await asyncio.sleep(2**attempt)
+                # bad_request тоже ретраим: z.ai иногда отвечает плавающим 1214 на валидный запрос.
+                # Если в запросе есть extra-параметры роли — сначала пробуем без них (BB-003)
+                if err.code == "bad_request" and extra:
+                    self._drop_extra(extra)
                     continue
-                last_error = err
-                raise last_error from e
-        raise last_error or LLMError("нет ответа провайдера")
+                if (err.code in _RETRYABLE or err.code == "bad_request") and attempt < _ATTEMPTS - 1:
+                    attempt += 1
+                    await asyncio.sleep(2 ** (attempt - 1))
+                    continue
+                raise err from e
 
     def stream(self, model: str, request: LLMRequest) -> AsyncIterator[LLMEvent]:
         """Стриминговый ответ; tool calls собираются и отдаются целиком в конце текста."""
         return self._stream(model, request)
 
     async def _stream(self, model: str, request: LLMRequest) -> AsyncIterator[LLMEvent]:
-        payload = self._to_wire(request)
+        payload, extra = self._to_wire(request)
         payload["stream"] = True
         payload["stream_options"] = {"include_usage": True}
-        stream = await self._with_key_rotation(lambda idx: self._open_stream(model, payload, idx))
+        stream = await self._with_key_rotation(lambda idx: self._open_stream(model, payload, extra, idx))
         if stream is None:
             raise LLMError("нет ответа провайдера")
 
@@ -274,20 +358,30 @@ class OpenAICompatProvider:
             yield LLMEvent(type="usage", usage=usage)
         yield LLMEvent(type="finish", finish_reason=finish or "stop")
 
-    async def _open_stream(self, model: str, payload: dict[str, Any], key_index: int | None) -> Any:
-        """Открыть стрим с ретраями временных ошибок (квота уходит в ротацию выше)."""
-        for attempt in range(_ATTEMPTS):
+    async def _open_stream(
+        self, model: str, payload: dict[str, Any], extra: dict[str, Any], key_index: int | None
+    ) -> Any:
+        """Открыть стрим с ретраями временных ошибок (квота уходит в ротацию выше).
+
+        bad_request с extra-параметрами роли — сначала ретрай без них (BB-003).
+        """
+        attempt = 0
+        while True:
             try:
-                return await self._ensure_client(key_index).chat.completions.create(model=model, **payload)
+                call = {**payload, **({"extra_body": dict(extra)} if extra else {})}
+                return await self._ensure_client(key_index).chat.completions.create(model=model, **call)
             except Exception as e:  # noqa: BLE001
                 err = _map_error(e)
                 if err.code == "bad_request":
                     _dump_1214(model, payload, str(e))
+                    if extra:
+                        self._drop_extra(extra)
+                        continue
                 if (err.code in _RETRYABLE or err.code == "bad_request") and attempt < _ATTEMPTS - 1:
-                    await asyncio.sleep(2**attempt)
+                    attempt += 1
+                    await asyncio.sleep(2 ** (attempt - 1))
                     continue
                 raise err from e
-        raise LLMError("нет ответа провайдера")
 
     @staticmethod
     def _parse_response(resp: Any) -> LLMResponse:

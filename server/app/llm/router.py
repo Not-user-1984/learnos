@@ -1,7 +1,7 @@
 """Фабрика провайдеров и маршрутизатор ролей моделей из llm.yaml."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -16,10 +16,15 @@ from .types import ProviderCapabilities
 
 @dataclass(frozen=True, slots=True)
 class RoleBinding:
-    """Привязка роли к провайдеру и модели."""
+    """Привязка роли к провайдеру и модели.
+
+    params — провайдер-специфичные параметры роли (thinking, max_tokens…):
+    шлются в wire-запрос только если заданы в конфиге (BB-003).
+    """
 
     provider: str
     model: str
+    params: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +41,7 @@ class LLMConfig:
             return cls(providers={}, roles={})
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         roles = {
-            name: RoleBinding(provider=b["provider"], model=b["model"])
+            name: RoleBinding(provider=b["provider"], model=b["model"], params=dict(b.get("params") or {}))
             for name, b in (raw.get("roles") or {}).items()
         }
         return cls(providers=raw.get("providers") or {}, roles=roles)
@@ -77,17 +82,22 @@ class ModelRouter:
         self._force = force_provider
         self._key_cooldown_seconds = key_cooldown_seconds
 
-    def resolve(self, role: str) -> tuple[LLMProvider, str]:
-        """Роль → (провайдер, модель). LLMError(not_configured), если роли/ключа нет."""
+    def resolve(self, role: str) -> tuple[LLMProvider, str, dict[str, Any]]:
+        """Роль → (провайдер, модель, params роли).
+
+        params — словарь extra-параметров из llm.yaml (пустой, если не заданы);
+        вызывающий код прокидывает их в LLMRequest.extra_params.
+        LLMError(not_configured), если роли/ключа нет.
+        """
         if self._force is not None:
-            return self._force, "fake-model"
+            return self._force, "fake-model", {}
         binding = self._config.roles.get(role)
         if binding is None:
             raise LLMError(f"роль '{role}' не настроена в llm.yaml", code="not_configured")
         spec = self._config.providers.get(binding.provider)
         if spec is None or not spec.get("enabled", True):
             raise LLMError(f"провайдер '{binding.provider}' не настроен или выключен", code="not_configured")
-        return self._get_provider(binding.provider, spec), binding.model
+        return self._get_provider(binding.provider, spec), binding.model, dict(binding.params)
 
     def _get_provider(self, name: str, spec: dict[str, Any]) -> LLMProvider:
         if name not in self._providers:
@@ -124,6 +134,7 @@ class ModelRouter:
             entry = {
                 "provider": binding.provider,
                 "model": binding.model,
+                "params": dict(binding.params),
                 "keys": len(keys),
                 "configured": ok,
             }
@@ -148,3 +159,42 @@ class ModelRouter:
             "reason": None if overall else "; ".join(reasons),
             "roles": roles_out,
         }
+
+    def detailed_status(self) -> dict[str, Any]:
+        """Полная сводка для /api/llm/status и тула llm_status (BB-004/BB-005).
+
+        /api/health открыт без токена, поэтому цепочки ключей и cooldown
+        отдаёт только этот метод; health берёт из status() сводные поля.
+        """
+        providers_out: dict[str, dict[str, Any]] = {}
+        for name, spec in self._config.providers.items():
+            keys, missing = _collect_api_keys(spec)
+            keyless = not (spec.get("api_key_envs") or spec.get("api_key_env"))
+            entry: dict[str, Any] = {
+                "type": spec.get("type", "openai_compat"),
+                "enabled": bool(spec.get("enabled", True)),
+                "keyless": keyless,
+                "keys_total": len(keys),
+            }
+            if not spec.get("enabled", True):
+                entry["reason"] = "провайдер выключен"
+            elif missing and not keys:
+                entry["reason"] = f"нет ключей ({', '.join(missing)})"
+            # живая цепочка — только у уже созданного провайдера (ленивая инициализация)
+            inst = self._providers.get(name)
+            if inst is not None and hasattr(inst, "keychain_status"):
+                entry["keychain"] = inst.keychain_status()
+            providers_out[name] = entry
+        return {**self.status(), "providers": providers_out}
+
+    def reset_cooldowns(self) -> dict[str, int]:
+        """Сбросить cooldown ключей всех созданных провайдеров: {имя: сколько снято}.
+
+        Ручное «переключение ключа» для агента (BB-005): безопасно — просто
+        очищает карту, следующий запрос берёт первый свободный ключ.
+        """
+        out: dict[str, int] = {}
+        for name, inst in self._providers.items():
+            if hasattr(inst, "reset_cooldown"):
+                out[name] = inst.reset_cooldown()
+        return out

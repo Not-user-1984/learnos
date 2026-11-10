@@ -187,6 +187,8 @@ root = AgentSpec(
         | {"get_session_state", "mark_chapter_done", "get_review_queue", "answer_review"}
         # разбор главы карточкой: root ведёт интент «review» (единый вход) сам
         | {"show_chapter_review"}
+        # состояние LLM и сброс cooldown ключей (BB-005): оркестратор видит свою систему
+        | {"llm_status"}
     ),
     max_steps=30,
 )

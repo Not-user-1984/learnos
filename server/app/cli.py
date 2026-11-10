@@ -39,7 +39,7 @@ async def _smoke_llm(container) -> None:
     """Три проверки LLM: обычный ответ, стрим, вызов инструмента echo."""
     from .llm.types import LLMRequest, Message, ToolSchema
 
-    provider, model = container.llm_router.resolve("chat")
+    provider, model, _params = container.llm_router.resolve("chat")
     print(f"провайдер: {provider.name}, модель: {model}")
 
     resp = await provider.complete(

@@ -3,6 +3,8 @@
 import json
 import logging
 import re
+from collections.abc import Mapping
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
@@ -22,10 +24,12 @@ async def structured_output(
     output: type[BaseModel],
     *,
     temperature: float | None = None,
+    extra_params: Mapping[str, Any] | None = None,
 ) -> tuple[BaseModel, tuple[int, int]]:
     """Гарантированно получить экземпляр pydantic-модели от LLM (до 2 повторов
     при невалидном JSON).
 
+    extra_params — параметры роли из llm.yaml (BB-003), уходят в каждый запрос.
     Возвращает (модель, (input_tokens, output_tokens)) — usage нужен трейсу
     (R-24): раньше токены structured-вызовов терялись и писались нулями.
     """
@@ -38,6 +42,7 @@ async def structured_output(
             messages=tuple(attempt_messages),
             response_schema=schema,
             temperature=temperature,
+            extra_params=extra_params,
         )
         response = await provider.complete(model, request)
         tokens_in += response.usage.input_tokens

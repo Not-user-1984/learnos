@@ -200,7 +200,7 @@ class AgentRuntime:
         self, spec: AgentSpec, ctx: AgentContext, history: Sequence[Message]
     ) -> AsyncIterator[AgentEvent]:
         """Чат-цикл агента; события отдаются по мере выполнения."""
-        provider, model = self._router.resolve(spec.model_role)
+        provider, model, role_params = self._router.resolve(spec.model_role)
         started = time.monotonic()
         steps = tool_calls = input_tokens = output_tokens = 0
         status, error_text = "ok", None
@@ -227,7 +227,12 @@ class AgentRuntime:
                 calls = []
                 async for event in provider.stream(
                     model,
-                    LLMRequest(messages=tuple(messages), tools=tuple(schemas), temperature=spec.temperature),
+                    LLMRequest(
+                        messages=tuple(messages),
+                        tools=tuple(schemas),
+                        temperature=spec.temperature,
+                        extra_params=role_params,
+                    ),
                 ):
                     if event.type == "text" and event.text:
                         assistant_text += event.text
@@ -374,7 +379,7 @@ class AgentRuntime:
         """Запуск агента как функции: без чата, выход — pydantic-модель output_model."""
         if spec.output_model is None:
             raise ValueError(f"агент '{spec.name}' не объявил output_model")
-        provider, model = self._router.resolve(spec.model_role)
+        provider, model, role_params = self._router.resolve(spec.model_role)
         started = time.monotonic()
         status, error_text = "ok", None
         run_id = self._recorder.start(
@@ -395,6 +400,7 @@ class AgentRuntime:
                 ],
                 spec.output_model,
                 temperature=spec.temperature,
+                extra_params=role_params,
             )
             self._recorder.step(
                 run_id,

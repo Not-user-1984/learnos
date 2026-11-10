@@ -88,3 +88,18 @@ def client(rest_app):
 
     with TestClient(rest_app) as tc:
         yield tc
+
+
+@pytest.fixture
+def token_client(container, monkeypatch):
+    """Приложение с включённым LEARNOS_API_TOKEN (R-07)."""
+    from fastapi.testclient import TestClient
+
+    container.settings.api_token = "secret-token-123"
+    import app.main as main_mod
+
+    monkeypatch.setattr(main_mod, "_CONTAINER", container)
+    app = main_mod.create_app()
+    app.state.mcp_servers = {}
+    with TestClient(app) as tc:
+        yield tc

@@ -133,8 +133,9 @@ def test_resolve_builds_provider_from_key_pool(monkeypatch):
         "base_url": _URL,
         "api_key_envs": ["ZAI_API_KEY", "ZAI_API_KEY_2", "ZAI_API_KEY_3"],
     }
-    provider, model = _router(spec).resolve("chat")
+    provider, model, params = _router(spec).resolve("chat")
     assert model == "glm"
+    assert params == {}  # params роли не заданы — пустые
     assert provider._api_keys == ["k1", "k3"]
 
 
@@ -256,3 +257,177 @@ def test_map_error_rotation_classes():
     assert _map_error(quota_ru).code == "rate_limit"
     assert _map_error(_status_error(openai.APIStatusError, 500, "boom")).code == "unavailable"
     assert _map_error(_err_connection()).code == "unavailable"
+
+
+# --- params роли в wire-запросе (BB-003) ---
+
+
+def _err_bad_request(message: str = "Invalid parameter: thinking") -> Exception:
+    return _status_error(openai.BadRequestError, 400, message)
+
+
+def test_to_wire_sends_extra_params_only_when_configured():
+    provider = OpenAICompatProvider("zai", _URL, ["k1"])
+
+    payload, extra = provider._to_wire(_req())
+    assert extra == {} and "thinking" not in payload  # без params роли — чистый запрос
+
+    req = LLMRequest(
+        messages=(Message(role="user", content="вопрос"),),
+        extra_params={"thinking": {"type": "disabled"}, "max_tokens": 128},
+    )
+    payload, extra = provider._to_wire(req)
+    # extra-параметры идут отдельно: SDK не принимает чужие kwargs, они уедут в extra_body
+    assert extra == {"thinking": {"type": "disabled"}, "max_tokens": 128}
+    assert "thinking" not in payload and "max_tokens" not in payload
+
+
+def test_to_wire_normalizes_thinking_shortcut_and_respects_request_fields():
+    provider = OpenAICompatProvider("zai", _URL, ["k1"])
+    req = LLMRequest(
+        messages=(Message(role="user", content="вопрос"),),
+        temperature=0.2,
+        max_tokens=64,
+        extra_params={"thinking": "disabled", "temperature": 0.9, "max_tokens": 999, "messages": []},
+    )
+    payload, extra = provider._to_wire(req)
+    # шорткат 'disabled' → объект по спецификации GLM; явные поля запроса не дублируются,
+    # служебные ключи wire не пробрасываются
+    assert extra == {"thinking": {"type": "disabled"}}
+    assert payload["temperature"] == 0.2 and payload["max_tokens"] == 64
+    assert isinstance(payload["messages"][0], dict) and payload["messages"][0]["role"] == "user"
+
+
+async def test_bad_request_on_extra_param_dropped_without_loop(monkeypatch):
+    """bad_request на extra-параметр: дроп, один немедленный ретрай, дальше не шлём."""
+
+    async def no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr("app.llm.providers.openai_compat.asyncio.sleep", no_sleep)
+    provider, by_key = _make_provider(["k1"], lambda key: _err_bad_request())
+    req = LLMRequest(
+        messages=(Message(role="user", content="вопрос"),),
+        extra_params={"thinking": "disabled"},
+    )
+
+    # с thinking → bad_request → дроп и ретрай сразу → снова bad_request (плавающий 1214)
+    # → обычный ретрай → bad_request → raise. Максимум 3 вызова, без зацикливания.
+    with pytest.raises(LLMError) as excinfo:
+        await provider.complete("glm", req)
+    assert excinfo.value.code == "bad_request"
+    assert by_key["k1"].calls == 3
+    # параметр отвергнут: последующие запросы собираются без него
+    payload, extra = provider._to_wire(req)
+    assert extra == {} and "thinking" not in payload
+
+
+async def test_bad_request_extra_drop_then_success():
+    """Провайдер отверг thinking, но без него отвечает — запрос спасён, параметр снят."""
+    calls = {"n": 0}
+
+    def flip(_key):
+        calls["n"] += 1
+        return _resp("ок без thinking") if calls["n"] >= 2 else _err_bad_request()
+
+    provider, by_key = _make_provider(["k1"], flip)
+    req = LLMRequest(
+        messages=(Message(role="user", content="вопрос"),),
+        extra_params={"thinking": "disabled"},
+    )
+
+    r = await provider.complete("glm", req)
+    assert r.text == "ок без thinking"
+    assert by_key["k1"].calls == 2
+    assert "thinking" in provider._unsupported_extra
+
+
+async def test_stream_bad_request_on_extra_param_dropped():
+    calls = {"n": 0}
+
+    def flip(_key):
+        calls["n"] += 1
+        return [_chunk("поток без thinking")] if calls["n"] >= 2 else _err_bad_request()
+
+    provider, by_key = _make_provider(["k1"], flip)
+    req = LLMRequest(
+        messages=(Message(role="user", content="вопрос"),),
+        extra_params={"thinking": "disabled"},
+    )
+    events = [e async for e in provider.stream("glm", req)]
+    assert "".join(e.text for e in events if e.type == "text") == "поток без thinking"
+    assert by_key["k1"].calls == 2  # отказ → дроп → успех
+
+
+# --- статус цепочки ключей (BB-004/BB-005) ---
+
+
+def test_keychain_status_states_and_cooldown_left():
+    now = {"t": 1000.0}
+    provider, _ = _make_provider(["k1", "k2", "k3"], lambda key: _resp("ок"), now=now)
+    provider._cooldown_key(2)  # третий ключ в cooldown на 600 с
+    now["t"] += 100.0
+
+    st = provider.keychain_status()
+    assert st["keys_total"] == 3 and st["sticky"] == 1  # ключи считаем с 1
+    states = {k["index"]: k for k in st["keys"]}
+    assert states[1]["state"] == "active"  # sticky
+    assert states[2]["state"] == "ready"
+    assert states[3]["state"] == "cooldown" and 495 <= states[3]["cooldown_seconds"] <= 500
+
+
+async def test_reset_cooldown_returns_keys_to_service():
+    now = {"t": 1000.0}
+    behavior = {"fn": lambda key: _err_429()}
+    provider, _ = _make_provider(["k1", "k2"], lambda key: behavior["fn"](key), now=now)
+    with pytest.raises(LLMError):
+        await provider.complete("glm", _req())
+    # оба ключа в cooldown — статус это видит
+    states = {k["index"]: k for k in provider.keychain_status()["keys"]}
+    assert all(k["state"] == "cooldown" for k in states.values())
+
+    assert provider.reset_cooldown() == 2
+    assert provider._cooldown_until == {}
+    behavior["fn"] = lambda key: _resp("в строю")
+    assert (await provider.complete("glm", _req())).text == "в строю"
+
+
+def test_detailed_status_roles_params_and_providers(monkeypatch):
+    monkeypatch.setenv("K1", "v1")
+    config = LLMConfig(
+        providers={"zai": {"type": "openai_compat", "base_url": _URL, "api_key_envs": ["K1"]}},
+        roles={
+            "chat": RoleBinding(provider="zai", model="glm-5.3"),
+            "fast": RoleBinding(
+                provider="zai", model="glm-5.3-flash", params={"thinking": {"type": "disabled"}}
+            ),
+        },
+    )
+    router = ModelRouter(config)
+    st = router.detailed_status()
+    assert st["configured"] is True
+    assert st["roles"]["fast"]["params"] == {"thinking": {"type": "disabled"}}
+    assert st["roles"]["chat"]["params"] == {}
+    prov = st["providers"]["zai"]
+    assert prov["keys_total"] == 1 and prov["enabled"] is True and "reason" not in prov
+    # провайдер ещё не создан — живой цепочки нет, но конфигурация видна
+    assert "keychain" not in prov
+
+    # после resolve появляется живая цепочка с sticky
+    router.resolve("chat")
+    st = router.detailed_status()
+    assert st["providers"]["zai"]["keychain"]["keys_total"] == 1
+    assert st["providers"]["zai"]["keychain"]["sticky"] == 1
+
+
+def test_detailed_status_reports_disabled_provider_reason(monkeypatch):
+    monkeypatch.delenv("K1", raising=False)
+    config = LLMConfig(
+        providers={
+            "zai": {"type": "openai_compat", "base_url": _URL, "api_key_envs": ["K1"], "enabled": False}
+        },
+        roles={"chat": RoleBinding(provider="zai", model="glm")},
+    )
+    st = ModelRouter(config).detailed_status()
+    assert st["configured"] is False
+    assert st["providers"]["zai"]["reason"] == "провайдер выключен"

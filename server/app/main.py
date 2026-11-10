@@ -202,6 +202,15 @@ def create_app() -> FastAPI:
             "modules": len({t.module for t in container.tools.all()}),
         }
 
+    @app.get("/api/llm/status", tags=["system"])
+    def llm_status():
+        """Детальный статус LLM: роли → модель/провайдер/params, цепочки ключей с cooldown.
+
+        health открыт без токена — детализацию (ключи, cooldown) отдаёт только
+        этот эндпоинт под bearer (BB-004). Значения ключей не отдаются нигде.
+        """
+        return container.llm_router.detailed_status()
+
     @app.get("/api/runs", tags=["system"])
     def runs(limit: int = 50, agent: str | None = None, status: str | None = None):
         """Трейсы запусков агентов (агрегаты): что, когда, сколько токенов (R-24)."""

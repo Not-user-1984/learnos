@@ -1,3 +1,9 @@
+# Роли → провайдер/модель. Смена провайдера — правка этого файла (пресеты ниже),
+# z.ai-специфика живёт только в адаптере app/llm/providers/openai_compat.py.
+#
+# params (опционально) — параметры роли, уходящие в запрос как есть:
+#   thinking: {type: disabled}  # или шорткат `thinking: disabled` — GLM допускает только объект
+#   max_tokens / temperature — по спецификации провайдера
 providers:
   zai:
     type: openai_compat
@@ -11,8 +17,28 @@ providers:
     api_key_env: null
     enabled: false
 
+  # Пресеты других провайдеров — раскомментируй и переключи роли ниже (BB-003):
+  # openrouter:
+  #   type: openai_compat
+  #   base_url: https://openrouter.ai/api/v1
+  #   api_key_envs: [OPENROUTER_API_KEY]
+  #   capabilities: {tools: true, streaming: true, json_schema: true, vision: false}
+  # openai:
+  #   type: openai_compat
+  #   base_url: https://api.openai.com/v1
+  #   api_key_envs: [OPENAI_API_KEY]
+  #   capabilities: {tools: true, streaming: true, json_schema: true, vision: true}
+  # deepseek:
+  #   type: openai_compat
+  #   base_url: https://api.deepseek.com/v1
+  #   api_key_envs: [DEEPSEEK_API_KEY]
+  #   capabilities: {tools: true, streaming: true, json_schema: false, vision: false}
+
 roles:
+  # думающая модель — диалог обучения, разбор главы, фейнман, создание материала
   chat:       {provider: zai, model: glm-5.3}
-  structured: {provider: zai, model: glm-5.3}
-  fast:       {provider: zai, model: glm-5.3}
+  # тривиальные операции (категоризация, summary, интенты, tool-обвязка) —
+  # быстрая модель без раздумий: thinking disabled резко срезает токены и латентность
+  structured: {provider: zai, model: glm-5.3-flash, params: {thinking: {type: disabled}}}
+  fast:       {provider: zai, model: glm-5.3-flash, params: {thinking: {type: disabled}}}
   vision:     {provider: zai, model: glm-4.6v}

@@ -42,6 +42,8 @@ MCP_MODULES = {
     "tuning",
     "mcpext",
     "revision",
+    # системные инструменты вне модулей: LLM-слой (llm_status) — общий /mcp, без узкого сервера
+    "llm",
 }
 
 
