@@ -89,6 +89,12 @@ def parse_chapter_number(title: str) -> int | None:
         return None
 
 
+def normalize_url(url: str) -> str:
+    """Нормализация URL для дедупа (B-007): без фрагмента и хвостового слэша."""
+    u = url.split("#", 1)[0].strip()
+    return u.rstrip("/") if u.endswith("/") and not u.endswith("://") else u
+
+
 def is_youtube_url(url: str) -> bool:
     """YouTube-ссылка на видео (youtu.be/<id>, watch?v=, shorts, live).
 

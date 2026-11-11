@@ -1,6 +1,6 @@
 """Инструмент экспорта (MCP + агенты)."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...kernel.tools.spec import ToolContext, ToolSpec
 
@@ -8,9 +8,9 @@ from ...kernel.tools.spec import ToolContext, ToolSpec
 class ExportArgs(BaseModel):
     """export_markdown: склеенный MD для передачи другой нейронке."""
 
-    scope: str = "all"  # block | category | course | source | all
-    id: str | None = None
-    max_chars: int | None = None
+    scope: str = Field(default="all", description="block | category | course | source | all")
+    id: str | None = Field(default=None, description="uid выбранного объекта (для block/category/…)")
+    max_chars: int | None = Field(default=None, description="Лимит символов (обрезка — truncated=true)")
 
 
 def export_tools(c) -> list[ToolSpec]:

@@ -41,6 +41,8 @@ class ToolSpec:
     # оконные инструменты (read_chapter, web_read) сами отвечают за размер порции через
     # limit и отдают согласованный next_offset — обрезать их результат нельзя
     truncatable: bool = True
+    # дубль другого тула (B-007): не удаляем, помечаем в описании MCP tools/list
+    deprecated: str | None = None
 
     def json_schema(self) -> dict[str, Any]:
         """JSON Schema аргументов для MCP и LLM."""

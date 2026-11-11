@@ -37,6 +37,11 @@ class SourceRepository:
         except NotFound:
             return None
 
+    def find_by_url(self, session: Session, url: str) -> dict | None:
+        """Источник по точному URL (дедуп add_source, B-007)."""
+        row = session.execute(select(sources).where(sources.c.url == url)).first()
+        return _source_dict(row) if row else None
+
     def list(self, session: Session, *, kind: str | None = None, q: str | None = None) -> list[dict]:
         stmt = select(sources)
         if kind:

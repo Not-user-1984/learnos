@@ -89,6 +89,30 @@ Next.js App Router, TS strict, Tailwind + shadcn-подход, PWA. Дизайн
 
 Референсы агентных решений: [task_ai/hermes-ideas.md](task_ai/hermes-ideas.md) (конспект из nousresearch/hermes-agent).
 
+## Подключить LearnOS как «второй мозг» (Claude Code / opencode)
+
+Компактный MCP-эндпоинт `/mcp/brain`: положить материал (`capture`), получить контекст
+по теме одним вызовом (`context` → `get`), посмотреть входящие (`inbox`). Всё, что
+нейронки кладут через capture — «сырьё» (inbox, verified=false): выученным блок
+становится только через сессию-урок человека.
+
+`.mcp.json` / конфиг opencode (токен — из env, значение не хранить в репо):
+
+```json
+{
+  "mcpServers": {
+    "learnos": {
+      "url": "http://192.168.0.132:8765/mcp/brain",
+      "headers": { "Authorization": "Bearer ${LEARNOS_API_TOKEN}" }
+    }
+  }
+}
+```
+
+- Инструменты: `capture`, `context`, `search_kb`, `get`, `list_topics`, `add_source_kb`, `inbox`, `promote_hint` (у всех параметров описания — видно в `tools/list`)
+- Ресурсы: `learnos://block/{uid}`, `learnos://source/{uid}/chapter/{idx}`
+- Идемпотентность: повторный `capture` того же текста/URL возвращает существующую запись (`created=false`)
+
 ## Карта документации
 
 - [AGENTS.md](AGENTS.md) — правила для агентов, запуск, эндпоинты; [STATUS.md](STATUS.md) — текущий статус

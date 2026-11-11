@@ -1,6 +1,6 @@
 """Инструменты messenger: отправка в Telegram из любого агента."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...kernel.errors import ValidationFailed
 from ...kernel.tools.spec import ToolContext, ToolSpec
@@ -9,20 +9,20 @@ from ...kernel.tools.spec import ToolContext, ToolSpec
 class SendTextArgs(BaseModel):
     """send_telegram_text: текст читаемыми сообщениями."""
 
-    text: str
+    text: str = Field(description="Текст сообщения в Telegram")
 
 
 class SendBlockArgs(BaseModel):
     """send_block_to_telegram: блок базы знаний (выноска + .md файлом)."""
 
-    block_uid: str
+    block_uid: str = Field(description="uid блока (blk_…)")
 
 
 class SendChapterArgs(BaseModel):
     """send_chapter_to_telegram: глава книги почитать в Telegram."""
 
-    source: str | int
-    chapter: int
+    source: str | int = Field(description="uid/id источника")
+    chapter: int = Field(description="Номер главы")
 
 
 def messenger_tools(c) -> list[ToolSpec]:

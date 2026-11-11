@@ -1,6 +1,6 @@
 ---
 name: web-search
-description: "Веб-поиск (прототип, DuckDuckGo). Возвращает топ результатов (title, url). Использовать для research_sources."
+description: "[УСТАРЕЛО: используй web_search] Веб-поиск (прототип, DuckDuckGo). Возвращает топ результатов (title, url)."
 params:
   query:
     type: str

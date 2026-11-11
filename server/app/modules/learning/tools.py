@@ -1,6 +1,6 @@
 """Инструменты модуля learning (MCP + агенты)."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...kernel.errors import NotFound
 from ...kernel.tools.spec import ToolContext, ToolSpec
@@ -9,70 +9,78 @@ from ...kernel.tools.spec import ToolContext, ToolSpec
 class _ListActsArgs(BaseModel):
     """list_activities без обязательных аргументов."""
 
-    status: str | None = None
+    status: str | None = Field(default=None, description="Фильтр по статусу активности")
 
 
 class StartSessionArgs(BaseModel):
     """start_session: одно из course_id/activity обязательно."""
 
-    course_id: int | None = None
-    activity: str | int | None = None
-    chapter: int | None = None
+    course_id: int | None = Field(default=None, description="id курса (сессия в его рамках)")
+    activity: str | int | None = Field(default=None, description="uid/id активности источника")
+    chapter: int | None = Field(default=None, description="Номер главы (по умолчанию курсор активности)")
     # элемент доски курса, который закроет сессия (B-004): приходит из контекста курса
-    course_item_id: int | None = None
-    config: dict = {}
+    course_item_id: int | None = Field(default=None, description="id элемента курса, который закроет сессия")
+    config: dict = Field(default_factory=dict, description="Конфиг сессии (concepts, minutes, …)")
 
 
 class AdvanceArgs(BaseModel):
     """advance: событие стейт-машины + payload."""
 
-    session_id: int | str | None = None
-    event: str
-    payload: dict = {}
+    session_id: int | str | None = Field(
+        default=None, description="uid/id сессии (из контекста — можно опустить)"
+    )
+    event: str = Field(description="Событие: theory_done, ask, answer, go_practice, practice_done, note…")
+    payload: dict = Field(default_factory=dict, description="Данные события (вопрос/ответ/заметка)")
 
 
 class FinishArgs(BaseModel):
     """finish_session: block_json опционален (без него — генерация из транскрипта)."""
 
-    session_id: int | str | None = None
-    block_json: dict | None = None
+    session_id: int | str | None = Field(
+        default=None, description="uid/id сессии (из контекста — можно опустить)"
+    )
+    block_json: dict | None = Field(default=None, description="Явный драфт блока-урока (BlockDraft)")
 
 
 class PracticeArgs(BaseModel):
     """practice_step: команда для пользователя."""
 
-    session_id: int | str | None = None
-    machine: str
-    command: str
-    explanation: str
-    expected: str | None = None
-    risk: str = "low"
+    session_id: int | str | None = Field(
+        default=None, description="uid/id сессии (из контекста — можно опустить)"
+    )
+    machine: str = Field(description="id машины из профиля пользователя")
+    command: str = Field(description="Команда для выполнения")
+    explanation: str = Field(description="Что делает команда (части через «;» и «—»)")
+    expected: str | None = Field(default=None, description="Ожидаемый вывод")
+    risk: str = Field(default="low", description="Риск: low | medium | high")
 
 
 class StartActivityArgs(BaseModel):
     """start_activity: «идём по источнику»."""
 
-    source: str | int
-    course_id: int | None = None
+    source: str | int = Field(description="uid/id источника")
+    course_id: int | None = Field(default=None, description="id курса (курсор в рамках курса)")
 
 
 class MarkChapterDoneArgs(BaseModel):
     """mark_chapter_done: главу разобрали — двигаем курсор активности."""
 
-    chapter: int | None = None
-    activity: str | int | None = None
+    chapter: int | None = Field(default=None, description="Номер главы (по умолчанию текущий курсор)")
+    activity: str | int | None = Field(
+        default=None, description="uid/id активности (по умолчанию из разговора)"
+    )
 
 
 class RefArgs(BaseModel):
     """Ссылка на активность/сессию."""
 
-    ref: str | int
+    ref: str | int = Field(description="uid или числовой id")
 
 
 class StateArgs(BaseModel):
     """Состояние сессии."""
 
-    session_id: int | str
+    session_id: int | str = Field(description="uid/id сессии")
 
 
 def learning_tools(c) -> list[ToolSpec]:

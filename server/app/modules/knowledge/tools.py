@@ -1,6 +1,6 @@
 """Инструменты модуля knowledge (MCP + агенты)."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...kernel.tools.spec import ToolContext, ToolSpec
 from .schemas import BlockDraftIn
@@ -9,75 +9,75 @@ from .schemas import BlockDraftIn
 class SaveNoteArgs(BaseModel):
     """save_note: блок-конспект; draft_json/preview_id — готовый драфт, иначе генерация из разговора."""
 
-    title: str | None = None
-    draft_json: BlockDraftIn | None = None
-    preview_id: int | None = None
-    source: str | None = None
-    chapter: int | None = None
-    conversation: str | None = None
+    title: str | None = Field(default=None, description="Подсказка заголовка (при генерации из разговора)")
+    draft_json: BlockDraftIn | None = Field(default=None, description="Готовый драфт блока (поля BlockDraft)")
+    preview_id: int | None = Field(default=None, description="id превью из preview_note (апрув пользователя)")
+    source: str | None = Field(default=None, description="uid источника для block_sources")
+    chapter: int | None = Field(default=None, description="Номер главы источника")
+    conversation: str | None = Field(default=None, description="uid разговора (если не из чата)")
 
 
 class PreviewNoteArgs(BaseModel):
     """preview_note: превью блока-конспекта из разговора, без записи в базу."""
 
-    instructions: str = ""
-    kind: str = "note"
+    instructions: str = Field(default="", description="Обязательные правки пользователя к драфту")
+    kind: str = Field(default="note", description="Тип блока: note | lesson")
 
 
 class ListBlocksArgs(BaseModel):
     """list_blocks с фильтрами."""
 
-    category: str | None = None
-    tag: str | None = None
-    kind: str | None = None
-    source: str | None = None
-    q: str | None = None
-    sort: str = "created"
-    course_id: int | None = None
+    category: str | None = Field(default=None, description="Фильтр по категории (путь дерева)")
+    tag: str | None = Field(default=None, description="Фильтр по тегу")
+    kind: str | None = Field(default=None, description="lesson | note | runbook")
+    source: str | None = Field(default=None, description="uid источника в block_sources")
+    q: str | None = Field(default=None, description="Текстовый фильтр по заголовку")
+    sort: str = Field(default="created", description="Сортировка: created | updated")
+    course_id: int | None = Field(default=None, description="id курса (не используется, совместимость)")
 
 
 class GetBlockArgs(BaseModel):
     """get_block по uid."""
 
-    block_uid: str
+    block_uid: str = Field(description="uid блока (blk_…)")
 
 
 class UpdateBlockArgs(BaseModel):
     """update_block: patch_json применяется сразу, старая версия сохраняется."""
 
-    block_uid: str
-    patch_json: dict
-    reason: str = "правка из разговора"
+    block_uid: str = Field(description="uid блока (blk_…)")
+    patch_json: dict = Field(description="Патч: поля BlockDraft или append_theses/append_weak_spots/…")
+    reason: str = Field(default="правка из разговора", description="Причина правки (в историю версий)")
 
 
 class VersionsArgs(BaseModel):
     """История версий блока."""
 
-    block_uid: str
+    block_uid: str = Field(description="uid блока (blk_…)")
 
 
 class RestoreArgs(BaseModel):
     """Откат к версии."""
 
-    block_uid: str
-    version: int
+    block_uid: str = Field(description="uid блока (blk_…)")
+    version: int = Field(description="Номер версии для отката")
 
 
 class CreateCategoryArgs(BaseModel):
     """create_category: новый узел дерева."""
 
-    path: str
-    title: str
-    color: str | None = None
-    icon: str | None = None
+    path: str = Field(description="Путь узла: root/child (корень — только существующий)")
+    title: str = Field(description="Человекочитаемое название")
+    color: str | None = Field(default=None, description="Цвет узла (hex/имя)")
+    icon: str | None = Field(default=None, description="Иконка Material Symbols")
 
 
 class SetCategoryArgs(BaseModel):
     """set_block_category: агент ставит категорию (confirm=false), пользователь подтверждает в UI."""
 
-    block_uid: str
-    path: str | None = None
-    confirm: bool = False
+    block_uid: str = Field(description="uid блока (blk_…)")
+    path: str | None = Field(default=None, description="Путь категории; пусто — снять")
+    confirm: bool = Field(default=False, description="Подтверждение (в UI — пользователь)")
 
 
 class NoArgs(BaseModel):
@@ -111,8 +111,13 @@ def knowledge_tools(c) -> list[ToolSpec]:
         if not domain_draft.category_suggestion:
             # явный draft_json без категории — категоризуем тем же categorizer'ом
             domain_draft = svc.categorize_draft(domain_draft)
-        # категория подтверждается сразу: юзер может сменить её позже на странице блока
-        block = svc.save_block(domain_draft, conversation_uid=conv, category_status="confirmed")
+        # B-007: из веб-чата (встроенный агент после апрува превью) — confirmed;
+        # из внешнего MCP подтверждения нет — блок уходит во входящие как сырьё
+        confirmed = ctx.channel == "agent"
+        category_status = "confirmed" if confirmed else "inbox"
+        block = svc.save_block(
+            domain_draft, conversation_uid=conv, category_status=category_status, verified=confirmed
+        )
         return {
             "ok": True,
             "block_uid": block.meta.uid,
@@ -120,7 +125,8 @@ def knowledge_tools(c) -> list[ToolSpec]:
             "title": block.meta.title,
             "summary": block.meta.summary,
             "category": block.meta.category_path,
-            "category_status": "confirmed",
+            "category_status": category_status,
+            "verified": confirmed,
             "version": 1,
             "_card": {
                 "type": "block_saved",
@@ -129,7 +135,7 @@ def knowledge_tools(c) -> list[ToolSpec]:
                 "title": block.meta.title,
                 "summary": block.meta.summary,
                 "category": block.meta.category_path,
-                "category_status": "confirmed",
+                "category_status": category_status,
                 "version": 1,
             },
         }

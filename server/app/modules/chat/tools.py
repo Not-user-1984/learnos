@@ -33,8 +33,8 @@ class ListAgentsArgs(BaseModel):
 class HandoffArgs(BaseModel):
     """handoff: передать разговор специалисту (он будет вести следующие ходы)."""
 
-    agent: str
-    reason: str = ""
+    agent: str = Field(description="Имя агента из list_agents (например quick_reviewer)")
+    reason: str = Field(default="", description="Зачем передаёте (пользователю видно не будет)")
 
 
 class HandoffBackArgs(BaseModel):

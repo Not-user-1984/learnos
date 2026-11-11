@@ -269,7 +269,16 @@ def create_app() -> FastAPI:
             app.include_router(router, prefix="/api")
 
     # MCP: общий сервер + узкие по модулям (роуты с абсолютными путями, без mount-префиксов)
-    app.state.mcp_servers["/mcp"] = build_mcp_server("learnos", container.tools, container.tools.all())
+    app.state.mcp_servers["/mcp"] = build_mcp_server(
+        "learnos",
+        container.tools,
+        container.tools.all(),
+        instructions=(
+            "LearnOS — личная база знаний: блоки «выучены» (verified) только через сессию-урок "
+            "человека, всё остальное — входящие (inbox). Полный набор инструментов по модулям — "
+            "/mcp/knowledge, /mcp/library и т.д.; компактный «второй мозг» — /mcp/brain."
+        ),
+    )
     for name in (
         "knowledge",
         "library",
@@ -287,6 +296,42 @@ def create_app() -> FastAPI:
             app.state.mcp_servers[f"/mcp/{name}"] = build_mcp_server(
                 f"learnos-{name}", container.tools, module_tools
             )
+
+    # «Второй мозг» (B-007): компактный фасад для внешних нейронок + ресурсы-ссылки
+    brain_tools = container.tools.by_module("brain")
+    if brain_tools:
+        brain_server = build_mcp_server(
+            "learnos-brain",
+            container.tools,
+            brain_tools,
+            instructions=(
+                "LearnOS — второй мозг. Порядок работы: context(тема) → get(uids) → capture(новое).\n"
+                "capture кладёт заметки во ВХОДЯЩИЕ (inbox): это сырьё, не выученное знание.\n"
+                "verified-блок (выученный) рождается только через сессию-урок человека — механического"
+                " promote нет, promote_hint подскажет пользователю.\n"
+                "Ресурсы: learnos://block/{uid}, learnos://source/{uid}/chapter/{idx}."
+            ),
+        )
+
+        @brain_server.resource(
+            "learnos://block/{uid}",
+            name="Блок базы знаний",
+            description="Markdown-тело блока по uid",
+            mime_type="text/markdown",
+        )
+        def _block_resource(uid: str) -> str:
+            return container.knowledge.get_block(uid).content
+
+        @brain_server.resource(
+            "learnos://source/{uid}/chapter/{idx}",
+            name="Глава источника",
+            description="Текст главы (uid источника, номер главы)",
+            mime_type="text/markdown",
+        )
+        def _chapter_resource(uid: str, idx: str) -> str:
+            return container.library.read_chapter(uid, int(idx), 0, 20000)["text"]
+
+        app.state.mcp_servers["/mcp/brain"] = brain_server
     for path, server in app.state.mcp_servers.items():
         # MCP по LAN (192.168.0.132) и из compose-сети (server) — иначе SDK-защита от
         # DNS-rebind отвечает «Invalid Host header» на всё, кроме localhost

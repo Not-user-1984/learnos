@@ -155,7 +155,8 @@ class BlockRepository:
                 blocks.c.block_uid.in_(select(block_tags.c.block_uid).where(block_tags.c.tag == tag))
             )
         if status == "inbox":
-            stmt = stmt.where(blocks.c.category_status == "suggested")
+            # входящие: старые suggested (категория не подтверждена) + новые inbox (B-007)
+            stmt = stmt.where(blocks.c.category_status.in_(("suggested", "inbox")))
         if q:
             needle = f"%{q.lower()}%"
             stmt = stmt.where(

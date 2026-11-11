@@ -1,6 +1,6 @@
 """Инструменты модуля search (MCP + агенты)."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...kernel.tools.spec import ToolContext, ToolSpec
 
@@ -8,16 +8,16 @@ from ...kernel.tools.spec import ToolContext, ToolSpec
 class SearchArgs(BaseModel):
     """search по блокам и/или главам."""
 
-    q: str
-    scope: str = "all"  # blocks | chapters | all
-    limit: int = 10
+    q: str = Field(description="Поисковый запрос")
+    scope: str = Field(default="all", description="blocks | chapters | all")
+    limit: int = Field(default=10, description="Сколько результатов")
 
 
 class ChunksArgs(BaseModel):
     """search_chunks — алиас v1."""
 
-    query: str
-    limit: int = 10
+    query: str = Field(description="Поисковый запрос")
+    limit: int = Field(default=10, description="Сколько результатов")
 
 
 def search_tools(c) -> list[ToolSpec]:
@@ -44,6 +44,7 @@ def search_tools(c) -> list[ToolSpec]:
         ToolSpec(
             name="search_chunks",
             module="search",
+            deprecated="используй search(scope='chapters') или context из /mcp/brain",
             description="Поиск по главам источников (совместимость).",
             args_model=ChunksArgs,
             handler=search_chunks,

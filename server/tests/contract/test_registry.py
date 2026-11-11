@@ -28,6 +28,7 @@ REQUIRED_V1 = {
 
 MCP_MODULES = {
     "knowledge",
+    "brain",
     "library",
     "learning",
     "chat",

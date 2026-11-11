@@ -9,42 +9,42 @@ from .schemas import SourceCreate
 class ProcessArgs(BaseModel):
     """process_source: запускает job обработки."""
 
-    source_id: str | int
-    force: bool = False
+    source_id: str | int = Field(description="uid/id источника")
+    force: bool = Field(default=False, description="Переобработать даже готовый")
 
 
 class RefArgs(BaseModel):
     """Ссылка на источник (uid или id)."""
 
-    source: str | int
+    source: str | int = Field(description="uid/id источника")
 
 
 class ListSourcesArgs(BaseModel):
     """list_sources с фильтром."""
 
-    kind: str | None = None
+    kind: str | None = Field(default=None, description="book | video | web | article")
 
 
 class ReadChapterArgs(BaseModel):
     """read_chapter: порция текста главы."""
 
-    source_id: str | int
-    chapter: int
-    offset: int = 0
-    limit: int = Field(default=6000, ge=500, le=24000)
+    source_id: str | int = Field(description="uid/id источника")
+    chapter: int = Field(description="Номер главы (у видео — 1)")
+    offset: int = Field(default=0, description="Смещение в символах (next_offset прошлого ответа)")
+    limit: int = Field(default=6000, ge=500, le=24000, description="Размер порции в символах")
 
 
 class ResearchArgs(BaseModel):
     """research_sources: веб-поиск кандидатов."""
 
-    topic: str
-    limit: int = 8
+    topic: str = Field(description="Тема для поиска источников")
+    limit: int = Field(default=8, description="Сколько кандидатов")
 
 
 class GetJobArgs(BaseModel):
     """Статус job."""
 
-    job_id: int
+    job_id: int = Field(description="id job обработки")
 
 
 def library_tools(c) -> list[ToolSpec]:

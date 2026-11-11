@@ -45,7 +45,7 @@ class GitPrepareChangeArgs(BaseModel):
 class RunChecksArgs(BaseModel):
     """Аргументы проверок."""
 
-    scope: Literal["server"] = "server"
+    scope: Literal["server"] = Field(default="server", description="Область проверок")
     branch: str | None = Field(default=None, description="Ветка agent/* — проверки в её worktree")
 
 

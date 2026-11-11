@@ -11,8 +11,8 @@ from . import github
 class SearchArgs(BaseModel):
     """web_search: поиск в интернете."""
 
-    query: str = Field(max_length=300)
-    limit: int = 6
+    query: str = Field(max_length=300, description="Поисковый запрос")
+    limit: int = Field(default=6, description="Сколько результатов")
 
 
 class NoArgs(BaseModel):
@@ -22,36 +22,36 @@ class NoArgs(BaseModel):
 class ReadArgs(BaseModel):
     """web_read: текст страницы порционно (offset/next_offset)."""
 
-    url: str = Field(max_length=500)
-    offset: int = 0
-    limit: int = Field(default=6000, ge=500, le=24000)
+    url: str = Field(max_length=500, description="URL страницы")
+    offset: int = Field(default=0, description="Смещение в символах")
+    limit: int = Field(default=6000, ge=500, le=24000, description="Размер порции в символах")
 
 
 class RepoArgs(BaseModel):
     """github_repo: карта репозитория для анализа идей."""
 
-    repo: str = Field(max_length=200)
+    repo: str = Field(max_length=200, description="owner/name репозитория")
 
 
 class RepoFileArgs(BaseModel):
     """github_file: прочитать файл репозитория."""
 
-    repo: str = Field(max_length=200)
-    path: str = Field(max_length=300)
+    repo: str = Field(max_length=200, description="owner/name репозитория")
+    path: str = Field(max_length=300, description="Путь файла в репозитории")
 
 
 class IdeaReportArgs(BaseModel):
     """save_idea_report: сохранить отчёт idea-scout в data/ideas/."""
 
-    title: str = Field(max_length=120)
-    content: str = Field(max_length=20000)
+    title: str = Field(max_length=120, description="Заголовок отчёта")
+    content: str = Field(max_length=20000, description="Markdown-тело отчёта")
 
 
 class VideoSearchArgs(BaseModel):
     """youtube_search: видео по теме."""
 
-    query: str = Field(max_length=300)
-    limit: int = 5
+    query: str = Field(max_length=300, description="Поисковый запрос видео")
+    limit: int = Field(default=5, description="Сколько видео")
 
 
 def _yt_search(query: str, limit: int, proxy: str = "") -> list[dict]:

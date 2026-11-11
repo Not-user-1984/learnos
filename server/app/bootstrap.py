@@ -15,6 +15,7 @@ from .kernel.ids import UuidHexGenerator
 from .kernel.logging import setup_logging
 from .kernel.tools.registry import ToolRegistry
 from .llm.router import LLMConfig, ModelRouter
+from .modules.brain import BrainModule
 from .modules.chat import ChatModule
 from .modules.courses import CoursesModule
 from .modules.export import ExportModule
@@ -45,6 +46,7 @@ MODULES = [
     ChatModule(),
     CoursesModule(),
     SearchModule(),
+    BrainModule(),
     ExportModule(),
     ReviewModule(),
     TodayModule(),
@@ -84,6 +86,7 @@ class Container:
     export: object | None = None
     review: object | None = None
     today: object | None = None
+    brain: object | None = None
     messenger: object | None = None
     tuning: object | None = None
     mcpext: object | None = None

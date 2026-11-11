@@ -1,6 +1,6 @@
 """Инструменты повторений (MCP + агенты)."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...kernel.tools.spec import ToolContext, ToolSpec
 
@@ -12,9 +12,9 @@ class NoArgs(BaseModel):
 class AnswerArgs(BaseModel):
     """Ответ на вопрос повторения."""
 
-    block_uid: str
-    answer: str
-    question: str | None = None  # что спрашивали — экзаменатору нужен контекст (R-17)
+    block_uid: str = Field(description="uid блока (blk_…)")
+    answer: str = Field(description="Ответ пользователя своими словами")
+    question: str | None = Field(default=None, description="Что спрашивали — контекст для экзаменатора")
 
 
 def review_tools(c) -> list[ToolSpec]:

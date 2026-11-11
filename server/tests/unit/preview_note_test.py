@@ -55,7 +55,7 @@ class FakeKnowledge:
         self.categorized.append(draft)
         return draft
 
-    def save_block(self, draft, conversation_uid=None, category_status="suggested"):
+    def save_block(self, draft, conversation_uid=None, category_status="suggested", verified=False):
         self.saved.append(draft)
         self.category_status = category_status
         meta = SimpleNamespace(

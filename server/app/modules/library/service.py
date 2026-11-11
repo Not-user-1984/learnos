@@ -13,7 +13,7 @@ from ...kernel.clock import Clock, now_iso
 from ...kernel.db import UnitOfWorkFactory
 from ...kernel.errors import Conflict, ExternalServiceError, NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
-from .domain import SourceRules
+from .domain import SourceRules, normalize_url
 from .events import SourceDeleted, SourceProcessed
 from .infra.sql_repo import ChapterRepository, JobRepository, SourceRepository
 
@@ -92,6 +92,13 @@ class LibraryService:
             kind = SourceRules.normalize_kind(kind)
         except ValueError as e:
             raise ValidationFailed(str(e)) from e
+        # дедуп по URL (B-007): повторный add_source не плодит источников
+        normalized = normalize_url(url) if url else url
+        if normalized:
+            with self._uow() as uow:
+                existing = self._sources.find_by_url(uow.session, normalized)
+            if existing is not None:
+                return {**existing, "created": False, "note": "источник с таким URL уже есть"}
         uid = self._ids.new("src")
         now = now_iso(self._clock)
         with self._uow() as uow:
@@ -101,14 +108,21 @@ class LibraryService:
                 kind=kind,
                 title=title,
                 author=author,
-                url=url,
+                url=normalized,
                 local_path=local_path,
                 status="chosen",
                 meta_json="{}",
                 created_at=now,
                 updated_at=now,
             )
-        return {"id": source_id, "uid": uid, "kind": kind, "title": title, "status": "chosen"}
+        return {
+            "id": source_id,
+            "uid": uid,
+            "kind": kind,
+            "title": title,
+            "status": "chosen",
+            "created": True,
+        }
 
     def segments(self, ref: str | int) -> dict:
         """Сегменты видео-транскрипта с таймкодами (B-006): data/youtube/<id>.segments.json.

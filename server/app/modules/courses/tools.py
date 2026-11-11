@@ -2,7 +2,7 @@
 
 import json
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...kernel.tools.spec import ToolContext, ToolSpec
 
@@ -10,42 +10,44 @@ from ...kernel.tools.spec import ToolContext, ToolSpec
 class CreateCourseArgs(BaseModel):
     """create_course: совместимость со старым topic+plan_json + новый формат."""
 
-    topic: str
-    title: str | None = None
-    description: str | None = None
-    plan_json: str = "{}"
-    items: list[dict] = []
+    topic: str = Field(description="Тема курса")
+    title: str | None = Field(default=None, description="Заголовок (по умолчанию тема)")
+    description: str | None = Field(default=None, description="Описание")
+    plan_json: str = Field(default="{}", description="Старый формат: план JSON-строкой")
+    items: list[dict] = Field(
+        default_factory=list, description="Элементы: [{item_type, source, chapter, block_uid}]"
+    )
 
 
 class RefArgs(BaseModel):
     """Ссылка на курс (uid или id)."""
 
-    course_id: str | int
+    course_id: str | int = Field(description="uid/id курса")
 
 
 class CourseItemArgs(BaseModel):
     """add_course_item: элемент + курс."""
 
-    course_id: str | int
-    item_type: str
-    source: str | int | None = None
-    chapter: int | None = None
-    block_uid: str | None = None
-    note: str | None = None
+    course_id: str | int = Field(description="uid/id курса")
+    item_type: str = Field(description="source | chapter | block")
+    source: str | int | None = Field(default=None, description="uid/id источника (для source/chapter)")
+    chapter: int | None = Field(default=None, description="Номер главы (для chapter)")
+    block_uid: str | None = Field(default=None, description="uid блока (для block)")
+    note: str | None = Field(default=None, description="Заметка к элементу")
 
 
 class RemoveItemArgs(BaseModel):
     """remove_course_item."""
 
-    course_id: str | int
-    item_id: int
+    course_id: str | int = Field(description="uid/id курса")
+    item_id: int = Field(description="id элемента")
 
 
 class ReorderArgs(BaseModel):
     """reorder_course: новый порядок id элементов."""
 
-    course_id: str | int
-    item_ids: list[int]
+    course_id: str | int = Field(description="uid/id курса")
+    item_ids: list[int] = Field(description="id элементов в новом порядке")
 
 
 class NoArgs(BaseModel):

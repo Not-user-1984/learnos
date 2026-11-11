@@ -15,31 +15,31 @@ class NoArgs(BaseModel):
 class ReadPromptArgs(BaseModel):
     """Чтение промпта агента."""
 
-    agent: str
+    agent: str = Field(description="Имя агента")
 
 
 class StageChangeArgs(BaseModel):
     """Черновик правки промпта (применяется только после подтверждения пользователем)."""
 
-    agent: str
-    new_content: str
-    summary: str
+    agent: str = Field(description="Имя агента")
+    new_content: str = Field(description="Новое содержимое промпта")
+    summary: str = Field(description="Короткое описание правки")
 
 
 class ProposeChangeArgs(BaseModel):
     """Черновик правки промпта или builtin-скилла (подтверждение — карточкой у человека)."""
 
-    kind: Literal["prompt", "skill"] = "prompt"
+    kind: Literal["prompt", "skill"] = Field(default="prompt", description="Правка промпта или скилла")
     target: str = Field(description="Агент (kind=prompt) или builtin-скилл (kind=skill)")
-    new_content: str
-    summary: str
+    new_content: str = Field(description="Новое содержимое")
+    summary: str = Field(description="Короткое описание правки")
     file: str = Field(default="run.py", description="kind=skill: run.py | SKILL.md")
 
 
 class ChangeIdArgs(BaseModel):
     """Ссылка на черновик правки."""
 
-    change_id: int
+    change_id: int = Field(description="id черновика правки")
 
 
 def tuning_tools(c) -> list[ToolSpec]:
