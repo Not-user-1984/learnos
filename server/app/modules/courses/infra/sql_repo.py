@@ -58,6 +58,31 @@ class CourseRepository:
     def remove_item(self, session: Session, item_id: int) -> None:
         session.execute(delete(course_items).where(course_items.c.id == item_id))
 
+    def set_item_status(self, session: Session, item_id: int, status: str) -> None:
+        """Статус элемента доски курса (B-004)."""
+        session.execute(update(course_items).where(course_items.c.id == item_id).values(status=status))
+
+    def items_by_chapter(self, session: Session, source_id: int, chapter_idx: int) -> list[dict]:
+        """Элементы-главы (source, chapter) во всех курсах — глава закрывается везде (B-004)."""
+        rows = session.execute(
+            select(course_items).where(
+                course_items.c.item_type == "chapter",
+                course_items.c.source_id == source_id,
+                course_items.c.chapter_idx == chapter_idx,
+            )
+        ).all()
+        return [_item_dict(r) for r in rows]
+
+    def renumber(self, session: Session, course_id: int) -> None:
+        """Перенумеровать позиции элементов курса по порядку (после удаления, B-004)."""
+        rows = session.execute(
+            select(course_items.c.id)
+            .where(course_items.c.course_id == course_id)
+            .order_by(course_items.c.position, course_items.c.id)
+        ).all()
+        for pos, (item_id,) in enumerate(rows, 1):
+            session.execute(update(course_items).where(course_items.c.id == item_id).values(position=pos))
+
     def count_items(self, session: Session, course_id: int) -> int:
         return int(
             session.execute(select(func.count()).where(course_items.c.course_id == course_id)).scalar_one()
@@ -107,4 +132,5 @@ def _item_dict(r) -> dict:
         "chapter_idx": r.chapter_idx,
         "block_uid": r.block_uid,
         "note": r.note,
+        "status": r.status,
     }

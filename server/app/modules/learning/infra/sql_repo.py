@@ -133,6 +133,7 @@ def _session_dict(r) -> dict:
         "conversation_id": r.conversation_id,
         "activity_id": r.activity_id,
         "course_id": r.course_id,
+        "course_item_id": r.course_item_id,
         "chapter_idx": r.chapter_idx,
         "idx": r.idx,
         "status": r.status,

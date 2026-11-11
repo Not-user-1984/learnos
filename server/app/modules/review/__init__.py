@@ -23,6 +23,17 @@ class ReviewModule(Module):
         )
         register_agents(c)
 
+    def routers(self, c):
+        from .api import make_router
+
+        return [make_router(c.review)]
+
+    def subscribe(self, bus, c) -> None:
+        from ..learning.events import SessionFinished
+
+        # сессия завершена → повторение урока завтра (B-004)
+        bus.subscribe(SessionFinished.name(), c.review.on_session_finished)
+
     def tools(self, c):
         from .tools import review_tools
 

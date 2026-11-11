@@ -31,6 +31,14 @@ class CoursesModule(Module):
 
         return [make_router(c.courses)]
 
+    def subscribe(self, bus, c) -> None:
+        from ..learning.events import ChapterRead, SessionFinished, SessionStarted
+
+        # доска статусов элементов курса живёт событиями (B-004): learning о курсах не знает
+        bus.subscribe(SessionStarted.name(), c.courses.on_session_started)
+        bus.subscribe(SessionFinished.name(), c.courses.on_session_finished)
+        bus.subscribe(ChapterRead.name(), c.courses.on_chapter_read)
+
     def tools(self, c):
         from .tools import courses_tools
 

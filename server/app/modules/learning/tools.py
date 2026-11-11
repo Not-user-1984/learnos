@@ -18,6 +18,8 @@ class StartSessionArgs(BaseModel):
     course_id: int | None = None
     activity: str | int | None = None
     chapter: int | None = None
+    # элемент доски курса, который закроет сессия (B-004): приходит из контекста курса
+    course_item_id: int | None = None
     config: dict = {}
 
 
@@ -88,7 +90,11 @@ def learning_tools(c) -> list[ToolSpec]:
     def start_session(args: StartSessionArgs, ctx: ToolContext):
         del ctx
         return svc.start_session(
-            course_id=args.course_id, activity_ref=args.activity, chapter_idx=args.chapter, config=args.config
+            course_id=args.course_id,
+            activity_ref=args.activity,
+            chapter_idx=args.chapter,
+            course_item_id=args.course_item_id,
+            config=args.config,
         )
 
     def get_state(args: StateArgs, ctx: ToolContext):

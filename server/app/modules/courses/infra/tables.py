@@ -36,4 +36,6 @@ course_items = Table(
     Column("chapter_idx", Integer),
     Column("block_uid", Text),
     Column("note", Text),
+    # доска курса (B-004): todo → doing → read|done; read = «прочитал сам»
+    Column("status", Text, nullable=False, server_default="todo"),
 )

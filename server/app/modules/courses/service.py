@@ -8,6 +8,7 @@ from ...kernel.asyncio_bridge import run_coro_sync
 from ...kernel.clock import Clock, now_iso
 from ...kernel.errors import Conflict, NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
+from .events import CourseItemStatusChanged
 from .infra.sql_repo import CourseRepository
 
 log = logging.getLogger("learnos.courses")
@@ -160,10 +161,11 @@ class CoursesService:
             return self._out(uow.session, course["id"])
 
     def remove_item(self, ref: str | int, item_id: int) -> dict:
-        """Удалить элемент курса."""
+        """Удалить элемент курса; позиции оставшихся перенумеровываются (B-004)."""
         with self._uow() as uow:
             course = self._repo.get(uow.session, ref)
             self._repo.remove_item(uow.session, item_id)
+            self._repo.renumber(uow.session, course["id"])
             return self._out(uow.session, course["id"])
 
     def count_items_for_block(self, block_uid: str) -> int:
@@ -249,23 +251,110 @@ class CoursesService:
             out["skipped_invalid_uids"] = skipped  # планировщик выдумал — не роняем курс (R-30)
         return out
 
+    # --- петля обучения: доска статусов по событиям (B-004) ---
+
+    def start_item_session(
+        self, ref: str | int, item_id: int, conversation_id: int | None = None, config: dict | None = None
+    ) -> dict:
+        """Сессия по элементу курса: get-or-create активности источника и курсор на главе.
+
+        Сессия получает course_item_id — её финиш закроет элемент доски.
+        """
+        with self._uow() as uow:
+            course = self._repo.get(uow.session, ref)
+            item = self._repo.item(uow.session, item_id)
+            if item["course_id"] != course["id"]:
+                raise NotFound(f"элемент {item_id} не принадлежит курсу '{ref}'")
+            if item["item_type"] == "block":
+                raise ValidationFailed("сессия по блоку не заводится — блок уже есть в базе")
+            activity = self._learning.start_activity(item["source_id"], course_id=course["id"])
+        return self._learning.start_session(
+            course_id=course["id"],
+            activity_ref=activity["id"],
+            chapter_idx=item["chapter_idx"] or activity["cursor_chapter"],
+            conversation_id=conversation_id,
+            config=config,
+            course_item_id=item_id,
+        )
+
+    def on_session_started(self, event) -> None:
+        """SessionStarted → элемент доски в doing (курс становится active)."""
+        for item in self._items_for_event(event):
+            self._set_item_status(item["course_id"], item["id"], "doing")
+
+    def on_session_finished(self, event) -> None:
+        """SessionFinished → элемент доски done (во всех курсах этой главы)."""
+        for item in self._items_for_event(event):
+            self._set_item_status(item["course_id"], item["id"], "done")
+
+    def on_chapter_read(self, event) -> None:
+        """ChapterRead («прочитал сам», quick-разбор) → read, если не done."""
+        for item in self._items_for_event(event):
+            if item["status"] != "done":
+                self._set_item_status(item["course_id"], item["id"], "read")
+
+    def _items_for_event(self, event) -> list[dict]:
+        """Элементы, которых касается событие: точечно по course_item_id, иначе по
+        паре источник/глава — одна и та же глава закрывается во всех курсах."""
+        try:
+            with self._uow() as uow:
+                if getattr(event, "course_item_id", None):
+                    return [self._repo.item(uow.session, event.course_item_id)]
+                if not getattr(event, "source_uid", None) or event.chapter_idx is None:
+                    return []
+                source_id = self._library.get_source(event.source_uid)["id"]
+                return self._repo.items_by_chapter(uow.session, source_id, event.chapter_idx)
+        except NotFound:
+            return []
+
+    def _set_item_status(self, course_id: int, item_id: int, status: str) -> None:
+        """Статус элемента + пересчёт статуса курса + событие (одна транзакция)."""
+        with self._uow() as uow:
+            item = self._repo.item(uow.session, item_id)
+            if item["status"] == status:
+                return
+            self._repo.set_item_status(uow.session, item_id, status)
+            self._recourse_status(uow.session, course_id)
+            uow.emit(CourseItemStatusChanged(course_id=course_id, item_id=item_id, status=status))
+
+    def _recourse_status(self, session, course_id: int) -> None:
+        """Курс: все элементы done|read → done; есть прогресс → active; иначе planned."""
+        statuses = [i["status"] for i in self._repo.items(session, course_id)]
+        new = "planned"
+        if statuses and all(s in {"done", "read"} for s in statuses):
+            new = "done"
+        elif any(s in {"doing", "done", "read"} for s in statuses):
+            new = "active"
+        current = self._repo.get(session, course_id)
+        if current["status"] != new:
+            self._repo.update(session, course_id, status=new, updated_at=now_iso(self._clock))
+
     # --- прогресс ---
 
     def _with_progress(self, session, course: dict, with_items: bool = False) -> dict:
         items = self._repo.items(session, course["id"])
+        # бэкфилл старых курсов (B-004): todo-элемент, фактически пройденный,
+        # получает статус при первом чтении — пересчёт один раз, дальше только статусы
+        changed = False
+        for item in items:
+            if item["status"] == "todo" and self._legacy_item_done(session, item):
+                self._repo.set_item_status(session, item["id"], "done")
+                item["status"] = "done"
+                changed = True
+        if changed:
+            self._recourse_status(session, course["id"])
+            course = self._repo.get(session, course["id"])
         enriched = []
-        done = 0
         for item in items:
             e = {**item}
-            e["done"] = self._item_done(session, item)
-            if e["done"]:
-                done += 1
+            e["done"] = item["status"] in {"done", "read"}
             e["title"], e["hint"] = self._item_title(session, item)
             enriched.append(e)
-        out = {**course, "items_count": len(items), "items_done": done}
+        passed = sum(1 for i in items if i["status"] in {"done", "read"})
+        out = {**course, "items_count": len(items), "items_done": passed}
         if with_items:
             out["items"] = enriched
-            next_item = next((i for i in enriched if not i["done"]), None)
+            next_item = next((i for i in enriched if i["status"] not in {"done", "read"}), None)
             out["next_step"] = (
                 {
                     "item_id": next_item["id"],
@@ -278,8 +367,10 @@ class CoursesService:
             )
         return out
 
-    def _item_done(self, session, item: dict) -> bool:
-        """Элемент пройден: источник — активность done; глава — есть блок по главе; блок — существует."""
+    def _legacy_item_done(self, session, item: dict) -> bool:
+        """Деривационная проверка «элемент пройден» — только для бэкфилла старых курсов
+        (до явных статусов, B-004): источник — активность done; глава — есть блок
+        по главе; блок — существует."""
         if item["item_type"] == "source":
             for act in self._learning.list_activities():
                 if act["source_id"] == item["source_id"] and act["status"] == "done":

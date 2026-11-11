@@ -8,7 +8,7 @@ from ...kernel.db import UnitOfWorkFactory
 from ...kernel.errors import Conflict, InvalidState, NotFound
 from ...kernel.ids import IdGenerator
 from .domain import allowed_events, can_finish, transcript_entry, transition
-from .events import ActivityProgressed, SessionFinished
+from .events import ActivityProgressed, ChapterRead, SessionFinished, SessionStarted
 from .infra.sql_repo import ActivityRepository, SessionRepository
 
 log = logging.getLogger("learnos.learning")
@@ -180,8 +180,13 @@ class LearningService:
         chapter_idx: int | None = None,
         conversation_id: int | None = None,
         config: dict | None = None,
+        course_item_id: int | None = None,
     ) -> dict:
-        """Начать сессию: обязательно course_id или activity."""
+        """Начать сессию: обязательно course_id или activity.
+
+        course_item_id — элемент доски курса, который закрывает сессия (B-004):
+        сохраняется и уходит событием, курсы переводят элемент в doing.
+        """
         if course_id is None and activity_ref is None:
             raise InvalidState("нужен course_id или activity")
         now = now_iso(self._clock)
@@ -199,6 +204,7 @@ class LearningService:
                 conversation_id=conversation_id,
                 activity_id=activity["id"] if activity else None,
                 course_id=course_id,
+                course_item_id=course_item_id,
                 chapter_idx=chapter_idx,
                 idx=idx,
                 status="active",
@@ -206,6 +212,17 @@ class LearningService:
                 config_json=json.dumps(config or {}, ensure_ascii=False),
                 started_at=now,
                 transcript_json="[]",
+            )
+            source_uid = self._source_uid(uow.session, activity["source_id"]) if activity else None
+            uow.emit(
+                SessionStarted(
+                    session_uid=uid,
+                    course_id=course_id,
+                    course_item_id=course_item_id,
+                    activity_uid=activity["uid"] if activity else None,
+                    source_uid=source_uid,
+                    chapter_idx=chapter_idx,
+                )
             )
             return self._state_out(self._sessions.get_by_id(uow.session, session_id))
 
@@ -331,7 +348,18 @@ class LearningService:
                         activity_uid=activity["uid"], cursor_chapter=cursor, total_chapters=total
                     )
                 )
-            uow.emit(SessionFinished(session_uid=s["uid"], block_uid=block["block_uid"]))
+            # курсы закрывают элемент, повторения заводят review_item (B-004)
+            uow.emit(
+                SessionFinished(
+                    session_uid=s["uid"],
+                    block_uid=block["block_uid"],
+                    course_id=s["course_id"],
+                    course_item_id=s.get("course_item_id"),
+                    activity_uid=activity["uid"] if activity else None,
+                    source_uid=self._source_uid(uow.session, activity["source_id"]) if activity else None,
+                    chapter_idx=s["chapter_idx"],
+                )
+            )
         return {
             "ok": True,
             "block_uid": block["block_uid"],
@@ -408,6 +436,15 @@ class LearningService:
             total = self._total_chapters(uow.session, act["source_id"])
             target = chapter if chapter is not None and chapter > 0 else act["cursor_chapter"]
             out = self._advance_cursor(uow, act, target, total, now)
+            # курсы помечают элемент главы read (B-004)
+            uow.emit(
+                ChapterRead(
+                    activity_uid=act["uid"],
+                    source_uid=self._source_uid(uow.session, act["source_id"]),
+                    chapter_idx=target,
+                    course_id=act.get("course_id"),
+                )
+            )
         return {"ok": True, **out}
 
     def mark_read(self, source_ref: str | int, chapter: int) -> dict:
@@ -433,6 +470,15 @@ class LearningService:
                 raise InvalidState(f"номер главы должен быть от 1 до {total}")
             act, _existing = self._find_or_create_activity(uow.session, row, None, now)
             out = self._advance_cursor(uow, act, chapter, total, now)
+            # «прочитал сам» засчитывается элементу курса как read (B-004)
+            uow.emit(
+                ChapterRead(
+                    activity_uid=act["uid"],
+                    source_uid=row.uid,
+                    chapter_idx=chapter,
+                    course_id=act.get("course_id"),
+                )
+            )
         return {"ok": True, **out}
 
     def session_for_conversation(self, conversation_id: int) -> dict | None:
@@ -478,6 +524,27 @@ class LearningService:
             session.execute(select(func.count()).where(chapters.c.source_id == source_id)).scalar_one()
         )
 
+    @staticmethod
+    def _source_uid(session, source_id: int) -> str | None:
+        """uid источника по id (для событий и block_sources)."""
+        from sqlalchemy import select
+
+        from ..library.infra.tables import sources
+
+        return session.execute(select(sources.c.uid).where(sources.c.id == source_id)).scalar()
+
+    @classmethod
+    def _activity_source(cls, session, activity: dict) -> dict | None:
+        """Источник активности: uid и название — для block_sources урока."""
+        from sqlalchemy import select
+
+        from ..library.infra.tables import sources
+
+        row = session.execute(
+            select(sources.c.uid, sources.c.title).where(sources.c.id == activity["source_id"])
+        ).first()
+        return {"uid": row.uid, "title": row.title} if row else None
+
     def _advance_cursor(self, uow, act: dict, target: int, total: int, now: str) -> dict:
         """Курсор активности вперёд до target+1 (не назад); выход за total завершает."""
         cursor = max(act["cursor_chapter"], target + 1)
@@ -498,8 +565,24 @@ class LearningService:
         return self._sessions.get_by_uid(session, str(ref))
 
     def _write_block(self, s: dict, draft: dict | None) -> dict:
-        """Блок из явного драфта или генерация из транскрипта."""
+        """Блок из явного драфта или генерация из транскрипта.
+
+        Блок несёт источник главы (block_sources) и активность (B-004): без этого
+        элемент курса типа chapter никогда не закрывался.
+        """
+        from dataclasses import replace
+
+        from ..knowledge.domain import BlockSource
         from ..knowledge.schemas import BlockDraftIn
+
+        with self._uow() as uow:
+            activity = self._acts.find(uow.session, s["activity_id"]) if s["activity_id"] else None
+            src = self._activity_source(uow.session, activity) if activity else None
+        extra_sources = (
+            (BlockSource(source=src["uid"], chapter=s["chapter_idx"], title=src["title"]),)
+            if src and s.get("chapter_idx")
+            else ()
+        )
 
         # блок из сессии — «проговорённое знание» (R-18): отличаем от конспекта
         if draft:
@@ -507,17 +590,25 @@ class LearningService:
             domain_draft = draft_in.to_domain()
             if not domain_draft.category_suggestion:
                 domain_draft = self._knowledge.categorize_draft(domain_draft)
+            if extra_sources and not domain_draft.sources:
+                domain_draft = replace(domain_draft, sources=extra_sources)
             block = self._knowledge.save_block(
                 domain_draft,
                 session_uid=s["uid"],
-                activity_uid=None,
+                activity_uid=activity["uid"] if activity else None,
                 category_status="confirmed",
                 verified=True,
             )
         else:
             generated = self._knowledge.generate_from_transcript(s)
+            if extra_sources and not generated.sources:
+                generated = replace(generated, sources=extra_sources)
             block = self._knowledge.save_block(
-                generated, session_uid=s["uid"], category_status="confirmed", verified=True
+                generated,
+                session_uid=s["uid"],
+                activity_uid=activity["uid"] if activity else None,
+                category_status="confirmed",
+                verified=True,
             )
         return {
             "block_uid": block.meta.uid,
@@ -552,6 +643,7 @@ class LearningService:
             "session_id": s["id"],
             "session_uid": s["uid"],
             "course_id": s["course_id"],
+            "course_item_id": s.get("course_item_id"),
             "activity_id": s["activity_id"],
             "chapter_idx": s["chapter_idx"],
             "idx": s["idx"],

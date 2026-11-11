@@ -19,6 +19,12 @@ class PlanConfirm(BaseModel):
     plan: dict
 
 
+class ItemSessionIn(BaseModel):
+    """Сессия по элементу курса (B-004): закроет элемент при финишe."""
+
+    config: dict = {}
+
+
 def make_router(svc) -> APIRouter:
     """Роуты курсов."""
     r = APIRouter(prefix="/courses", tags=["courses"])
@@ -58,6 +64,11 @@ def make_router(svc) -> APIRouter:
     @r.delete("/{ref}/items/{item_id}")
     def remove_item(ref: str, item_id: int):
         return svc.remove_item(ref, item_id)
+
+    @r.post("/{ref}/items/{item_id}/session")
+    def start_item_session(ref: str, item_id: int, body: ItemSessionIn | None = None):
+        """Начать сессию по элементу доски курса (B-004): финиш закроет элемент."""
+        return svc.start_item_session(ref, item_id, config=(body.config if body else None))
 
     @r.post("/{ref}/reorder")
     def reorder(ref: str, body: ReorderIn):

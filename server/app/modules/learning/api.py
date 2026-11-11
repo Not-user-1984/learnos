@@ -24,6 +24,7 @@ class SessionIn(BaseModel):
     course_id: int | None = None
     activity: str | int | None = None
     chapter: int | None = None
+    course_item_id: int | None = None
     config: dict = {}
 
 
@@ -65,7 +66,11 @@ def make_router(svc) -> APIRouter:
         if body.course_id is None and course_id is not None:
             body.course_id = course_id
         return svc.start_session(
-            course_id=body.course_id, activity_ref=body.activity, chapter_idx=body.chapter, config=body.config
+            course_id=body.course_id,
+            activity_ref=body.activity,
+            chapter_idx=body.chapter,
+            course_item_id=body.course_item_id,
+            config=body.config,
         )
 
     @r.get("/sessions/{ref}")

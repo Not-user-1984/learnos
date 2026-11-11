@@ -88,3 +88,9 @@ forbidden_modules = ["app.modules.*.infra", "app.modules.*.api", "app.modules.*.
 name = "Модули не импортируют infra друг друга"
 type = "independence"
 modules = ["app.modules.*.infra"]
+
+[[tool.importlinter.contracts]]
+name = "Learning не зависит от курсов и повторений"
+type = "forbidden"
+source_modules = ["app.modules.learning"]
+forbidden_modules = ["app.modules.courses", "app.modules.review"]

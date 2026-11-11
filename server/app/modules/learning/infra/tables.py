@@ -33,6 +33,8 @@ sessions = Table(
     Column("conversation_id", Integer, ForeignKey("conversations.id")),
     Column("activity_id", Integer, ForeignKey("activities.id")),
     Column("course_id", Integer, ForeignKey("courses.id")),
+    # какой элемент курса закрывает сессия (B-004); без FK — курс может уйти каскадом
+    Column("course_item_id", Integer),
     Column("chapter_idx", Integer),
     Column("idx", Integer, nullable=False),
     Column("status", Text, nullable=False, server_default="active"),

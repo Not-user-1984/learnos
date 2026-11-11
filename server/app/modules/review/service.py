@@ -42,6 +42,40 @@ class ReviewService:
                         updated_at=now_iso(self._clock),
                     )
 
+    def on_session_finished(self, event) -> None:
+        """SessionFinished → review_item блока урока с due_at = завтра (B-004).
+
+        Идемпотентно: существующий прогресс повторения не перезаписывается.
+        """
+        with self._uow() as uow:
+            if self._repo.get(uow.session, event.block_uid) is not None:
+                return
+            due = (self._clock.now() + timedelta(days=1)).isoformat(timespec="seconds")
+            self._repo.upsert(
+                uow.session,
+                block_uid=event.block_uid,
+                ease=25,
+                interval_days=1,
+                due_at=due,
+                reps=0,
+                updated_at=now_iso(self._clock),
+            )
+
+    def stats(self) -> dict:
+        """Сводка повторений для дашборда (B-004/B-005): назрело, просрочено, всего."""
+        self.ensure_items()
+        now = now_iso(self._clock)
+        today_start = (
+            self._clock.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat(timespec="seconds")
+        )
+        with self._uow() as uow:
+            items = self._repo.all(uow.session)
+        return {
+            "due_today": sum(1 for i in items if str(i["due_at"] or "") <= now),
+            "overdue": sum(1 for i in items if str(i["due_at"] or "") < today_start),
+            "total": len(items),
+        }
+
     def queue(self, limit: int = 2) -> list[dict]:
         """Очередь на день: сначала слабые, затем созревшие."""
         self.ensure_items()
