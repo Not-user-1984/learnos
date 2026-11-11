@@ -167,6 +167,7 @@ repo_scout = AgentSpec(
             "send_telegram_text",
             "web_search",
             "web_read",
+            "create_task_file",
         }
     ),
     max_steps=30,

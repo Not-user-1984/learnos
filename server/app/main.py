@@ -1,7 +1,7 @@
 """Точка входа FastAPI: create_app(), REST, MCP (/mcp и /mcp/<module>), lifespan."""
 
+import asyncio
 import logging
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -93,7 +93,16 @@ def migrate_db(container) -> None:
     command.upgrade(alembic_cfg, "head")
 
 
-@asynccontextmanager
+async def _scheduler_loop(container) -> None:
+    """Тик планировщика раз в минуту (B-010); ошибка тика не роняет цикл."""
+    while True:
+        try:
+            await asyncio.to_thread(container.scheduler.tick)
+        except Exception:  # noqa: BLE001 — цикл живёт
+            log.exception("scheduler tick упал")
+        await asyncio.sleep(60)
+
+
 async def lifespan(app: FastAPI):
     """Старт: миграции, FTS, категории по умолчанию, кастомные агенты, воркер jobs, MCP-сессии."""
     container = app.state.container
@@ -112,6 +121,8 @@ async def lifespan(app: FastAPI):
         uow.session.execute(text("SELECT 1"))
         ensure_fts(uow.session)
     container.knowledge.ensure_categories_default()
+    if container.scheduler is not None:
+        container.scheduler.ensure_defaults()  # расписание по умолчанию (B-010)
     if container.tuning is not None:
         loaded = container.tuning.load_custom_agents()
         if loaded:
@@ -125,6 +136,9 @@ async def lifespan(app: FastAPI):
     if worker is not None:
         await worker.start()
 
+    # планировщик (B-010): тик раз в минуту; дефолты выключены (квота GLM)
+    scheduler_task = asyncio.create_task(_scheduler_loop(container))
+
     managers = []
     for server in app.state.mcp_servers.values():
         cm = server.session_manager.run()
@@ -133,6 +147,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        scheduler_task.cancel()
         if worker is not None:
             await worker.stop()
         for cm in managers:

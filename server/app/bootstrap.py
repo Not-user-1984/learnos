@@ -25,9 +25,11 @@ from .modules.library import LibraryModule
 from .modules.mcpext import McpExtModule
 from .modules.messenger import MessengerModule
 from .modules.profile import ProfileModule
+from .modules.proposals import ProposalsModule
 from .modules.research import ResearchModule
 from .modules.review import ReviewModule
 from .modules.revision import RevisionModule
+from .modules.scheduler import SchedulerModule
 from .modules.search import SearchModule
 from .modules.skills import SkillsModule
 from .modules.today import TodayModule
@@ -54,6 +56,8 @@ MODULES = [
     TuningModule(),
     McpExtModule(),
     RevisionModule(),
+    SchedulerModule(),
+    ProposalsModule(),
 ]
 
 
@@ -87,6 +91,8 @@ class Container:
     review: object | None = None
     today: object | None = None
     brain: object | None = None
+    scheduler: object | None = None
+    proposals: object | None = None
     messenger: object | None = None
     tuning: object | None = None
     mcpext: object | None = None

@@ -13,4 +13,4 @@
 | B-007 | review | [MCP «второй мозг»: capture/context, inbox, idempotency, описания](B-007-mcp-brain/plan.md) | 2026-11-11 |
 | B-008 | review | [Гибридный поиск FTS + sqlite-vec (после B-007)](B-008-semantic-search/plan.md) | 2026-11-11 |
 | B-009 | review | [Архитектура: порты, разрез god-сервисов (после B-003, B-004)](B-009-arch-ports-split/plan.md) | 2026-11-11 |
-| B-010 | todo | [Самоулучшение: планировщик, предложения агентов, напоминания (после B-004)](B-010-self-improve-loop/plan.md) | 2026-11-11 |
+| B-010 | review | [Самоулучшение: планировщик, предложения агентов, напоминания (после B-004)](B-010-self-improve-loop/plan.md) | 2026-11-11 |

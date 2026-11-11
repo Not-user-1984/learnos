@@ -9,6 +9,7 @@ import { MaintenanceActions } from "@/components/settings/maintenance";
 import { TelegramTestButton } from "@/components/settings/integrations";
 import { ConnectivitySettings } from "@/components/settings/connectivity";
 import { LlmSettings } from "@/components/settings/llm-settings";
+import { SchedulesSettings } from "@/components/settings/schedules";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,8 @@ export default async function SettingsPage() {
           </p>
           <AgentsSettings />
         </section>
+
+        <SchedulesSettings />
 
         <section className="rounded-2xl border bg-card p-6">
           <h2 className="font-medium">Сторонние MCP</h2>

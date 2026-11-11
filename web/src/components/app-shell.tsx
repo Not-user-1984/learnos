@@ -20,6 +20,7 @@ const NAV = [
   { href: "/kb", label: "База знаний", icon: "psychology" },
   { href: "/library", label: "Библиотека", icon: "collections_bookmark" },
   { href: "/courses", label: "Курсы", icon: "school" },
+  { href: "/proposals", label: "Предложения", icon: "lightbulb" },
   { href: "/review", label: "Повторения", icon: "replay" },
   { href: "/settings", label: "Настройки", icon: "settings" },
 ];
