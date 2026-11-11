@@ -48,6 +48,13 @@ class SessionRepository:
             session.execute(select(func.count()).where(sessions.c.course_id == course_id)).scalar_one()
         )
 
+    def list_active(self, session: Session, limit: int = 10) -> list[dict]:
+        """Незакрытые сессии, свежие первыми — дашборд «Сегодня» (B-005)."""
+        rows = session.execute(
+            select(sessions).where(sessions.c.status == "active").order_by(sessions.c.id.desc()).limit(limit)
+        ).all()
+        return [_session_dict(r) for r in rows]
+
     def count_for_activity(self, session: Session, activity_id: int) -> int:
         """Число сессий активности (для запрета удаления активности)."""
         return int(

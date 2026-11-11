@@ -29,6 +29,7 @@ from .modules.review import ReviewModule
 from .modules.revision import RevisionModule
 from .modules.search import SearchModule
 from .modules.skills import SkillsModule
+from .modules.today import TodayModule
 from .modules.tuning import TuningModule
 
 log = logging.getLogger("learnos.bootstrap")
@@ -46,6 +47,7 @@ MODULES = [
     SearchModule(),
     ExportModule(),
     ReviewModule(),
+    TodayModule(),
     MessengerModule(),
     TuningModule(),
     McpExtModule(),
@@ -81,6 +83,7 @@ class Container:
     search: object | None = None
     export: object | None = None
     review: object | None = None
+    today: object | None = None
     messenger: object | None = None
     tuning: object | None = None
     mcpext: object | None = None

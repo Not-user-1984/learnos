@@ -1,8 +1,8 @@
-import KbPage from "./kb/page";
+import TodayPage from "./today/page";
 
 export const dynamic = "force-dynamic";
 
-/** Корень сразу рендерит базу знаний (серверный редирект ломался во встроенном браузере). */
+/** Корень — дашборд «Сегодня» (B-005): что делать дальше одной кнопкой. */
 export default function Home() {
-  return <KbPage searchParams={Promise.resolve({})} />;
+  return <TodayPage />;
 }

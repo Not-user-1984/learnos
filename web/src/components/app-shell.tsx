@@ -15,10 +15,12 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const NAV = [
+  { href: "/today", label: "Сегодня", icon: "today" },
   { href: "/chat", label: "Чат", icon: "chat" },
   { href: "/kb", label: "База знаний", icon: "psychology" },
   { href: "/library", label: "Библиотека", icon: "collections_bookmark" },
   { href: "/courses", label: "Курсы", icon: "school" },
+  { href: "/review", label: "Повторения", icon: "replay" },
   { href: "/settings", label: "Настройки", icon: "settings" },
 ];
 
@@ -28,10 +30,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [recent, setRecent] = useState<ConversationItem[]>([]);
   const [inbox, setInbox] = useState<number | null>(null);
+  const [dueReviews, setDueReviews] = useState<number | null>(null);
 
   useEffect(() => {
     api<ConversationItem[]>("/conversations").then((c) => setRecent(c.slice(0, 5))).catch(() => setRecent([]));
     api<BlockCard[]>("/kb/inbox").then((b) => setInbox(b.length)).catch(() => setInbox(null));
+    api<{ due_today: number }>("/review/stats")
+      .then((s) => setDueReviews(s.due_today))
+      .catch(() => setDueReviews(null));
   }, [pathname]);
 
   const nav = (
@@ -55,6 +61,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="ml-auto flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs text-primary">
                 <Icon name="inbox" size={12} />
                 {inbox}
+              </span>
+            )}
+            {!collapsed && href === "/review" && dueReviews !== null && dueReviews > 0 && (
+              <span className="ml-auto flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs text-primary">
+                <Icon name="replay" size={12} />
+                {dueReviews}
               </span>
             )}
           </Link>

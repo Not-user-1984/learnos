@@ -24,6 +24,12 @@ class ConversationRepository:
             raise NotFound(f"разговор '{uid}' не найден")
         return _conv_dict(row)
 
+    def get_by_id(self, session: Session, conversation_id: int) -> dict:
+        row = session.execute(select(conversations).where(conversations.c.id == conversation_id)).first()
+        if row is None:
+            raise NotFound(f"разговор {conversation_id} не найден")
+        return _conv_dict(row)
+
     def list(
         self,
         session: Session,

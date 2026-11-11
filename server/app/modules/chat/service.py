@@ -279,6 +279,11 @@ class ChatService:
         with self._uow() as uow:
             return self._convs.get(uow.session, uid).get("activity_id")
 
+    def conversation_uid(self, conversation_id: int) -> str | None:
+        """uid разговора по id (для дашборда «Сегодня», B-005)."""
+        with self._uow() as uow:
+            return self._convs.get_by_id(uow.session, conversation_id)["uid"]
+
     def detach_activities(self, activity_ids: list[int]) -> None:
         """Отвязать разговоры от активностей источника (при удалении источника история остаётся)."""
         if not activity_ids:

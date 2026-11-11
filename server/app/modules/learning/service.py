@@ -487,6 +487,11 @@ class LearningService:
             s = self._sessions.find_by_conversation(uow.session, conversation_id)
             return self._state_out(s) if s else None
 
+    def active_sessions(self) -> list[dict]:
+        """Незакрытые сессии (свежие первыми) — для дашборда «Сегодня» (B-005)."""
+        with self._uow() as uow:
+            return [self._state_out(s) for s in self._sessions.list_active(uow.session)]
+
     # --- внутреннее ---
 
     def _find_or_create_activity(
@@ -644,6 +649,7 @@ class LearningService:
             "session_uid": s["uid"],
             "course_id": s["course_id"],
             "course_item_id": s.get("course_item_id"),
+            "conversation_id": s.get("conversation_id"),
             "activity_id": s["activity_id"],
             "chapter_idx": s["chapter_idx"],
             "idx": s["idx"],

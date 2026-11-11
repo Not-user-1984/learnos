@@ -29,7 +29,7 @@ class CoursesModule(Module):
     def routers(self, c):
         from .api import make_router
 
-        return [make_router(c.courses)]
+        return [make_router(c.courses, chat=c.chat)]
 
     def subscribe(self, bus, c) -> None:
         from ..learning.events import ChapterRead, SessionFinished, SessionStarted

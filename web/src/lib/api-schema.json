@@ -3030,6 +3030,56 @@
         }
       }
     },
+    "/api/courses/{ref}/items/{item_id}/start": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Start Item",
+        "description": "Сессия по элементу в новом разговоре session-режима (B-005): вернуть uid.",
+        "operationId": "start_item_api_courses__ref__items__item_id__start_post",
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ref"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/courses/{ref}/reorder": {
       "post": {
         "tags": [
@@ -3273,6 +3323,26 @@
         "summary": "Stats",
         "description": "Сводка: due_today / overdue / total — для дашборда и бейджа.",
         "operationId": "stats_api_review_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/today": {
+      "get": {
+        "tags": [
+          "today"
+        ],
+        "summary": "Snapshot",
+        "description": "Снимок дня: сессия, курсы, чтение, повторения, входящие, источники.",
+        "operationId": "snapshot_api_today_get",
         "responses": {
           "200": {
             "description": "Successful Response",

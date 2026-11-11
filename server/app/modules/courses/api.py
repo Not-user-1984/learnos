@@ -25,8 +25,8 @@ class ItemSessionIn(BaseModel):
     config: dict = {}
 
 
-def make_router(svc) -> APIRouter:
-    """Роуты курсов."""
+def make_router(svc, chat=None) -> APIRouter:
+    """Роуты курсов; chat — создание разговора для сессии по элементу (B-005)."""
     r = APIRouter(prefix="/courses", tags=["courses"])
 
     @r.get("")
@@ -69,6 +69,11 @@ def make_router(svc) -> APIRouter:
     def start_item_session(ref: str, item_id: int, body: ItemSessionIn | None = None):
         """Начать сессию по элементу доски курса (B-004): финиш закроет элемент."""
         return svc.start_item_session(ref, item_id, config=(body.config if body else None))
+
+    @r.post("/{ref}/items/{item_id}/start")
+    def start_item(ref: str, item_id: int):
+        """Сессия по элементу в новом разговоре session-режима (B-005): вернуть uid."""
+        return svc.start_item_conversation(ref, item_id, chat)
 
     @r.post("/{ref}/reorder")
     def reorder(ref: str, body: ReorderIn):

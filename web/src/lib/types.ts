@@ -163,9 +163,11 @@ export type CourseItem = {
   id: number;
   item_type: string;
   source_id: number | null;
+  source_uid?: string | null;
   chapter_idx: number | null;
   block_uid: string | null;
   note: string | null;
+  status: string;
   done: boolean;
   title: string;
   hint: string;
@@ -181,6 +183,44 @@ export type Course = {
   items_done: number;
   items?: CourseItem[];
   next_step?: { item_id: number; item_type: string; title: string; hint: string } | null;
+};
+
+/** Снимок «Сегодня» (GET /api/today, B-005): что делать дальше. */
+export type TodaySnapshot = {
+  active_session: {
+    session_uid: string;
+    conversation_uid: string | null;
+    chapter_idx: number | null;
+    started_at: string;
+  } | null;
+  next_course_items: {
+    course_uid: string;
+    course_title: string;
+    item_id: number;
+    item_type: string;
+    title: string;
+    hint: string;
+  }[];
+  reading: {
+    activity_uid: string;
+    source_uid: string;
+    title: string;
+    cursor_chapter: number;
+    total_chapters: number;
+  }[];
+  review: { due_today: number };
+  inbox_count: number;
+  sources_attention: { source_uid: string; title: string; status: string; last_error: string | null }[];
+};
+
+/** Элемент очереди повторений (GET /api/review/queue). */
+export type ReviewQueueItem = {
+  block_uid: string;
+  title: string;
+  due_at: string;
+  reps: number;
+  interval_days: number;
+  weak_spots_count: number;
 };
 
 export type Profile = {

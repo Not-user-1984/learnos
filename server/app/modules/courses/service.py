@@ -277,6 +277,13 @@ class CoursesService:
             course_item_id=item_id,
         )
 
+    def start_item_conversation(self, ref: str | int, item_id: int, chat) -> dict:
+        """Разговор session-режима + сессия по элементу курса (B-005): web уходит
+        в чат, агент-тьютор ведёт урок, финиш закроет элемент доски."""
+        conv = chat.create_conversation(mode="session")
+        session = self.start_item_session(ref, item_id, conversation_id=conv["id"])
+        return {"conversation_uid": conv["uid"], "session_uid": session["session_uid"]}
+
     def on_session_started(self, event) -> None:
         """SessionStarted → элемент доски в doing (курс становится active)."""
         for item in self._items_for_event(event):
@@ -349,6 +356,9 @@ class CoursesService:
             e = {**item}
             e["done"] = item["status"] in {"done", "read"}
             e["title"], e["hint"] = self._item_title(session, item)
+            if item.get("source_id"):
+                # uid источника — для кнопок «Читать»/«Прочитал сам» (B-005)
+                e["source_uid"] = self._repo_source_uid(session, item["source_id"])
             enriched.append(e)
         passed = sum(1 for i in items if i["status"] in {"done", "read"})
         out = {**course, "items_count": len(items), "items_done": passed}
