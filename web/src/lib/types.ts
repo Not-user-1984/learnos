@@ -44,6 +44,8 @@ export type SourceCard = {
   summary: string | null;
   chapters_count: number;
   meta: Record<string, unknown>;
+  /** Ошибка последней обработки — только у failed-источников (B-001). */
+  last_error?: string | null;
 };
 
 export type ChapterCard = {

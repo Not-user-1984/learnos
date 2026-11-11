@@ -114,6 +114,7 @@ class LibraryService:
         """Обзор источника + главы."""
         with self._uow() as uow:
             src = self._sources.get(uow.session, ref)
+            src["last_error"] = self._source_last_error(uow.session, src)
             src["chapters"] = [
                 {
                     k: ch[k]
@@ -142,7 +143,14 @@ class LibraryService:
             items = self._sources.list(uow.session, kind=kind, q=q)
             for s in items:
                 s["chapters_count"] = self._chapters.count(uow.session, s["id"])
+                s["last_error"] = self._source_last_error(uow.session, s)
             return items
+
+    def _source_last_error(self, session, src: dict) -> str | None:
+        """Ошибка последней обработки — только у failed-источников (B-001)."""
+        if src.get("status") != "failed":
+            return None
+        return self._jobs.last_error(session, target=src["uid"])
 
     def delete_source(self, ref: str | int) -> dict:
         """Удалить источник; запрещено, если по нему есть блоки. Файлы удаляются тоже.

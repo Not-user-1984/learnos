@@ -107,6 +107,11 @@ export function LibraryBrowser({ sources }: { sources: SourceCard[] }) {
                         </>
                       )}
                     </p>
+                    {s.status === "failed" && s.last_error && (
+                      <p className="line-clamp-2 text-xs text-muted-foreground" title={s.last_error}>
+                        {s.last_error}
+                      </p>
+                    )}
                   </div>
                 </Link>
                 <ConfirmDeleteButton

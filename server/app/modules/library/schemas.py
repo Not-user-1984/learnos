@@ -43,6 +43,7 @@ class SourceCard(BaseModel):
     summary: str | None = None
     chapters_count: int = 0
     meta: dict = {}
+    last_error: str | None = None
 
 
 class ChapterCard(BaseModel):

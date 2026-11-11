@@ -103,6 +103,7 @@ def make_router(svc) -> APIRouter:
             summary=s.get("summary"),
             meta=s.get("meta", {}),
             chapters_count=s.get("chapters_count", 0),
+            last_error=s.get("last_error"),
         )
 
     return r

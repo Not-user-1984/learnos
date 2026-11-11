@@ -62,10 +62,46 @@ def _flush_cue(cue: list, seen: set, out: list) -> None:
         out.append(text)
 
 
+# Оригинальные автодорожки (xx-orig) приоритетнее переводов (tlang): переводы
+# YouTube режет 429, а без --ignore-errors yt-dlp прерывается на первой ошибке.
+SUB_LANGS = "ru-orig,en-orig,ru,en"
+_SUB_PRIORITY = ("ru-orig", "en-orig", "ru", "en")
+
+
+def _video_id_from_url(url: str) -> str | None:
+    """ID видео из ссылки (watch/youtu.be/shorts/live) — для чистки старых файлов."""
+    m = re.search(r"(?:[?&]v=|youtu\.be/|shorts/|live/)([A-Za-z0-9_-]{11})", url)
+    return m.group(1) if m else None
+
+
+def _pick_sub(paths: list[Path]) -> Path | None:
+    """Выбор дорожки: сначала оригиналы (ru → en), затем остальные (ru → en).
+
+    Ручная и переводная дорожки неотличимы по имени файла (обе ID.ru.vtt),
+    поэтому любой *-orig впереди: если оригинал есть, остальные — переводы.
+    """
+    by_lang: dict[str, Path] = {}
+    for p in paths:
+        parts = p.name.split(".")
+        if len(parts) >= 3:  # <video_id>.<lang>.<vtt|srt>
+            by_lang.setdefault(parts[-2], p)
+    for lang in _SUB_PRIORITY:
+        if lang in by_lang:
+            return by_lang[lang]
+    return None
+
+
 def main(url: str) -> dict:
     out_dir = DATA_DIR / "youtube"
     out_dir.mkdir(parents=True, exist_ok=True)
     tmpl = str(out_dir / "%(id)s.%(ext)s")
+
+    # частичные файлы прошлых попыток не должны попасть в выбор дорожки
+    stale_id = _video_id_from_url(url)
+    if stale_id:
+        for old in out_dir.glob(f"{stale_id}.*"):
+            if old.suffix in (".vtt", ".srt"):
+                old.unlink(missing_ok=True)
 
     cmd = [
         "yt-dlp",
@@ -73,7 +109,8 @@ def main(url: str) -> dict:
         "--write-subs",
         "--write-auto-subs",
         "--sub-langs",
-        "ru,en",
+        SUB_LANGS,
+        "--ignore-errors",
         "--sub-format",
         "vtt/srt/best",
         "--print",
@@ -98,15 +135,21 @@ def main(url: str) -> dict:
     # успех = есть хоть один файл субтитров (код возврата бывает ненулевым,
     # когда один из языков упал на 429, а остальные скачались)
     subs = sorted(out_dir.glob(f"{video_id}.*.vtt")) + sorted(out_dir.glob(f"{video_id}.*.srt"))
-    if not subs:
+    picked = _pick_sub(subs)
+    if picked is None:
+        stderr_tail = (proc.stderr or "").strip()[-200:]
+        if "429" in (proc.stderr or ""):
+            base = "YouTube ограничил запросы (429), повторите позже"
+        else:
+            base = f"субтитры не найдены ({SUB_LANGS}), Whisper-fallback не реализован"
         return {
-            "error": "субтитры не найдены (ru/en), Whisper-fallback не реализован",
+            "error": f"{base} | {stderr_tail}" if stderr_tail else base,
             "video_id": video_id,
             "title": title,
             "stderr": (proc.stderr or "")[-200:],
         }
 
-    raw = subs[0].read_text(encoding="utf-8", errors="replace")
+    raw = picked.read_text(encoding="utf-8", errors="replace")
     text = _parse_vtt(raw)
     md_path = out_dir / f"{video_id}.md"
     md_path.write_text(f"# {title}\n\nИсточник: {url}\n\n{text}\n", encoding="utf-8")
@@ -114,7 +157,8 @@ def main(url: str) -> dict:
         "ok": True,
         "video_id": video_id,
         "title": title,
-        "lang": subs[0].suffixes[0].lstrip("."),
+        # en-orig → en: пользователь видит язык видео, а не служебный суффикс
+        "lang": picked.name.split(".")[-2].removesuffix("-orig"),
         "chars": len(text),
         "path": str(md_path),
         "preview": text[:500],

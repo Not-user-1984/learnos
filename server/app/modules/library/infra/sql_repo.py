@@ -122,6 +122,16 @@ class JobRepository:
     def update(self, session: Session, job_id: int, **values) -> None:
         session.execute(update(jobs).where(jobs.c.id == job_id).values(**values))
 
+    def last_error(self, session: Session, *, target: str, kind: str = "process_source") -> str | None:
+        """Ошибка последнего failed job обработки источника (показ в UI, B-001)."""
+        row = session.execute(
+            select(jobs.c.error)
+            .where(jobs.c.target == target, jobs.c.kind == kind, jobs.c.status == "failed")
+            .order_by(jobs.c.id.desc())
+            .limit(1)
+        ).first()
+        return row[0] if row else None
+
 
 def _source_dict(r) -> dict:
     return {
