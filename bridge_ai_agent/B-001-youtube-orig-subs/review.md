@@ -40,3 +40,10 @@
    CT на новом коммите. Статус B-001 → review, отчёт дописать в report.md.
 
 Проверки: `cd web && npm run lint && npx tsc --noEmit && npm run build`.
+
+## Раунд 3 — 2026-11-11 · вердикт: **done**
+
+- `1556fd8`: `rose-500` → `destructive` в трёх местах, градиент не тронут; путь к логу убран из AGENTS/README/ci-cd. Точно по заданию.
+- `origin/main` = `007cc0a`, health прода OK (worker running, 4 ключа LLM). `bah-bah-report.md` не закоммичен — верно.
+- **minor** `opencode.log` обёртки снова оставлен в папке задачи (untracked; в раунде 1 его случайно закоммитили).
+  Нужно `bridge_ai_agent/**/opencode.log` в `.gitignore` проекта и в шаблон bridge.

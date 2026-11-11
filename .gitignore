@@ -17,3 +17,5 @@ server/htmlcov/
 server/dist/
 # знания — отдельный git-репо на проде (D аудита), не в коде
 kb/
+# логи исполнителя glm exec
+bridge_ai_agent/**/opencode.log
