@@ -89,7 +89,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
         )}
 
         {source.status === "failed" && source.last_error && (
-          <p className="mb-5 rounded-xl border border-rose-500/30 bg-rose-500/5 p-3 text-xs leading-relaxed text-muted-foreground">
+          <p className="mb-5 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs leading-relaxed text-muted-foreground">
             {source.last_error}
           </p>
         )}

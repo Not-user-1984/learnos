@@ -136,8 +136,7 @@
 ## 8. Как проверить схему руками
 
 - статус Actions: `https://github.com/Not-user-1984/learnos/actions`
-- журнал деплоя на CT: `journalctl -u learnos-deploy.service`,
-  `/var/log/learnos-deploy.log`
+- журнал деплоя на CT: `journalctl -u learnos-deploy.service`
 - ручной запуск: `systemctl start learnos-deploy.service`
 - прод: `curl http://192.168.0.132:8765/api/health` (200 без токена),
   остальные эндпоинты — 401 без `Authorization: Bearer`

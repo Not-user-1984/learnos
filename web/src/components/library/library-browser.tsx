@@ -24,7 +24,7 @@ const STATUS_VIEW: Record<string, { label: string; cls: string }> = {
   processing: { label: "обрабатывается…", cls: "text-amber-500" },
   chosen: { label: "не обработана", cls: "text-muted-foreground" },
   found: { label: "найдена, не обработана", cls: "text-muted-foreground" },
-  failed: { label: "ошибка обработки", cls: "text-rose-500" },
+  failed: { label: "ошибка обработки", cls: "text-destructive" },
 };
 
 const STATUS_ORDER: Record<string, number> = { processed: 0, processing: 1, chosen: 2, found: 2, failed: 3 };
@@ -121,7 +121,7 @@ export function LibraryBrowser({ sources }: { sources: SourceCard[] }) {
                   description="Уйдут главы и файлы источника из библиотеки. Разговоры и блоки базы знаний останутся — если по источнику есть блоки, удаление будет запрещено."
                   successMessage="Источник удалён"
                   className="absolute right-2 top-2 opacity-0 transition group-hover:opacity-100"
-                  buttonClassName="rounded-lg bg-background/60 p-1.5 text-muted-foreground backdrop-blur transition hover:text-rose-500"
+                  buttonClassName="rounded-lg bg-background/60 p-1.5 text-muted-foreground backdrop-blur transition hover:text-destructive"
                 />
               </div>
             );

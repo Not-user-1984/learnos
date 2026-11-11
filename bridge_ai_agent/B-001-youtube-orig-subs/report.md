@@ -94,3 +94,33 @@
 
 - Подтвердить решение «last_error только при `status == failed`» (история jobs игнорируется
   для остальных статусов) — так в плане, но тест закрепляет это явно.
+
+## Раунд 2 (fix от 2026-11-11) — закрыт
+
+**Изменения**
+
+- `web/src/app/library/[uid]/page.tsx:92` — плашка last_error: `border-rose-500/30
+  bg-rose-500/5` → `border-destructive/30 bg-destructive/5`.
+- `web/src/components/library/library-browser.tsx` — статус failed `:27`:
+  `text-rose-500` → `text-destructive`; hover удаления `:124`:
+  `hover:text-rose-500` → `hover:text-destructive`. Градиент карточки видео `:91`
+  не тронут (декоративный, так и велено).
+- `AGENTS.md`, `README.md` — убрано упоминание `/var/log/learnos-deploy.log`
+  (файла на CT нет), оставлен `journalctl -u learnos-deploy.service`.
+- `task_ai/reference/ci-cd-architecture.md:139` — та же правка. Выходит за букву
+  раунда 2 (там только AGENTS/README), но это тот же несуществующий лог в доке,
+  которую читают перед изменением деплоя; оставлять одну ссылку ложной не стал.
+  Решение в духе плана — если ревьюер не согласен, откатить коммитом.
+
+**Проверки**
+
+- `cd web && npm run lint && npx tsc --noEmit && npm run build` — зелёные.
+- Серверные проверки (ruff/format/lint-imports/pytest) — прогнаны перед пушем
+  (серверный код не менялся, но push запускает CI-гейт на CT).
+
+**Прочее**
+
+- `task_ai/bah-bah-report.md` — правка пользователя, в коммит не включена.
+- `bridge_ai_agent/B-001-youtube-orig-subs/opencode.log` — лог сессии, не коммитится
+  (в раунде 1 его уже случайно закоммитили и убрали в `768a718`); в .gitignore
+  не добавлял — вне скоупа раунда.

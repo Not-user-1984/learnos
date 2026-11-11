@@ -71,7 +71,7 @@ Next.js App Router, TS strict, Tailwind + shadcn-подход, PWA. Дизайн
 ## Развертывание (прод)
 
 - **CT 132 `learnos`** на Proxmox (4c/6G/30G SSD256, docker compose внутри): web `:3000`, api `:8765`.
-- **Разработка = git push**: systemd-таймер на CT раз в 2 мин проверяет `origin/main`; есть новые коммиты → build → **CI-гейт (ruff+lint-imports+pytest в свежем образе; фейл → откат, прод остаётся на старом коде)** → up → health. Сверху — GitHub Actions на зеркале (server+web). Полная схема с компромиссами: [task_ai/reference/ci-cd-architecture.md](task_ai/reference/ci-cd-architecture.md). Логи: `journalctl -u learnos-deploy.service`, `/var/log/learnos-deploy.log`.
+- **Разработка = git push**: systemd-таймер на CT раз в 2 мин проверяет `origin/main`; есть новые коммиты → build → **CI-гейт (ruff+lint-imports+pytest в свежем образе; фейл → откат, прод остаётся на старом коде)** → up → health. Сверху — GitHub Actions на зеркале (server+web). Полная схема с компромиссами: [task_ai/reference/ci-cd-architecture.md](task_ai/reference/ci-cd-architecture.md). Логи: `journalctl -u learnos-deploy.service`.
 - Данные прода: `/opt/learnos/{data,kb}` (в git не попадают). Ключи: `ZAI_API_KEY` и опциональные `ZAI_API_KEY_2..4` (цепочка фейловера по квоте, в том же порядке, что `api_key_envs` в llm.yaml), GitHub-токен — файлами через `sec exec` (см. `proxmox/scripts/deploy/deploy-learnos-container.sh`).
 - Роут: `learn.not-user-1984.duckdns.org` (NPM/hginx, wildcard-сертификат). Доступ по LAN `http://192.168.0.132:3000`; снаружи — см. задачу T-002.
 - YouTube-скилл ходит через хомлаб-прокси `socks5://192.168.0.10:1080` (vpn-gw).
