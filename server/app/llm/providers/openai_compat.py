@@ -301,6 +301,27 @@ class OpenAICompatProvider:
                     continue
                 raise err from e
 
+    async def embed(self, model: str, texts: list[str]) -> list[list[float]]:
+        """Эмбеддинги батча текстов через /embeddings (B-008): ротация ключей + ретраи."""
+        payload = {"model": model, "input": list(texts)}
+        return await self._with_key_rotation(lambda idx: self._embed_attempts(model, payload, idx))
+
+    async def _embed_attempts(
+        self, model: str, payload: dict[str, Any], key_index: int | None
+    ) -> list[list[float]]:
+        attempt = 0
+        while True:
+            try:
+                resp = await self._ensure_client(key_index).embeddings.create(**payload)
+                return [list(d.embedding) for d in resp.data]
+            except Exception as e:  # noqa: BLE001 — граница к внешнему сервису
+                err = _map_error(e)
+                if err.code in _RETRYABLE and attempt < _ATTEMPTS - 1:
+                    attempt += 1
+                    await asyncio.sleep(2 ** (attempt - 1))
+                    continue
+                raise err from e
+
     def stream(self, model: str, request: LLMRequest) -> AsyncIterator[LLMEvent]:
         """Стриминговый ответ; tool calls собираются и отдаются целиком в конце текста."""
         return self._stream(model, request)

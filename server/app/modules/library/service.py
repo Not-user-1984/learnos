@@ -244,6 +244,19 @@ class LibraryService:
 
     # --- выполнение jobs (вызывает воркер) ---
 
+    def finish_job(self, job_id: int, status: str, message: str = "") -> None:
+        """Завершить job стороннего хэндлера: done | skipped (B-008, без источника)."""
+        from sqlalchemy import update
+
+        from .infra.tables import jobs as jobs_t
+
+        with self._uow() as uow:
+            uow.session.execute(
+                update(jobs_t)
+                .where(jobs_t.c.id == job_id)
+                .values(status=status, message=str(message)[:500], updated_at=now_iso(self._clock))
+            )
+
     def fail_stuck_job(self, job_id: int, source_uid: str | None, error: str) -> None:
         """Job → failed и связанный источник из processing → failed (R-10).
 

@@ -1,6 +1,7 @@
 """Фейковый провайдер для тестов: сценарий ответов, запись запросов."""
 
 import asyncio
+import hashlib
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -70,6 +71,25 @@ class FakeLLMProvider:
             yield LLMEvent(type="tool_call", tool_call=call)
         yield LLMEvent(type="usage", usage=Usage(input_tokens=10, output_tokens=10))
         yield LLMEvent(type="finish", finish_reason="tool_calls" if turn.tool_calls else "stop")
+
+    EMBED_DIM = 64  # детерминированные хэш-векторы для тестов гибридного поиска (B-008)
+
+    async def embed(self, model: str, texts: list[str]) -> list[list[float]]:
+        """Bag-of-words хэш-вектор: одинаковые слова — одинаковые координаты.
+
+        Детерминированная «семантика» для тестов: запрос и документ с общими
+        словами дают близкие векторы без настоящей модели.
+        """
+        return [self._hash_embedding(t) for t in texts]
+
+    @classmethod
+    def _hash_embedding(cls, text: str) -> list[float]:
+        vec = [0.0] * cls.EMBED_DIM
+        for word in text.lower().split():
+            digest = hashlib.md5(word.encode()).digest()  # noqa: S324 — не криптография
+            vec[int.from_bytes(digest[:4], "big") % cls.EMBED_DIM] += 1.0
+        norm = sum(v * v for v in vec) ** 0.5 or 1.0
+        return [v / norm for v in vec]
 
     # helpers для сценариев
     @staticmethod

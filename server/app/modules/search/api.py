@@ -8,8 +8,8 @@ def make_router(svc) -> APIRouter:
     r = APIRouter(tags=["search"])
 
     @r.get("/search")
-    def search(q: str, scope: str = "all", limit: int = 10):
-        result = svc.search(q, scope, limit)
+    def search(q: str, scope: str = "all", limit: int = 10, mode: str = "hybrid"):
+        result = svc.search(q, scope, limit, mode=mode)
         # v1-совместимость: /api/search?q= отдавал список чанков
         if scope == "chapters":
             return result.get("chunks", [])

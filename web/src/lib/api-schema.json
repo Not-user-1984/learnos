@@ -3283,6 +3283,16 @@
               "default": 10,
               "title": "Limit"
             }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "hybrid",
+              "title": "Mode"
+            }
           }
         ],
         "responses": {

@@ -189,6 +189,7 @@ def create_app() -> FastAPI:
     @app.get("/api/health", tags=["system"])
     def health():
         llm = container.llm_router.status()
+        vec = container.search.vector_status()  # роль embed и объём индекса (B-008)
         return {
             "ok": True,
             "llm_configured": llm["configured"],
@@ -196,6 +197,9 @@ def create_app() -> FastAPI:
             "model": llm["model"],
             "provider": llm["provider"],
             "llm_reason": llm.get("reason"),
+            "embed_configured": vec.get("embed_configured"),
+            "embed_indexed_items": vec.get("indexed_items"),
+            "embed_pending_blocks": vec.get("pending_blocks"),
             "worker_running": container.job_worker.running if container.job_worker else False,
             "tools": len(container.tools.all()),
             # счётчики для доков (R-28): единственный источник правды о размерах

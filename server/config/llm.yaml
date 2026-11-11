@@ -42,3 +42,7 @@ roles:
   structured: {provider: zai, model: glm-5.3-flash, params: {thinking: {type: disabled}}}
   fast:       {provider: zai, model: glm-5.3-flash, params: {thinking: {type: disabled}}}
   vision:     {provider: zai, model: glm-4.6v}
+  # эмбеддинги для гибридного поиска (B-008): OpenAI-совместимый /embeddings;
+  # модель уточняй в доке провайдера — смена модели = полный reindex --embeddings.
+  # Роль не настроена/нет ключа → поиск честно работает на чистом FTS.
+  # embed:     {provider: zai, model: embedding-3}

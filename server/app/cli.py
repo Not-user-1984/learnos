@@ -11,7 +11,10 @@ def main() -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("migrate", help="применить миграции Alembic")
-    sub.add_parser("reindex", help="пересобрать индекс базы знаний из kb/")
+    reindex_p = sub.add_parser("reindex", help="пересобрать индекс базы знаний из kb/")
+    reindex_p.add_argument(
+        "--embeddings", action="store_true", help="векторы тоже (инкрементально по хэшу, B-008)"
+    )
     sub.add_parser("smoke-llm", help="живая проверка LLM: ответ, стрим, tool call")
     sub.add_parser("seed-demo", help="демо-данные в текущие LEARNOS_DATA_DIR/LEARNOS_KB_DIR")
     args = parser.parse_args()
@@ -29,10 +32,38 @@ def main() -> None:
         container.search.reindex_blocks()
         container.search.reindex_chapters()
         print(f"reindex: {result}")
+        if args.embeddings:
+            _reindex_embeddings(container)
     elif args.cmd == "smoke-llm":
         asyncio.run(_smoke_llm(container))
     elif args.cmd == "seed-demo":
         _seed_demo(container)
+
+
+def _reindex_embeddings(container) -> None:
+    """Бэкфилл векторов с прогрессом; повторный запуск досчитывает недостающее (хэш текста)."""
+    if not container.search.embed_ready():
+        print("embeddings: роль embed не настроена — пропускаю (поиск остаётся на FTS)")
+        return
+    blocks = container.knowledge.list_blocks(limit=1000)
+    done = skipped = 0
+    for meta in blocks:
+        out = container.search.index_block_embeddings(meta.uid)
+        done += 1 if out.get("indexed") else 0
+        skipped += 0 if out.get("indexed") else 1
+        mark = "✓" if out.get("indexed") else (out.get("reason") or "skip")
+        print(f"  блок {done + skipped}/{len(blocks)}: {meta.uid} {mark}")
+    chapters_done = 0
+    for src in container.library.list_sources():
+        src_chapters = 0
+        for ch in container.library.list_chapters(src["uid"]):
+            part = container.library.read_chapter(src["uid"], ch["idx"], 0, 50000)
+            out = container.search.index_chapter_embeddings(src["uid"], ch["idx"], part["text"])
+            if out.get("indexed"):
+                src_chapters += 1
+        chapters_done += src_chapters
+        print(f"  источник {src['uid']}: глав проиндексировано {src_chapters}")
+    print(f"embeddings: блоков {done} (+{skipped} пропущено), глав {chapters_done}")
 
 
 async def _smoke_llm(container) -> None:

@@ -13,12 +13,40 @@ log = logging.getLogger("learnos.worker")
 class JobWorker:
     """Читает jobs из БД, выполняет последовательно; падение job не роняет воркер."""
 
-    def __init__(self, library, runtime=None) -> None:
+    def __init__(self, library, runtime=None, extra_handlers: dict | None = None) -> None:
         self._library = library
         self._runtime = runtime
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
         self.clock = SystemClock()
+        # сторонние kinds (например search_embed, B-008): kind → callable(job) -> dict
+        self._extra_handlers: dict = dict(extra_handlers or {})
+
+    def register_handler(self, kind: str, handler) -> None:
+        """Зарегистрировать обработчик чужого kind jobs (B-008: векторная индексация)."""
+        self._extra_handlers[kind] = handler
+
+    def enqueue(self, kind: str, target: str | None, total: int = 1) -> int:
+        """Поставить job в очередь (без дедупликации — события редкие)."""
+        from ...kernel.clock import now_iso
+        from .infra.tables import jobs
+
+        def _insert(uow):
+            return int(
+                uow.session.execute(
+                    jobs.insert().values(
+                        kind=kind,
+                        target=target,
+                        status="queued",
+                        total=total,
+                        created_at=now_iso(self.clock),
+                        updated_at=now_iso(self.clock),
+                    )
+                ).inserted_primary_key[0]
+            )
+
+        with self._library._uow() as uow:  # noqa: SLF001
+            return _insert(uow)
 
     async def start(self) -> None:
         """Запустить цикл воркера в фоне; до цикла — разбор залипших jobs (R-10)."""
@@ -54,9 +82,15 @@ class JobWorker:
                 await asyncio.sleep(1.5)
                 continue
             log.info("job %s %s → running", job["id"], job["kind"])
+            handler = self._extra_handlers.get(job["kind"])
             try:
-                result = await anyio.to_thread.run_sync(self._library.run_job, job)
-                log.info("job %s done: %s", job["id"], result)
+                if handler is not None:
+                    result = await anyio.to_thread.run_sync(handler, job)
+                    await anyio.to_thread.run_sync(self._finish, job, result)
+                    log.info("job %s done: %s", job["id"], result)
+                else:
+                    result = await anyio.to_thread.run_sync(self._library.run_job, job)
+                    log.info("job %s done: %s", job["id"], result)
             except Exception:  # noqa: BLE001 — воркер не должен умирать
                 log.exception("job %s failed", job["id"])
                 await anyio.to_thread.run_sync(self._fail, job)
@@ -91,6 +125,11 @@ class JobWorker:
 
         with self._library._uow() as uow:  # noqa: SLF001
             return _fetch(uow)
+
+    def _finish(self, job: dict, result: dict) -> None:
+        """Завершить job стороннего хэндлера: done | skipped (embed недоступен)."""
+        status = "skipped" if result.get("skipped") else "done"
+        self._library.finish_job(job["id"], status, str(result)[:500])
 
     def _fail(self, job: dict) -> None:
         """Job → failed и его источник больше не «обрабатывается» (R-10)."""

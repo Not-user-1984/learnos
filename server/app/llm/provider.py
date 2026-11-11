@@ -19,3 +19,7 @@ class LLMProvider(Protocol):
     def stream(self, model: str, request: LLMRequest):
         """Ответ потоком: текст по кускам, вызовы инструментов — целиком, когда собраны."""
         ...
+
+    async def embed(self, model: str, texts: list[str]) -> list[list[float]]:
+        """Эмбеддинги батча текстов (OpenAI-совместимый /embeddings, B-008)."""
+        ...
