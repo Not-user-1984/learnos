@@ -91,7 +91,7 @@ Next.js App Router, TS strict, Tailwind + shadcn-подход, PWA. Дизайн
 
 ## Карта документации
 
-- [AGENTS.md](AGENTS.md) — правила для агентов, запуск, эндпоинты, текущий статус
+- [AGENTS.md](AGENTS.md) — правила для агентов, запуск, эндпоинты; [STATUS.md](STATUS.md) — текущий статус
 - [ARCHITECTURE.md](ARCHITECTURE.md) — компоненты, модель данных, MCP-инструменты, стейт-машина сессии
 - [PLAN.md](PLAN.md) — видение, фазы, зафиксированные решения
 - [task_ai/README.md](task_ai/README.md) — ТЗ: справочники 01–08, этапы, приоритеты
