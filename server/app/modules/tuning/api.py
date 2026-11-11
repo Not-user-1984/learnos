@@ -21,8 +21,20 @@ class AgentCreateIn(BaseModel):
     tools: list[str] = Field(default_factory=list)
 
 
-def make_router(svc) -> APIRouter:
-    """Роуты настройки агентов."""
+class CardMarkIn(BaseModel):
+    """Пометка карточки в чате, из которой нажали кнопку (B-003): статус — в БД."""
+
+    conversation_uid: str | None = None
+    card_id: str | None = None
+
+
+def make_router(svc, card_state=None) -> APIRouter:
+    """Роуты настройки агентов; card_state — пометка карточек чата (B-003)."""
+
+    def _mark(body: CardMarkIn | None, status: str) -> None:
+        if card_state is not None and body is not None:
+            card_state.mark(body.conversation_uid or "", body.card_id or "", status)
+
     r = APIRouter(prefix="/tuning", tags=["tuning"])
 
     @r.get("/prompts")
@@ -38,12 +50,16 @@ def make_router(svc) -> APIRouter:
         return svc.changes(status)
 
     @r.post("/changes/{change_id}/approve")
-    def approve(change_id: int):
-        return svc.apply_change(change_id)
+    def approve(change_id: int, body: CardMarkIn | None = None):
+        out = svc.apply_change(change_id)
+        _mark(body, "applied")
+        return out
 
     @r.post("/changes/{change_id}/reject")
-    def reject(change_id: int):
-        return svc.reject_change(change_id)
+    def reject(change_id: int, body: CardMarkIn | None = None):
+        out = svc.reject_change(change_id)
+        _mark(body, "rejected")
+        return out
 
     @r.post("/prompts/{agent}/reset")
     def reset(agent: str):

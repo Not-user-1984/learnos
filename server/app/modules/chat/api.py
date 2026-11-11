@@ -10,7 +10,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from ...kernel.errors import AppError
-from .schemas import ConversationCreate, ConversationItem, ConversationPatch, MessageIn
+from .schemas import CardResolveIn, ConversationCreate, ConversationItem, ConversationPatch, MessageIn
 from .service import SseEvent
 
 
@@ -54,8 +54,8 @@ def _streaming_response(source) -> StreamingResponse:
     )
 
 
-def make_router(svc) -> APIRouter:
-    """Роуты чата."""
+def make_router(svc, cards=None) -> APIRouter:
+    """Роуты чата; cards — CardState для resolve карточек-решений (B-003)."""
     r = APIRouter(prefix="/conversations", tags=["chat"])
 
     @r.get("", response_model=list[ConversationItem])
@@ -119,5 +119,10 @@ def make_router(svc) -> APIRouter:
     @r.post("/{uid}/stop")
     def stop(uid: str):
         return svc.stop(uid)
+
+    @r.post("/{uid}/cards/{card_id}/resolve")
+    def resolve_card(uid: str, card_id: str, body: CardResolveIn):
+        """Зафиксировать выбор по карточке-решению: статус и выбор — в БД (B-003)."""
+        return cards.resolve(uid, card_id, body.choice)
 
     return r

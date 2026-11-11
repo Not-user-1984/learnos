@@ -17,8 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { StudyFlowDialog } from "@/components/chat/study-flow";
-import { ChatCat } from "@/components/chat/chat-cat";
+import { CatToggle, ChatCat } from "@/components/chat/chat-cat";
 import { cn } from "@/lib/utils";
+import { CHAT_SCENARIOS } from "@/lib/scenarios";
 
 /** Фразы приветствия: одна на заход, случайная. Пополняется без логики. */
 const TAGLINES = [
@@ -133,6 +134,14 @@ export function ChatStart({ conversations }: { conversations: ConversationItem[]
     inputRef.current?.focus();
   };
 
+  /** Один сценарий — одно поведение и здесь, и в NextSteps разговора (B-003). */
+  const runScenario = (id: string) => {
+    const s = CHAT_SCENARIOS.find((x) => x.id === id);
+    if (!s) return;
+    if (s.action.kind === "prefill") prefill(s.action.text);
+    else void start(s.action.initial, { intent: s.action.intent });
+  };
+
   return (
     <div className="relative h-full">
       <div className="h-full overflow-y-auto">
@@ -204,10 +213,10 @@ export function ChatStart({ conversations }: { conversations: ConversationItem[]
           </div>
 
           <Collapse collapsed={collapsed}>
-            <div className="flex flex-wrap justify-center gap-2 pt-5">
-              <ScenarioButton icon="track_changes" label="Закрепить пройденное" onClick={() => void start("Закрепим пройденное", { intent: "reinforce" })} />
-              <ScenarioButton icon="edit_note" label="Конспект" onClick={() => prefill("Конспект: ")} />
-              <ScenarioButton icon="school" label="Собрать курс" onClick={() => prefill("Собери курс по теме: ")} />
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-5">
+              {CHAT_SCENARIOS.map((s) => (
+                <ScenarioButton key={s.id} icon={s.icon} label={s.label} onClick={() => runScenario(s.id)} />
+              ))}
               <ScenarioButton
                 icon="public"
                 label="Ресёрч темы"
@@ -218,6 +227,7 @@ export function ChatStart({ conversations }: { conversations: ConversationItem[]
               />
               <ScenarioButton icon="auto_stories" label="Изучить книгу" onClick={() => setFlow("book")} />
               <ScenarioButton icon="movie" label="Обсудить видео" onClick={() => setFlow("video")} />
+              <CatToggle className="inline-flex h-9 w-9 items-center justify-center rounded-full border text-muted-foreground transition hover:bg-accent hover:text-foreground" />
             </div>
           </Collapse>
         </div>

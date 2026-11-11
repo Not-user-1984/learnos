@@ -8,6 +8,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from ....kernel.errors import NotFound
+from ..cards import ensure_card_ids
 from .tables import conversations, messages
 
 
@@ -106,6 +107,28 @@ class MessageRepository:
         return session.execute(
             select(func.max(messages.c.id)).where(messages.c.conversation_id == conversation_id)
         ).scalar_one_or_none()
+
+    def find_card(
+        self, session: Session, conversation_id: int, card_id: str
+    ) -> tuple[int | None, list[dict]]:
+        """Сообщение и его карточки по card_id (B-003).
+
+        Старым карточкам id генерируется тем же детерминированным правилом, что и
+        при отдаче истории — resolve работает и по сообщениям до появления card_id.
+        """
+        for m in self.list(session, conversation_id):
+            cards = ensure_card_ids(m["id"], m["cards"])
+            if any(c.get("card_id") == card_id for c in cards):
+                return m["id"], cards
+        return None, []
+
+    def update_cards(self, session: Session, message_id: int, cards: list[dict]) -> None:
+        """Записать карточки сообщения (resolve/mark меняет status/choice, B-003)."""
+        session.execute(
+            update(messages)
+            .where(messages.c.id == message_id)
+            .values(cards_json=json.dumps(cards, ensure_ascii=False))
+        )
 
 
 def _conv_dict(r) -> dict:

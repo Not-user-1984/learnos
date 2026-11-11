@@ -57,8 +57,8 @@ const EDGE = 8; // отступ от краёв полки, px
 const STORAGE_KEY = "learnos:cat";
 
 /** Видимость кота — client-only значение из localStorage, читается через
- *  useSyncExternalStore; запись рассылает подписчиков вручную (storage-событие
- *  в том же табе не срабатывает). */
+ * useSyncExternalStore; запись рассылает подписчиков вручную (storage-событие
+ * в том же табе не срабатывает). */
 const catListeners = new Set<() => void>();
 const subscribeCat = (cb: () => void) => {
   catListeners.add(cb);
@@ -71,6 +71,31 @@ const writeCatVisible = (visible: boolean) => {
   localStorage.setItem(STORAGE_KEY, visible ? "on" : "off");
   catListeners.forEach((l) => l());
 };
+
+/** Видимость кота для layout-решений (padding ленты под полку, B-003). */
+export function useCatVisible(): boolean {
+  return useSyncExternalStore(subscribeCat, readCatVisible, () => true);
+}
+
+/** Toggle кота — живёт в ряду композера/сценариев, а не поверх ленты (B-003:
+ *  absolute-кнопка перекрывала правый край карточек последнего сообщения). */
+export function CatToggle({ className }: { className?: string }) {
+  const visible = useCatVisible();
+  return (
+    <button
+      type="button"
+      onClick={() => writeCatVisible(!visible)}
+      aria-label={visible ? "Скрыть кота" : "Показать кота"}
+      title={visible ? "Скрыть кота" : "Показать кота"}
+      className={
+        className ??
+        "inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-muted-foreground transition hover:text-foreground"
+      }
+    >
+      <Icon name="pets" size={16} />
+    </button>
+  );
+}
 
 const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
 const subscribeReduced = (cb: () => void) => {
@@ -178,20 +203,10 @@ export function ChatCat() {
     setBubble(CAT_PHRASES[i]);
   };
 
-  const toggle = () => writeCatVisible(!visible);
-
   const bubbleAtRight = view.left > width - 220;
 
   return (
     <div ref={rootRef} className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
-      <button
-        type="button"
-        onClick={toggle}
-        aria-label={visible ? "Скрыть кота" : "Показать кота"}
-        className="pointer-events-auto absolute bottom-2 right-2 z-20 rounded-lg border bg-card/80 p-1.5 text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground"
-      >
-        <Icon name="pets" size={14} />
-      </button>
       {visible && (
         <div className="absolute bottom-2" style={{ left: view.left }}>
           {bubble && (

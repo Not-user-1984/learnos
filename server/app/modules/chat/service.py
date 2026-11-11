@@ -18,6 +18,7 @@ from ...kernel.ids import IdGenerator
 from ...llm.router import ModelRouter
 from ...llm.types import Message
 from .agents import REVIEW_TOOLS, SESSION_TOOLS
+from .cards import DECISION_TYPES, build_options, ensure_card_ids, merge_decision
 from .domain import content_note
 from .infra.sql_repo import ConversationRepository, MessageRepository
 from .infra.tables import conversations as conversations_table
@@ -246,7 +247,10 @@ class ChatService:
         """Разговор: сообщения, сессия, прогресс разбора, сценарий, состояние агента."""
         with self._uow() as uow:
             conv = self._convs.get(uow.session, uid)
-            conv["messages"] = self._msgs.list(uow.session, conv["id"])
+            conv["messages"] = [
+                {**m, "cards": ensure_card_ids(m["id"], m["cards"])}
+                for m in self._msgs.list(uow.session, conv["id"])
+            ]
             conv["session"] = self._learning.session_for_conversation(conv["id"])
             conv["review_progress"] = self._review_progress(conv)
             conv["scenario"] = self._scenario(conv, self._activity_source_kind(conv))
@@ -486,8 +490,22 @@ class ChatService:
                         {"call_id": ev.call_id, "name": ev.name, "args": ev.args, "label": ev.label},
                     )
                 elif ev.type == "card":
-                    cards.append(ev.card or {})
-                    yield SseEvent("card", {"call_id": ev.call_id, "card": ev.card})
+                    # B-003: одна зона решений на ход — вторая decision-карточка
+                    # вливается в первую (без дублей label), клиент заменяет её по index
+                    card = dict(ev.card or {})
+                    if card.get("type") in DECISION_TYPES:
+                        card["options"] = build_options(card)
+                    first_idx = next(
+                        (i for i, c in enumerate(cards) if c.get("type") in DECISION_TYPES), None
+                    )
+                    if card.get("type") in DECISION_TYPES and first_idx is not None:
+                        merge_decision(cards[first_idx], card)
+                        yield SseEvent(
+                            "card", {"call_id": ev.call_id, "card": cards[first_idx], "index": first_idx}
+                        )
+                    else:
+                        cards.append(card)
+                        yield SseEvent("card", {"call_id": ev.call_id, "card": card, "index": len(cards) - 1})
                 elif ev.type == "error":
                     yield SseEvent("error", {"error": "agent_error", "message": ev.text})
             text = "".join(text_parts)
@@ -505,6 +523,9 @@ class ChatService:
                         ),
                         created_at=now2,
                     )
+                    # B-003: card_id нужен сразу — resolve возможен с первым же ответом
+                    ensure_card_ids(assistant_id, cards)
+                    self._msgs.update_cards(uow.session, assistant_id, cards)
                     self._convs.update(uow.session, conv["id"], updated_at=now2)
                 if conv["title"] == "Новый разговор" and text:
                     new_title = await self._make_title(conv, text)

@@ -24,141 +24,6 @@
         }
       }
     },
-    "/api/llm/status": {
-      "get": {
-        "tags": [
-          "system"
-        ],
-        "summary": "Llm Status",
-        "description": "Детальный статус LLM: роли → модель/провайдер/params, цепочки ключей с cooldown.\n\nhealth открыт без токена — детализацию (ключи, cooldown) отдаёт только\nэтот эндпоинт под bearer (BB-004). Значения ключей не отдаются нигде.",
-        "operationId": "llm_status_api_llm_status_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/runs": {
-      "get": {
-        "tags": [
-          "system"
-        ],
-        "summary": "Runs",
-        "description": "Трейсы запусков агентов (агрегаты): что, когда, сколько токенов (R-24).",
-        "operationId": "runs_api_runs_get",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 50,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "agent",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Agent"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Status"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/runs/{run_id}": {
-      "get": {
-        "tags": [
-          "system"
-        ],
-        "summary": "Run Detail",
-        "description": "Запуск целиком: агрегаты + трасса шагов + дочерние запуски субагентов (R-24).",
-        "operationId": "run_detail_api_runs__run_id__get",
-        "parameters": [
-          {
-            "name": "run_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Run Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/settings/profile": {
       "get": {
         "tags": [
@@ -215,101 +80,6 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/connectivity": {
-      "get": {
-        "tags": [
-          "connectivity"
-        ],
-        "summary": "Get Connectivity",
-        "operationId": "get_connectivity_api_connectivity_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "connectivity"
-        ],
-        "summary": "Put Connectivity",
-        "operationId": "put_connectivity_api_connectivity_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConnectivityIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/connectivity/check": {
-      "post": {
-        "tags": [
-          "connectivity"
-        ],
-        "summary": "Check Connectivity",
-        "operationId": "check_connectivity_api_connectivity_check_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/research/providers": {
-      "get": {
-        "tags": [
-          "research"
-        ],
-        "summary": "Get Search Providers",
-        "description": "Где агент ищет: web/academic/video с состоянием провайдеров (блок UI настроек).",
-        "operationId": "get_search_providers_api_research_providers_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
               }
             }
           }
@@ -515,44 +285,6 @@
                 "schema": {
                   "$ref": "#/components/schemas/BlockDetail"
                 }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "knowledge"
-        ],
-        "summary": "Delete Block",
-        "operationId": "delete_block_api_kb_blocks__uid__delete",
-        "parameters": [
-          {
-            "name": "uid",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Uid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
               }
             }
           },
@@ -1236,48 +968,6 @@
         }
       }
     },
-    "/api/sources/from-url": {
-      "post": {
-        "tags": [
-          "library"
-        ],
-        "summary": "From Url",
-        "description": "Скачать и добавить материал по ссылке (YouTube/PDF/статья); обработка — job.",
-        "operationId": "from_url_api_sources_from_url_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FromUrlCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FromUrlOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/sources/{ref}": {
       "get": {
         "tags": [
@@ -1438,140 +1128,6 @@
                   },
                   "title": "Response Chapters Api Sources  Ref  Chapters Get"
                 }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sources/{ref}/file": {
-      "get": {
-        "tags": [
-          "library"
-        ],
-        "summary": "Source File",
-        "description": "Оригинальный PDF источника — встроенный просмотрщик (inline, с Range).",
-        "operationId": "source_file_api_sources__ref__file_get",
-        "parameters": [
-          {
-            "name": "ref",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Ref"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sources/{ref}/outline": {
-      "get": {
-        "tags": [
-          "library"
-        ],
-        "summary": "Outline",
-        "description": "Оглавление книги: стартовые страницы, номера глав, секции (из БД, для старых — матч закладок).",
-        "operationId": "outline_api_sources__ref__outline_get",
-        "parameters": [
-          {
-            "name": "ref",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Ref"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OutlineOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sources/{ref}/images/{name}": {
-      "get": {
-        "tags": [
-          "library"
-        ],
-        "summary": "Source Image",
-        "description": "Картинка главы (рендер сплиттера) — только basename из images/ источника.",
-        "operationId": "source_image_api_sources__ref__images__name__get",
-        "parameters": [
-          {
-            "name": "ref",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Ref"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
               }
             }
           },
@@ -1783,45 +1339,6 @@
         }
       }
     },
-    "/api/activities/mark-read": {
-      "post": {
-        "tags": [
-          "learning"
-        ],
-        "summary": "Mark Read",
-        "operationId": "mark_read_api_activities_mark_read_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MarkReadIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/activities/{ref}": {
       "get": {
         "tags": [
@@ -1829,44 +1346,6 @@
         ],
         "summary": "Get Activity",
         "operationId": "get_activity_api_activities__ref__get",
-        "parameters": [
-          {
-            "name": "ref",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Ref"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "learning"
-        ],
-        "summary": "Delete Activity",
-        "operationId": "delete_activity_api_activities__ref__delete",
         "parameters": [
           {
             "name": "ref",
@@ -1977,44 +1456,6 @@
             "in": "path",
             "required": true,
             "schema": {
-              "title": "Ref"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "learning"
-        ],
-        "summary": "Delete Session",
-        "operationId": "delete_session_api_sessions__ref__delete",
-        "parameters": [
-          {
-            "name": "ref",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
               "title": "Ref"
             }
           }
@@ -2441,47 +1882,6 @@
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{uid}/resume": {
-      "post": {
-        "tags": [
-          "chat"
-        ],
-        "summary": "Resume",
-        "description": "Дописать прерванный ответ (SSE как у messages); проверки до стрима дают 409.",
-        "operationId": "resume_api_conversations__uid__resume_post",
-        "parameters": [
-          {
-            "name": "uid",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Uid"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3387,47 +2787,6 @@
         }
       }
     },
-    "/api/tuning/skills/{name}/reset": {
-      "post": {
-        "tags": [
-          "tuning"
-        ],
-        "summary": "Reset Skill",
-        "description": "Снять override builtin-скилла — вернуть файлы из кода (бэкап перед снятием).",
-        "operationId": "reset_skill_api_tuning_skills__name__reset_post",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/tuning/tools": {
       "get": {
         "tags": [
@@ -3843,66 +3202,6 @@
           }
         }
       }
-    },
-    "/api/revision/branches": {
-      "get": {
-        "tags": [
-          "revision"
-        ],
-        "summary": "Branches",
-        "description": "Подготовленные агентом ветки (дневник data/git-branches).",
-        "operationId": "branches_api_revision_branches_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/revision/branch/reject": {
-      "post": {
-        "tags": [
-          "revision"
-        ],
-        "summary": "Reject",
-        "description": "Удалить подготовленную ветку agent/* вместе с worktree.",
-        "operationId": "reject_api_revision_branch_reject_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BranchIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
     }
   },
   "components": {
@@ -4265,21 +3564,6 @@
         ],
         "title": "Body_upload_source_api_sources_upload_post"
       },
-      "BranchIn": {
-        "properties": {
-          "branch": {
-            "type": "string",
-            "minLength": 6,
-            "title": "Branch"
-          }
-        },
-        "type": "object",
-        "required": [
-          "branch"
-        ],
-        "title": "BranchIn",
-        "description": "Ветка агента для отклонения."
-      },
       "CategoryIn": {
         "properties": {
           "path": {
@@ -4423,39 +3707,6 @@
             "type": "boolean",
             "title": "Has Exercises",
             "default": false
-          },
-          "number": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Number"
-          },
-          "start_page": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Page"
-          },
-          "end_page": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "End Page"
           }
         },
         "type": "object",
@@ -4466,41 +3717,12 @@
         "title": "ChapterCard",
         "description": "Глава в списке глав."
       },
-      "ConnectivityIn": {
-        "properties": {
-          "search_provider": {
-            "type": "string",
-            "title": "Search Provider",
-            "default": "chain"
-          },
-          "search_api_key": {
-            "type": "string",
-            "title": "Search Api Key",
-            "default": ""
-          },
-          "proxy_url": {
-            "type": "string",
-            "maxLength": 500,
-            "title": "Proxy Url",
-            "default": ""
-          },
-          "vless_key": {
-            "type": "string",
-            "maxLength": 2000,
-            "title": "Vless Key",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "title": "ConnectivityIn",
-        "description": "Патч настроек связи; пустое поле = сброс. Маскированные значения UI не шлёт,\nно на всякий случай ключ с '…' не затирает сохранённый."
-      },
       "ConversationCreate": {
         "properties": {
           "mode": {
             "type": "string",
             "title": "Mode",
-            "default": "root"
+            "default": "free"
           },
           "activity": {
             "anyOf": [
@@ -4567,11 +3789,6 @@
           "mode": {
             "type": "string",
             "title": "Mode"
-          },
-          "scenario": {
-            "type": "string",
-            "title": "Scenario",
-            "default": ""
           },
           "updated_at": {
             "type": "string",
@@ -4812,67 +4029,6 @@
         ],
         "title": "DraftIn"
       },
-      "FromUrlCreate": {
-        "properties": {
-          "url": {
-            "type": "string",
-            "maxLength": 2000,
-            "minLength": 8,
-            "title": "Url"
-          }
-        },
-        "type": "object",
-        "required": [
-          "url"
-        ],
-        "title": "FromUrlCreate",
-        "description": "Добавление материала по ссылке (YouTube/PDF/статья)."
-      },
-      "FromUrlOut": {
-        "properties": {
-          "ok": {
-            "type": "boolean",
-            "title": "Ok"
-          },
-          "uid": {
-            "type": "string",
-            "title": "Uid"
-          },
-          "kind": {
-            "type": "string",
-            "title": "Kind"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "job_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Job Id"
-          },
-          "processing": {
-            "type": "boolean",
-            "title": "Processing"
-          }
-        },
-        "type": "object",
-        "required": [
-          "ok",
-          "uid",
-          "kind",
-          "title",
-          "processing"
-        ],
-        "title": "FromUrlOut",
-        "description": "Результат добавления по ссылке: источник поставлен в обработку."
-      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -4948,6 +4104,7 @@
         "required": [
           "id",
           "kind",
+          "target",
           "status"
         ],
         "title": "JobOut",
@@ -5027,84 +4184,12 @@
         "title": "Machine",
         "description": "Машина пользователя: где агент предлагает практику."
       },
-      "MarkReadIn": {
-        "properties": {
-          "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Source"
-          },
-          "chapter": {
-            "type": "integer",
-            "title": "Chapter"
-          }
-        },
-        "type": "object",
-        "required": [
-          "source",
-          "chapter"
-        ],
-        "title": "MarkReadIn",
-        "description": "«Прочитал сам»: глава прочитана в веб-читалке без разбора агентом."
-      },
-      "MessageAttachment": {
-        "properties": {
-          "source_uid": {
-            "type": "string",
-            "title": "Source Uid"
-          }
-        },
-        "type": "object",
-        "required": [
-          "source_uid"
-        ],
-        "title": "MessageAttachment",
-        "description": "Вложение сообщения: источник, уже загруженный через /api/sources/upload (PDF)."
-      },
       "MessageIn": {
         "properties": {
           "content": {
             "type": "string",
             "minLength": 1,
             "title": "Content"
-          },
-          "research": {
-            "type": "boolean",
-            "title": "Research",
-            "default": false
-          },
-          "attachments": {
-            "items": {
-              "$ref": "#/components/schemas/MessageAttachment"
-            },
-            "type": "array",
-            "maxItems": 4,
-            "title": "Attachments"
-          },
-          "intent": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "review",
-                  "study",
-                  "session",
-                  "quote",
-                  "tune",
-                  "reinforce"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Intent"
           }
         },
         "type": "object",
@@ -5113,71 +4198,6 @@
         ],
         "title": "MessageIn",
         "description": "Сообщение пользователя."
-      },
-      "OutlineOut": {
-        "properties": {
-          "source": {
-            "type": "string",
-            "title": "Source"
-          },
-          "total_pages": {
-            "type": "integer",
-            "title": "Total Pages",
-            "default": 0
-          },
-          "pages": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "type": "object",
-            "title": "Pages",
-            "default": {}
-          },
-          "numbers": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "type": "object",
-            "title": "Numbers",
-            "default": {}
-          },
-          "sections": {
-            "additionalProperties": {
-              "items": {
-                "$ref": "#/components/schemas/OutlineSection"
-              },
-              "type": "array"
-            },
-            "type": "object",
-            "title": "Sections",
-            "default": {}
-          }
-        },
-        "type": "object",
-        "required": [
-          "source"
-        ],
-        "title": "OutlineOut",
-        "description": "Оглавление книги для PDF-ридера: страницы/номера глав и их секции."
-      },
-      "OutlineSection": {
-        "properties": {
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "page": {
-            "type": "integer",
-            "title": "Page"
-          }
-        },
-        "type": "object",
-        "required": [
-          "title",
-          "page"
-        ],
-        "title": "OutlineSection",
-        "description": "Секция level-2 внутри главы (закладка PDF)."
       },
       "PlanConfirm": {
         "properties": {
@@ -5445,17 +4465,6 @@
             "type": "object",
             "title": "Meta",
             "default": {}
-          },
-          "last_error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Error"
           }
         },
         "type": "object",

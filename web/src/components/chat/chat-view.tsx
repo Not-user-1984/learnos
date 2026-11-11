@@ -11,9 +11,10 @@ import type { AgentState, ChatMessage, ConversationDetail, ReviewProgress, SseEv
 import { useSearchParams } from "next/navigation";
 import { streamChat, streamResume } from "@/lib/chat/stream";
 import { apiPost, apiUpload } from "@/lib/api";
-import { ChatCat } from "@/components/chat/chat-cat";
+import { CatToggle, ChatCat, useCatVisible } from "@/components/chat/chat-cat";
 import { Markdown } from "@/components/markdown/Markdown";
-import { CardView } from "@/components/chat/cards";
+import { CardView, stripCommandFences } from "@/components/chat/cards";
+import { NextSteps } from "@/components/chat/next-steps";
 import { TuningEmptyState } from "@/components/chat/tuning-panel";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { agentLabel, modeLabel } from "@/lib/format";
+import type { ChatScenario } from "@/lib/scenarios";
 
 type ToolChip = {
   call_id: string;
@@ -64,7 +66,6 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   );
   const [reconnecting, setReconnecting] = useState(false);
   const [agentState, setAgentState] = useState<AgentState | null>(conversation.agent_state ?? null);
-  const [courseBusy, setCourseBusy] = useState(false);
   const [attachment, setAttachment] = useState<PendingAttachment | null>(null);
   const [uploading, setUploading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -141,7 +142,9 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           setChips((c) => c.map((chip) => (chip.call_id === ev.data.call_id ? { ...chip, ok: ev.data.ok, summary: ev.data.summary } : chip)));
           break;
         case "card":
-          cards = [...cards, ev.data.card];
+          // B-003: index — позиция карточки в сообщении; слитые решения
+          // приходят заменой первой карточки, а не новой строкой
+          cards[ev.data.index ?? cards.length] = ev.data.card;
           setLiveCards([...cards]);
           break;
         case "session":
@@ -342,30 +345,24 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
     }
   };
 
-  // «Собрать курс»: план из источников разговора/библиотеки → курс с сессиями и прогрессом
-  const buildCourse = async () => {
-    if (courseBusy) return;
-    setCourseBusy(true);
-    const topic = title.replace(/^Ресёрч:\s*/i, "").trim() || "Курс по материалам разговора";
+  // Сценарий из NextSteps с поведением стартового экрана (B-003): одна надпись —
+  // одно действие. «Закрепить пройденное» всегда начинает новый reinforce-разговор.
+  const startScenario = async (scenario: ChatScenario) => {
+    if (scenario.action.kind !== "new-conversation") return;
     try {
-      const plan = await apiPost<Record<string, unknown>>("/courses/plan", {
-        topic,
-        constraints: "источники уже в библиотеке (добавлены ресёрчем) — строй курс по ним, сессиями по главам/видео",
-      });
-      const items = (plan.items as unknown[] | undefined) ?? [];
-      if (!items.length) {
-        toast.info("Планировщик не нашёл материала — добавь источники и попробуй снова");
-        return;
-      }
-      const course = await apiPost<{ uid: string }>("/courses/from-plan", { plan });
-      toast.success("Курс собран");
-      router.push(`/courses/${course.uid}`);
+      const conv = await apiPost<{ uid: string }>("/conversations", {});
+      const params = new URLSearchParams({ initial: scenario.action.initial });
+      if (scenario.action.intent) params.set("intent", scenario.action.intent);
+      router.push(`/chat/${conv.uid}?${params.toString()}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "не удалось собрать курс");
-    } finally {
-      setCourseBusy(false);
+      toast.error(e instanceof Error ? e.message : "не удалось создать разговор");
     }
   };
+
+  // кот занимает нижнюю полку ленты: когда он видим, лента оставляет ему отступ
+  const catVisible = useCatVisible();
+  // note_draft → ближайший записанный после него блок (для «Записано → Открыть блок»)
+  const noteOutcomes = noteDraftOutcomes(messages);
 
   return (
     <div className="flex h-full min-w-0">
@@ -380,6 +377,8 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
               ведёт: {agentLabel(activeAgent)}
             </span>
           )}
+          {/* прогресс сессии на мобиле — кнопкой в шапке (B-003: fixed-кнопка перекрывала композер) */}
+          {session && session.state !== "done" && <SessionPanelDialog session={session} />}
           <ConfirmDeleteButton
             endpoint={`/conversations/${conversation.uid}`}
             title="Удалить разговор?"
@@ -437,14 +436,22 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
           </div>
         )}
 
-        {/* лента + кот-питомец на полке у нижней границы: оверлей не мешает кликам */}
+        {/* лента + кот-питомец на полке у нижней границы: оверлей не мешает кликам,
+            а видимой полке оставляем нижний отступ, чтобы кот не накрывал карточки */}
         <div className="relative min-h-0 flex-1">
-          <div ref={feedRef} className="h-full overflow-y-auto px-4 py-6">
+          <div ref={feedRef} className={cn("h-full overflow-y-auto px-4 py-6", catVisible && "pb-14")}>
             <div className="mx-auto flex max-w-3xl flex-col gap-7 py-2">
               {messages.length === 0 && (conversation.mode === "root" || conversation.mode === "free") && <EmptyHint />}
               {messages.length === 0 && conversation.mode === "tuning" && <TuningEmptyState />}
               {messages.map((m) => (
-                <Message key={m.id} message={m} onInsert={streaming ? undefined : setInput} onSend={streaming ? undefined : send} />
+                <Message
+                  key={m.id}
+                  message={m}
+                  onInsert={streaming ? undefined : setInput}
+                  onSend={streaming ? undefined : send}
+                  conversationUid={conversation.uid}
+                  noteSavedBlockUid={noteOutcomes.get(m.id)}
+                />
               ))}
               {streaming && (
                 <div>
@@ -452,8 +459,13 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
                     <ToolChipView key={chip.call_id} chip={chip} />
                   ))}
                   {liveCards.map((c, i) => (
-                    <div key={i} className="mb-3">
-                      <CardView card={c} onInsert={streaming ? undefined : setInput} onSend={streaming ? undefined : send} />
+                    <div key={c.card_id ?? i} className="mb-3">
+                      <CardView
+                        card={c}
+                        onInsert={streaming ? undefined : setInput}
+                        onSend={streaming ? undefined : send}
+                        conversationUid={conversation.uid}
+                      />
                     </div>
                   ))}
                   {streamText ? (
@@ -490,42 +502,17 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
             </div>
           </div>
         )}
-        {session && !streaming && session.state !== "done" && (
-          <div className="mx-auto mb-1 flex max-w-3xl flex-wrap gap-2 px-4">
-            <button
-              onClick={() => void send("Фейнман: запусти проверку — задай следующий вопрос по пройденному (карточкой ask).")}
-              className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-sm text-primary transition hover:bg-primary/20"
-            >
-              <Icon name="help" size={16} /> Фейнман-вопросы
-            </button>
-          </div>
-        )}
-        {["root", "free", "quick"].includes(conversation.mode) && !streaming && (
-          <div className="mx-auto mb-1 flex max-w-3xl flex-wrap gap-2 px-4">
-            <button
-              onClick={() => void send("Закрепим материал нашего разговора: задай вопросы по ключевым понятиям, по одному за раз.")}
-              className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-500 transition hover:bg-sky-500/20"
-            >
-              <Icon name="track_changes" size={16} /> Закрепить пройденное
-            </button>
-            <button
-              onClick={() =>
-                void send("Собери превью конспекта в базу знаний по пройденному: покажи, что запишем, без сохранения.")
-              }
-              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-500 transition hover:bg-emerald-500/20"
-            >
-              <Icon name="edit_note" size={16} /> Конспект в базу знаний
-            </button>
-            <button
-              onClick={() => void buildCourse()}
-              disabled={courseBusy}
-              className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-sm text-primary transition hover:bg-primary/20 disabled:opacity-60"
-            >
-              {courseBusy ? <Icon name="progress_activity" size={16} className="animate-spin" /> : <Icon name="school" size={16} />}
-              Собрать курс
-            </button>
-          </div>
-        )}
+        {/* B-003: один контекстный ряд «что дальше» вместо двух рядов чипов;
+            скрыт при стриме и пока есть неотвеченные решения */}
+        <NextSteps
+          streaming={streaming}
+          messages={messages}
+          session={session}
+          mode={conversation.mode}
+          onSend={(t) => void send(t)}
+          onPrefill={setInput}
+          onStartScenario={(s) => void startScenario(s)}
+        />
         <div className="border-t p-3">
           <div className="mx-auto max-w-3xl">
             {attachment && (
@@ -567,6 +554,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
                   <Icon name="attach_file" size={16} />
                 )}
               </Button>
+              <CatToggle className="inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground" />
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -596,8 +584,6 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
 
       {session && (
         <>
-          {/* планшет: панель сессии прячется в кнопку с прогрессом в шапке */}
-          <SessionPanelDialog session={session} />
           <aside className="hidden w-64 shrink-0 flex-col gap-4 border-l p-4 text-sm lg:flex">
             <div>
               <h2 className="mb-2 font-medium">Сессия</h2>
@@ -684,10 +670,10 @@ function SessionPanelDialog({ session }: { session: NonNullable<ConversationDeta
     <div className="lg:hidden">
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-4 z-20 flex items-center gap-2 rounded-full border bg-card px-3 py-2 text-sm shadow-lg"
+        className="flex shrink-0 items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs text-muted-foreground transition hover:text-foreground"
         aria-label="Прогресс сессии"
       >
-        <span className="flex gap-1">
+        <span className="flex gap-0.5">
           {SESSION_STEPS.map((st, i) => (
             <span
               key={st}
@@ -695,7 +681,7 @@ function SessionPanelDialog({ session }: { session: NonNullable<ConversationDeta
             />
           ))}
         </span>
-        {STEP_LABELS[session.state]} · {done}/{SESSION_STEPS.length}
+        {done}/{SESSION_STEPS.length}
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-xs">
@@ -719,14 +705,33 @@ function SessionPanelDialog({ session }: { session: NonNullable<ConversationDeta
 
 const CHAT_PROSE = "prose-headings:mt-5 prose-headings:mb-2 prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-p:my-3";
 
+/** note_draft → uid ближайшего block_saved ПОЗЖЕ этого сообщения: превью,
+ *  по которому блок уже записан, показывает ссылку вместо кнопок (B-003). */
+function noteDraftOutcomes(messages: ChatMessage[]): Map<number, string | undefined> {
+  const out = new Map<number, string | undefined>();
+  let saved: string | undefined;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "assistant") continue;
+    const bs = (m.cards ?? []).find((c) => c.type === "block_saved" && c.block_uid);
+    if (bs?.block_uid) saved = bs.block_uid;
+    if ((m.cards ?? []).some((c) => c.type === "note_draft")) out.set(m.id, saved);
+  }
+  return out;
+}
+
 function Message({
   message,
   onInsert,
   onSend,
+  conversationUid,
+  noteSavedBlockUid,
 }: {
   message: ChatMessage;
   onInsert?: (t: string) => void;
   onSend?: (t: string) => void;
+  conversationUid?: string;
+  noteSavedBlockUid?: string;
 }) {
   const time = new Date(message.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
   if (message.role === "user") {
@@ -748,14 +753,27 @@ function Message({
       </div>
     );
   }
+  // команда показывается один раз: fenced-дубль карточки command гасится (B-003)
+  const commandTexts = new Set(
+    (message.cards ?? [])
+      .filter((c) => c.type === "command" && (c.command ?? "").trim())
+      .map((c) => (c.command ?? "").trim()),
+  );
   return (
     <div className="flex flex-col gap-2">
       <p className="flex items-center gap-1 px-1 text-xs text-muted-foreground"><Icon name="smart_toy" size={14} /> Агент · {time}</p>
       <div className="rounded-2xl border bg-muted/50 px-5 py-4">
-        <Markdown content={message.content} className={CHAT_PROSE} />
+        <Markdown content={stripCommandFences(message.content, commandTexts)} className={CHAT_PROSE} />
       </div>
       {message.cards?.map((c, i) => (
-        <CardView key={i} card={c} onInsert={onInsert} onSend={onSend} />
+        <CardView
+          key={c.card_id ?? i}
+          card={c}
+          onInsert={onInsert}
+          onSend={onSend}
+          conversationUid={conversationUid}
+          noteSavedBlockUid={noteSavedBlockUid}
+        />
       ))}
     </div>
   );

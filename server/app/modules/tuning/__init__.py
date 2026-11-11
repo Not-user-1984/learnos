@@ -22,7 +22,8 @@ class TuningModule(Module):
     def routers(self, c):
         from .api import make_router
 
-        return [make_router(c.tuning)]
+        # card_state из чата: approve/reject помечает карточку в сообщении (B-003)
+        return [make_router(c.tuning, card_state=getattr(c, "chat_cards", None))]
 
     def tools(self, c):
         from .tools import tuning_tools

@@ -37,11 +37,17 @@ class MessageIn(BaseModel):
     """Сообщение пользователя."""
 
     content: str = Field(min_length=1)
-    # режим ресёрча: инструкция уходит агенту в system_extra, в чате видна только тема
+    # режим ресёрха: инструкция уходит агенту в system_extra, в чате видна только тема
     research: bool = False
     attachments: list[MessageAttachment] = Field(default_factory=list, max_length=4)
     # сценарий входа («быстрый разбор», «сессия-урок»…): директиву агенту собирает сервер
     intent: Literal[INTENTS] | None = None
+
+
+class CardResolveIn(BaseModel):
+    """Выбор по карточке-решению (B-003): label нажатой кнопки."""
+
+    choice: str = Field(min_length=1, max_length=200)
 
 
 class ConversationItem(BaseModel):

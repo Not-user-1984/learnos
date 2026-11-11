@@ -268,6 +268,12 @@ export type NoteDraft = {
 
 export interface Card {
   type: string;
+  // идентификатор и статус решения (B-003): клик → resolve на сервере, кнопки не воскресают
+  card_id?: string;
+  status?: string;
+  choice?: string;
+  // единые варианты решения карточки (action_offer/quick_replies после слияния)
+  options?: { label: string; text: string }[];
   // command
   machine?: string;
   machine_name?: string;
@@ -297,7 +303,6 @@ export interface Card {
   to_version?: number;
   reason?: string;
   // prompt_change (kind: prompt | skill)
-  status?: string;
   change_id?: number;
   agent?: string;
   file?: string;
@@ -330,7 +335,7 @@ export type SseEvent =
   | { event: "delta"; data: { text: string } }
   | { event: "tool_start"; data: { call_id: string; name: string; args: Record<string, unknown>; label: string } }
   | { event: "tool_end"; data: { call_id: string; name: string; ok: boolean; summary: string } }
-  | { event: "card"; data: { call_id?: string; card: Card } }
+  | { event: "card"; data: { call_id?: string; card: Card; index?: number } }
   | { event: "session"; data: { session_uid?: string; state: string; allowed_events: string[]; chapter_idx?: number | null; progress: { theory_done: number; questions_done: number } } }
   | { event: "review_progress"; data: ReviewProgress }
   | { event: "title"; data: { title: string } }
