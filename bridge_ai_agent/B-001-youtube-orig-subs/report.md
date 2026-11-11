@@ -124,3 +124,17 @@
 - `bridge_ai_agent/B-001-youtube-orig-subs/opencode.log` — лог сессии, не коммитится
   (в раунде 1 его уже случайно закоммитили и убрали в `768a718`); в .gitignore
   не добавлял — вне скоупа раунда.
+
+**Прод (раунд 2)**
+
+- Коммит `1556fd8` запушен в оба зеркала (origin = GitHub + GitVerse), GitHub Actions
+  CI — success (1m50s).
+- Автодеплой CT 132: журнал `learnos-deploy.service` — `new commits: 768a718 → 1556fd82`,
+  CI-гейт пройден, `health OK` (15:51 UTC), откатов нет. Прод на `1556fd8`.
+- Живой HTML прода: страница `/library/src_40fdcabd` — `border-destructive/30
+  bg-destructive/5`, вхождений `rose-500` — 0; `/library` — `text-destructive` у
+  статуса failed, единственный оставшийся `rose-500` — декоративный градиент
+  видеокарты (`from-rose-500/20 to-amber-500/20`), его трогать было запрещено.
+- `git rev-parse` на CT через `pve.py exec` не проверить (ломает кавычки в
+  `bash -c '…'`); коммит подтверждён строкой «new commits: … → 1556fd82…» в
+  journalctl — она печатается из самого деплой-скрипта до reset.
