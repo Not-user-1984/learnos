@@ -32,7 +32,8 @@ class LibraryModule(Module):
     def routers(self, c):
         from .api import make_router
 
-        return [make_router(c.library)]
+        # chat — get-or-create разговора главы для split-view (B-006)
+        return [make_router(c.library, chat=c.chat)]
 
     def tools(self, c):
         from .tools import library_tools

@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import socket
@@ -53,6 +54,62 @@ def _parse_vtt(raw: str) -> str:
         _flush_cue(cue, seen, out)
     # абзацы по ~4 реплики — читабельно и для LLM, и для читалки
     return "\n\n".join(" ".join(out[i : i + 4]) for i in range(0, len(out), 4))
+
+
+def _ts_to_seconds(stamp: str) -> float:
+    """VTT-таймстамп (00:01:02.500 | 01:02.500) → секунды."""
+    parts = stamp.replace(",", ".").split(":")
+    try:
+        nums = [float(p) for p in parts]
+    except ValueError:
+        return 0.0
+    while len(nums) < 3:
+        nums.insert(0, 0.0)
+    return nums[0] * 3600 + nums[1] * 60 + nums[2]
+
+
+def _parse_vtt_segments(raw: str) -> list[dict]:
+    """VTT → сегменты [{start, text}] для таймкодов (B-006).
+
+    Склейка та же, что у текста (~4 реплики), start — начало первой реплики
+    группы: сегменты совпадают с абзацами транскрипта, клик перематывает видео.
+    """
+    import html
+
+    items: list[tuple[float, str]] = []
+    cue_text: list[str] = []
+    cue_start: float | None = None
+    seen: set[str] = set()
+
+    def flush() -> None:
+        nonlocal cue_text, cue_start
+        text = " ".join(cue_text).strip()
+        if text and text not in seen and cue_start is not None:
+            seen.add(text)
+            items.append((cue_start, text))
+        cue_text, cue_start = [], None
+
+    for line in raw.splitlines():
+        s = line.strip()
+        if "-->" in s:
+            if cue_text:
+                flush()
+            cue_start = _ts_to_seconds(s.split("-->")[0].strip())
+            continue
+        if not s or s.startswith(("WEBVTT", "Kind:", "Language:", "NOTE")):
+            if cue_text:
+                flush()
+            continue
+        clean = html.unescape(re.sub(r"<[^>]+>", "", s))
+        if clean:
+            cue_text.append(clean)
+    if cue_text:
+        flush()
+
+    return [
+        {"start": items[i][0], "text": " ".join(t for _, t in items[i : i + 4])}
+        for i in range(0, len(items), 4)
+    ]
 
 
 def _flush_cue(cue: list, seen: set, out: list) -> None:
@@ -153,6 +210,11 @@ def main(url: str) -> dict:
     text = _parse_vtt(raw)
     md_path = out_dir / f"{video_id}.md"
     md_path.write_text(f"# {title}\n\nИсточник: {url}\n\n{text}\n", encoding="utf-8")
+    # таймкоды (B-006): сегменты рядом с транскриптом — читалка отдаёт их панели
+    segments = _parse_vtt_segments(raw)
+    (out_dir / f"{video_id}.segments.json").write_text(
+        json.dumps(segments, ensure_ascii=False), encoding="utf-8"
+    )
     return {
         "ok": True,
         "video_id": video_id,
@@ -161,5 +223,6 @@ def main(url: str) -> dict:
         "lang": picked.name.split(".")[-2].removesuffix("-orig"),
         "chars": len(text),
         "path": str(md_path),
+        "segments": len(segments),
         "preview": text[:500],
     }

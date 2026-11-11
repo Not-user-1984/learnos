@@ -110,6 +110,20 @@ class LibraryService:
             )
         return {"id": source_id, "uid": uid, "kind": kind, "title": title, "status": "chosen"}
 
+    def segments(self, ref: str | int) -> dict:
+        """Сегменты видео-транскрипта с таймкодами (B-006): data/youtube/<id>.segments.json.
+
+        Старые видео без файла сегментов отвечают пустым списком — транскрипт
+        работает как раньше, без синхронизации плеера.
+        """
+        src = self.get_source(ref)
+        video_id = (src.get("meta") or {}).get("video_id")
+        if not video_id:
+            return {"segments": [], "video_id": None, "url": src.get("url")}
+        path = Path(self._settings.data_dir) / "youtube" / f"{video_id}.segments.json"
+        segments = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else []
+        return {"segments": segments, "video_id": video_id, "url": src.get("url")}
+
     def get_source(self, ref: str | int) -> dict:
         """Обзор источника + главы."""
         with self._uow() as uow:

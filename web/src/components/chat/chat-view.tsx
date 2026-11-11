@@ -48,7 +48,17 @@ function trimOpenFence(text: string): string {
   return text.slice(0, fences[fences.length - 1].index ?? 0);
 }
 
-export function ChatView({ conversation }: { conversation: ConversationDetail }) {
+export type ChatViewProps = {
+  conversation: ConversationDetail;
+  /** panel — встроенная панель рядом с читалкой (без шапки/сайдбара/кота, B-006). */
+  variant?: "page" | "panel";
+  /** Вставить текст в композер (цитата/момент видео из читалки, B-006). */
+  insert?: { text: string; nonce: number };
+  /** Клик по таймкоду [мм:сс] в ответах — seek видео-плеера (B-006). */
+  onTimecode?: (seconds: number) => void;
+};
+
+export function ChatView({ conversation, variant = "page", insert, onTimecode }: ChatViewProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(conversation.messages);
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
@@ -79,6 +89,14 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
   }, [messages, streamText, liveCards]);
+
+  // цитата из читалки / момент видео — в композер панели (B-006); вставка как
+  // производный state во время рендера (паттерн «adjusting state when props change»)
+  const [lastInsertNonce, setLastInsertNonce] = useState(0);
+  if (insert?.text && insert.nonce !== lastInsertNonce) {
+    setLastInsertNonce(insert.nonce);
+    setInput(insert.text);
+  }
 
   const refresh = async (): Promise<ConversationDetail | null> => {
     try {
@@ -367,29 +385,39 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
   return (
     <div className="flex h-full min-w-0">
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-2 border-b px-4 py-3">
-          <h1 className="truncate font-semibold">{title}</h1>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            {conversation.scenario || modeLabel(conversation.mode)}
-          </span>
-          {activeAgent && activeAgent !== "root" && (
-            <span className="rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs text-primary">
-              ведёт: {agentLabel(activeAgent)}
+        {variant === "panel" ? (
+          /* панель у читалки: компактная шапка без удаления (B-006) */
+          <header className="flex items-center gap-2 border-b px-3 py-2">
+            <h1 className="truncate text-sm font-semibold">{title}</h1>
+            <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              {conversation.scenario || modeLabel(conversation.mode)}
             </span>
-          )}
-          {/* прогресс сессии на мобиле — кнопкой в шапке (B-003: fixed-кнопка перекрывала композер) */}
-          {session && session.state !== "done" && <SessionPanelDialog session={session} />}
-          <ConfirmDeleteButton
-            endpoint={`/conversations/${conversation.uid}`}
-            title="Удалить разговор?"
-            name={title}
-            description="Сообщения разговора удалятся безвозвратно. Блоки базы знаний, созданные по нему, останутся."
-            successMessage="Разговор удалён"
-            redirectTo="/chat"
-            className="ml-auto"
-            buttonClassName="rounded-lg p-1.5 text-muted-foreground transition hover:text-rose-500"
-          />
-        </header>
+          </header>
+        ) : (
+          <header className="flex items-center gap-2 border-b px-4 py-3">
+            <h1 className="truncate font-semibold">{title}</h1>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              {conversation.scenario || modeLabel(conversation.mode)}
+            </span>
+            {activeAgent && activeAgent !== "root" && (
+              <span className="rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs text-primary">
+                ведёт: {agentLabel(activeAgent)}
+              </span>
+            )}
+            {/* прогресс сессии на мобиле — кнопкой в шапке (B-003: fixed-кнопка перекрывала композер) */}
+            {session && session.state !== "done" && <SessionPanelDialog session={session} />}
+            <ConfirmDeleteButton
+              endpoint={`/conversations/${conversation.uid}`}
+              title="Удалить разговор?"
+              name={title}
+              description="Сообщения разговора удалятся безвозвратно. Блоки базы знаний, созданные по нему, останутся."
+              successMessage="Разговор удалён"
+              redirectTo="/chat"
+              className="ml-auto"
+              buttonClassName="rounded-lg p-1.5 text-muted-foreground transition hover:text-rose-500"
+            />
+          </header>
+        )}
 
         {/* статус-бар быстрого разбора: курсор книги по главам (активность разговора);
             видео и материалы без глав (total ≤ 1) полосу не показывают */}
@@ -451,6 +479,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
                   onSend={streaming ? undefined : send}
                   conversationUid={conversation.uid}
                   noteSavedBlockUid={noteOutcomes.get(m.id)}
+                  onTimecode={onTimecode}
                 />
               ))}
               {streaming && (
@@ -470,7 +499,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
                   ))}
                   {streamText ? (
                     <div className="rounded-2xl bg-muted px-4 py-3">
-                      <Markdown content={trimOpenFence(streamText)} />
+                      <Markdown content={trimOpenFence(streamText)} onTimecode={onTimecode} />
                     </div>
                   ) : (
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -481,7 +510,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
               )}
             </div>
           </div>
-          <ChatCat />
+          {variant === "page" && <ChatCat />}
         </div>
 
         {streamError && (
@@ -554,7 +583,9 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
                   <Icon name="attach_file" size={16} />
                 )}
               </Button>
-              <CatToggle className="inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground" />
+              {variant === "page" && (
+                <CatToggle className="inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground" />
+              )}
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -582,7 +613,7 @@ export function ChatView({ conversation }: { conversation: ConversationDetail })
         </div>
       </div>
 
-      {session && (
+      {session && variant === "page" && (
         <>
           <aside className="hidden w-64 shrink-0 flex-col gap-4 border-l p-4 text-sm lg:flex">
             <div>
@@ -726,12 +757,14 @@ function Message({
   onSend,
   conversationUid,
   noteSavedBlockUid,
+  onTimecode,
 }: {
   message: ChatMessage;
   onInsert?: (t: string) => void;
   onSend?: (t: string) => void;
   conversationUid?: string;
   noteSavedBlockUid?: string;
+  onTimecode?: (seconds: number) => void;
 }) {
   const time = new Date(message.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
   if (message.role === "user") {
@@ -763,7 +796,11 @@ function Message({
     <div className="flex flex-col gap-2">
       <p className="flex items-center gap-1 px-1 text-xs text-muted-foreground"><Icon name="smart_toy" size={14} /> Агент · {time}</p>
       <div className="rounded-2xl border bg-muted/50 px-5 py-4">
-        <Markdown content={stripCommandFences(message.content, commandTexts)} className={CHAT_PROSE} />
+        <Markdown
+          content={stripCommandFences(message.content, commandTexts)}
+          className={CHAT_PROSE}
+          onTimecode={onTimecode}
+        />
       </div>
       {message.cards?.map((c, i) => (
         <CardView

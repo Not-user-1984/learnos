@@ -30,6 +30,8 @@ type Props = {
   initialMode?: string | null;
   /** Прогресс книги по активной активности (null — у материала одна глава, кнопка «Прочитал» не нужна). */
   progress?: { cursor: number; total: number } | null;
+  /** Split-view (B-006): обсудить главу/цитату в панели рядом, без ухода на /chat. */
+  onDiscuss?: (text: string) => void;
 };
 
 const FONT_KEY = "learnos-reader-font";
@@ -68,6 +70,7 @@ export function ChapterReader({
   isBook = false,
   initialMode = null,
   progress = null,
+  onDiscuss,
 }: Props) {
   const router = useRouter();
   const [fontScale, changeFont] = useReaderFont();
@@ -123,6 +126,15 @@ export function ChapterReader({
   }, []);
 
   const openDiscussion = async (quote: string | null) => {
+    // split-view (B-006): обсуждение живёт в панели рядом — цитата уходит в композер
+    if (onDiscuss) {
+      onDiscuss(
+        quote
+          ? `Разбери фрагмент главы «${chapter.title}»:\n\n${quote}`
+          : `Разберём главу «${chapter.title}»`,
+      );
+      return;
+    }
     setStarting("chat");
     try {
       const act = await apiPost<{ uid: string }>("/activities", { source: sourceUid });

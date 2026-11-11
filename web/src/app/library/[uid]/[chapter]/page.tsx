@@ -1,9 +1,9 @@
-/** Читалка главы: полный текст, e-book типографика, обсуждение с агентом. */
+/** Читалка главы с split-view: материал слева, обсуждение справа (B-006). */
 
 import { notFound } from "next/navigation";
 import { api } from "@/lib/api";
 import type { ActivityCard, SourceDetail } from "@/lib/types";
-import { ChapterReader } from "@/components/library/reader";
+import { ChapterSplit } from "@/components/library/chapter-split";
 
 export const dynamic = "force-dynamic";
 
@@ -40,19 +40,15 @@ export default async function ChapterReaderPage({
       : null;
 
   return (
-    <ChapterReader
-      sourceUid={uid}
-      sourceTitle={source.title}
-      chapter={{
-        idx,
-        title: ch?.title ?? `Глава ${idx}`,
-        summary: ch?.summary ?? null,
-        number: ch?.number ?? null,
-      }}
+    <ChapterSplit
+      source={source}
+      chapterIdx={idx}
+      chapterTitle={ch?.title ?? `Глава ${idx}`}
+      chapterSummary={ch?.summary ?? null}
+      chapterNumber={ch?.number ?? null}
       text={text}
       prevIdx={prev?.idx ?? null}
       nextIdx={next?.idx ?? null}
-      isBook={source.kind === "book"}
       initialMode={sp?.mode ?? null}
       progress={progress}
     />

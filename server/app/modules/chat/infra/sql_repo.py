@@ -68,8 +68,17 @@ class ConversationRepository:
         return convs
 
     def set_active_agent(self, session: Session, conv_id: int, agent: str | None) -> None:
-        """Сменить агента, ведущего разговор (handoff, T-050 Э4)."""
+        """Сменить агента, ведущего разговор (handoff, T-050)."""
         session.execute(update(conversations).where(conversations.c.id == conv_id).values(active_agent=agent))
+
+    def find_by_context_ref(self, session: Session, context_ref: str) -> dict | None:
+        """Разговор по привязке к главе источника (split-view, B-006): свежий."""
+        row = session.execute(
+            select(conversations)
+            .where(conversations.c.context_ref == context_ref)
+            .order_by(conversations.c.id.desc())
+        ).first()
+        return _conv_dict(row) if row else None
 
     def update(self, session: Session, conv_id: int, **values) -> None:
         session.execute(update(conversations).where(conversations.c.id == conv_id).values(**values))
@@ -147,6 +156,7 @@ def _conv_dict(r) -> dict:
         "activity_id": r.activity_id,
         "chapter_idx": r.chapter_idx,
         "focus_block_uid": r.focus_block_uid,
+        "context_ref": r.context_ref,
         "summary": r.summary,
         "created_at": r.created_at,
         "updated_at": r.updated_at,

@@ -13,8 +13,8 @@ class ProcessOut(BaseModel):
     job_id: int | None = None
 
 
-def make_router(svc) -> APIRouter:
-    """Роуты библиотеки."""
+def make_router(svc, chat=None) -> APIRouter:
+    """Роуты библиотеки; chat — get-or-create разговора главы (split-view, B-006)."""
     r = APIRouter(tags=["library"])
 
     @r.post("/sources", response_model=SourceCard)
@@ -86,6 +86,22 @@ def make_router(svc) -> APIRouter:
     @r.get("/sources/{ref}/chapters/{idx}")
     def read_chapter(ref: str, idx: int, offset: int = 0, limit: int = 12000):
         return svc.read_chapter(ref, idx, offset, limit)
+
+    @r.get("/sources/{ref}/segments")
+    def segments(ref: str, from_s: float = 0, to_s: float | None = None):
+        """Сегменты видео-транскрипта с таймкодами (B-006); from/to — окно в секундах."""
+        data = svc.segments(ref)
+        segs = [
+            s
+            for s in data["segments"]
+            if (s["start"] >= from_s if from_s else True) and (s["start"] <= to_s if to_s else True)
+        ]
+        return {"segments": segs, "video_id": data["video_id"], "url": data["url"]}
+
+    @r.post("/sources/{ref}/chapters/{idx}/conversation")
+    def chapter_conversation(ref: str, idx: int):
+        """Разговор главы (get-or-create, B-006): split-view продолжает тот же разговор."""
+        return chat.chapter_conversation(ref, idx)
 
     @r.get("/jobs/{job_id}", response_model=JobOut)
     def get_job(job_id: int) -> JobOut:

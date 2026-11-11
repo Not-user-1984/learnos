@@ -13,6 +13,8 @@ type Props = {
   content: string;
   /** uid → заголовок для рендера [[blk_…]] */
   linkTitles?: Record<string, string>;
+  /** Клик по таймкоду [мм:сс] (панель видео, B-006): seek плеера. */
+  onTimecode?: (seconds: number) => void;
   className?: string;
 };
 
@@ -24,7 +26,20 @@ function wikilinks(content: string, titles: Record<string, string>): string {
   });
 }
 
-export function Markdown({ content, linkTitles = {}, className = "" }: Props) {
+/** [мм:сс] / [ч:мм:сс] → ссылка #t=сек (до рендера; активна при onTimecode). */
+function timecodes(content: string): string {
+  return content.replace(
+    /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g,
+    (whole, stamp: string) => {
+      const parts = stamp.split(":").map(Number);
+      const secs =
+        parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+      return Number.isFinite(secs) ? `[${stamp}](#t=${Math.floor(secs)})` : whole;
+    },
+  );
+}
+
+export function Markdown({ content, linkTitles = {}, onTimecode, className = "" }: Props) {
   return (
     <div
       className={`prose prose-zinc dark:prose-invert max-w-none
@@ -37,8 +52,21 @@ export function Markdown({ content, linkTitles = {}, className = "" }: Props) {
         remarkPlugins={[remarkGfm, remarkAlerts, remarkMath]}
         rehypePlugins={[rehypeKatex]}
         components={{
-          // http(s)-ссылки: обычные остаются ссылками, YouTube/PDF получают меню действий
+          // http(s)-ссылки: обычные остаются ссылками, YouTube/PDF получают меню действий;
+          // #t=сек — таймкод видео: кнопкой на seek плеера (B-006)
           a({ href, children }) {
+            if (onTimecode && href?.startsWith("#t=")) {
+              const secs = Number(href.slice(3));
+              return (
+                <button
+                  type="button"
+                  onClick={() => onTimecode(secs)}
+                  className="rounded-md border border-primary/40 bg-primary/10 px-1.5 py-0.5 font-mono text-[0.85em] text-primary transition hover:bg-primary/20"
+                >
+                  {children}
+                </button>
+              );
+            }
             return <ActionLink href={href}>{children}</ActionLink>;
           },
           pre({ children }) {
@@ -88,7 +116,7 @@ export function Markdown({ content, linkTitles = {}, className = "" }: Props) {
           },
         }}
       >
-        {wikilinks(content, linkTitles)}
+        {wikilinks(onTimecode ? timecodes(content) : content, linkTitles)}
       </ReactMarkdown>
     </div>
   );

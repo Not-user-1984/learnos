@@ -219,6 +219,7 @@ class ChatService:
         chapter: int | None = None,
         focus_block: str | None = None,
         title: str | None = None,
+        context_ref: str | None = None,
     ) -> dict:
         """Новый разговор в одном из режимов (кастомные агенты — mode='agent:<имя>')."""
         if not _valid_mode(self._agents, mode):
@@ -238,10 +239,27 @@ class ChatService:
                 activity_id=activity_id,
                 chapter_idx=chapter,
                 focus_block_uid=focus_block,
+                context_ref=context_ref,
                 created_at=now,
                 updated_at=now,
             )
             return self._convs.get(uow.session, uid)
+
+    def chapter_conversation(self, source_ref: str | int, chapter_idx: int) -> dict:
+        """Разговор главы источника (get-or-create, split-view B-006): повторное
+        открытие главы продолжает тот же разговор, история не размножается."""
+        src = self._library.get_source(source_ref)
+        context_ref = f"{src['uid']}:{chapter_idx}"
+        with self._uow() as uow:
+            existing = self._convs.find_by_context_ref(uow.session, context_ref)
+            if existing is not None:
+                return existing
+        act = self._learning.start_activity(src["uid"])
+        ch = next((c for c in src.get("chapters", []) if c["idx"] == chapter_idx), None)
+        title = f"Разбор: {ch['title'] if ch else src['title']}"[:80]
+        return self.create_conversation(
+            activity=act["uid"], chapter=chapter_idx, title=title, context_ref=context_ref
+        )
 
     def get_conversation(self, uid: str) -> dict:
         """Разговор: сообщения, сессия, прогресс разбора, сценарий, состояние агента."""
@@ -439,6 +457,17 @@ class ChatService:
         agent_name = _agent_for_conversation(self._agents, conv)
         spec: AgentSpec = self._agents.get(agent_name)
         system_extra = self._context_block(conv, session)
+        # split-view (B-006): разговор привязан к главе — агент читает её по требованию
+        # и для видео ссылается на таймкоды (кликабельны в панели)
+        if conv.get("context_ref"):
+            src_uid, _, ch_ref = conv["context_ref"].partition(":")
+            system_extra = (
+                f"{system_extra}\n\n"
+                f"Разговор открыт рядом с главой {ch_ref} источника uid={src_uid}: материал получай "
+                "read_chapter по этой главе (не пересказывай её целиком без нужды). Если источник — "
+                "видео, указывай моменты таймкодами [мм:сс] (или [ч:мм:сс]) — в панели они кликабельны "
+                "и перематывают плеер."
+            ).strip()
         # претрекер контента: заметка о ссылках/ID в сообщении — агенту, без LLM
         for note in filter(None, [content_note(content), *extra_notes]):
             system_extra = f"{system_extra}\n\n{note}".strip()

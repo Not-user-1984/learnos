@@ -23,6 +23,8 @@ conversations = Table(
     Column("activity_id", Integer, ForeignKey("activities.id")),
     Column("chapter_idx", Integer),
     Column("focus_block_uid", Text),
+    # split-view (B-006): разговор главы "source_uid:chapter" — get-or-create при открытии
+    Column("context_ref", Text),
     Column("summary", Text),
     Column("created_at", Text, nullable=False),
     Column("updated_at", Text, nullable=False),
