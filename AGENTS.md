@@ -12,6 +12,12 @@
 
 **Агент-разработчик**: `.zcode/agents/learnos-dev.md` — субагент, знающий архитектуру и воркфлоу; запускать задачи разработки через него.
 
+## bridge_ai_agent: задачи от архитектора (Claude)
+
+Планы задач от Claude лежат в `bridge_ai_agent/`. Протокол описан в `bridge_ai_agent/README.md`, доска — `bridge_ai_agent/BOARD.md`.
+Команда «возьми задачу» или «возьми B-NNN»: следуй `bridge_ai_agent/README.md` (раздел «Исполнитель»).
+Claude в этом проекте код не пишет: только планы и ревью в `bridge_ai_agent/`.
+
 ## Текущий статус (2026-11-10)
 
 **Аудит 2026-11-01 ЗАКРЫТ ЦЕЛИКОМ (спринты 0–4, T-048..T-052)** ([task_ai/reference/audit-2026-11-01.md](task_ai/reference/audit-2026-11-01.md), 31 пункт R-01..R-31): T-048 спринт 0 (P0: обрезка окон чтения не рвёт next_offset, update_block round-trip без потерь, finish_session пишет блок до закрытия, линтер «промпт ↔ инструменты», list_blocks с tags/sources, recovery залипших processing, Telegram-фиксы) и T-049 спринт 1 (безопасность: карточки субагентов в SSE родителя, песочница скиллов без секретов + /repo-маски, SSRF-netguard на всех загрузках URL, bearer LEARNOS_API_TOKEN). Спринты 2 и 3 закрыты 2026-11-01 (T-050 harness; T-051 обучение: фейнман-гейт can_finish+verified, SRS-фиксы, поиск OR/bm25+префиксы, ингест fenced-код+map-reduce, concepts/assessments-таблицы). Спринт 2: handoff разговоров (conversations.active_agent + handoff()/handoff_back(), бейдж в чате), слой контекста (трасса инструментов и карточки в истории, компактация conversation_summarizer, бюджет 2.5 симв/токен), трейсы agent_steps + /api/runs/{id}, eval-каркас tests/evals + scripts/run_evals.py; спринты 3 (T-051) и 4 (T-052) тоже закрыты: T-051 — обучение (фейнман-гейт+verified, SRS, поиск, ингест, concepts/assessments); T-052 — эксплуатация (fail-fast миграции с бэкапом БД, healthcheck, kb/ отдельное git-репо + ежедневный бэкап, R-16/R-23/R-25..31, LLM-слой: сборка tool-call по index + фоновая петля + статус всех ролей). Остальное — как было:
