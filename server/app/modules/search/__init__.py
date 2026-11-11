@@ -1,6 +1,8 @@
 """Модуль «Поиск»: FTS5 + векторы (B-008) по блокам и главам, обновление по событиям."""
 
 from ...kernel.module import Module
+from ..knowledge.events import BlockDeleted, BlockSaved, BlockUpdated
+from ..library.events import SourceDeleted, SourceProcessed
 
 
 class SearchModule(Module):
@@ -42,9 +44,6 @@ class SearchModule(Module):
         return search_tools(c)
 
     def subscribe(self, bus, c) -> None:
-        from ..knowledge.events import BlockDeleted, BlockSaved, BlockUpdated
-        from ..library.events import SourceDeleted, SourceProcessed
-
         def _on_block_saved(block_uid: str) -> None:
             c.search.on_block_saved(block_uid)
             # векторы — фоном: не блокировать запрос пользователя (B-008)

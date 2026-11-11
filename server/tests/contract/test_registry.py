@@ -139,3 +139,12 @@ def test_agent_duplicate_name_rejected():
         raise AssertionError("ожидали ValueError")
     except ValueError:
         pass
+
+
+def test_container_boots_all_ports_resolved(container):
+    """B-009: контейнер собирается, use-cases и порты привязаны (бог-сервисы разрезаны)."""
+    assert container.chat._context_uc and container.chat._stream_uc and container.chat._drafts_uc
+    assert container.knowledge._generation and container.knowledge._categories_uc
+    assert container.library._processing_uc
+    assert container.learning._library is container.library  # порт вместо чтения infra
+    assert container.brain._search is container.search

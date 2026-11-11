@@ -79,7 +79,7 @@ def test_run_video_saves_real_title_over_url(tmp_path):
     svc, sources, _ = make_service(
         tmp_path, skill_title="Логирование в Python", source_title="https://youtu.be/abc123"
     )
-    result = svc._run_video(sources.row, "https://youtu.be/abc123")
+    result = svc._processing_uc._run_video(sources.row, "https://youtu.be/abc123")
     assert result["ok"]
     assert sources.row["title"] == "Логирование в Python"
     assert sources.row["status"] == "processed"
@@ -87,13 +87,13 @@ def test_run_video_saves_real_title_over_url(tmp_path):
 
 def test_run_video_keeps_existing_title_when_skill_silent(tmp_path):
     svc, sources, _ = make_service(tmp_path, skill_title="", source_title="Конец эпохи кодеров")
-    svc._run_video(sources.row, "https://youtu.be/abc123")
+    svc._processing_uc._run_video(sources.row, "https://youtu.be/abc123")
     assert sources.row["title"] == "Конец эпохи кодеров"
 
 
 def test_run_video_single_chapter_with_transcript(tmp_path):
     svc, _, chapters = make_service(tmp_path, skill_title="Тайтл", source_title="url")
-    svc._run_video({"id": 1, "uid": "src_x", "title": "url", "kind": "video"}, "url")
+    svc._processing_uc._run_video({"id": 1, "uid": "src_x", "title": "url", "kind": "video"}, "url")
     assert len(chapters.inserted) == 1
     ch = chapters.inserted[0]
     assert ch["idx"] == 1

@@ -6,7 +6,7 @@ from tests.api.test_book_structure import ENTRIES, _add_book_source
 def test_mark_chapter_done_moves_cursor_via_conversation(client, container):
     """Тул по conversation_uid: вперёд, но не назад; последняя глава завершает активность."""
     src = _add_book_source(container)
-    container.library._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
+    container.library._processing_uc._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
     act = container.learning.start_activity(src["uid"])
     conv = container.chat.create_conversation(mode="quick", activity=act["uid"], chapter=1)
 

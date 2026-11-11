@@ -102,7 +102,7 @@ def test_summarize_long_chapter_map_reduce(container, fake_llm, tmp_path):
             total=1,
             now="2026-11-01T00:00:00",
         )
-    out = container.library.run_job(job)
+    out = container.library._processing_uc.run_job(job)
     assert out.get("ok") is True
     with container.uow() as uow:
         row = container.library._chapters.get(  # noqa: SLF001

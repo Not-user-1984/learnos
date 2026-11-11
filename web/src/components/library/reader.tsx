@@ -15,6 +15,7 @@ import { useStored } from "@/lib/use-stored";
 import { Markdown } from "@/components/markdown/Markdown";
 import { Button } from "@/components/ui/button";
 import { ChapterHistoryButton } from "./chapter-history";
+import { ChapterNav } from "./chapter-nav";
 import { PdfViewer } from "./pdf-viewer";
 
 type Props = {
@@ -292,21 +293,12 @@ export function ChapterReader({
             className="min-h-0"
           />
           <nav className="flex shrink-0 items-center justify-between border-t px-5 py-2.5">
-            {prevIdx ? (
-              <Link href={`/library/${sourceUid}/${prevIdx}?mode=pdf`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-                <Icon name="chevron_left" size={16} /> Глава {prevIdx}
-              </Link>
-            ) : (
-              <span />
-            )}
+            <div className="flex items-center gap-2">
+              <ChapterNav href={(idx) => `/library/${sourceUid}/${idx}?mode=pdf`} prevIdx={prevIdx} nextIdx={nextIdx} pdf />
+            </div>
             <span className="text-xs text-muted-foreground">
               PDF · глава {chapter.idx} · стр. {visiblePage ?? pdfPage}
             </span>
-            {nextIdx && (
-              <Link href={`/library/${sourceUid}/${nextIdx}?mode=pdf`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-                Глава {nextIdx} <Icon name="chevron_right" size={16} />
-              </Link>
-            )}
           </nav>
         </div>
       ) : (
@@ -325,20 +317,7 @@ export function ChapterReader({
             <Markdown content={formatChapter(text, chapter.title)} />
           </article>
 
-          <nav className="mx-auto flex max-w-2xl items-center justify-between border-t px-5 py-5 sm:px-8">
-            {prevIdx ? (
-              <Link href={`/library/${sourceUid}/${prevIdx}`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-                <Icon name="chevron_left" size={16} /> Глава {prevIdx}
-              </Link>
-            ) : (
-              <span />
-            )}
-            {nextIdx && (
-              <Link href={`/library/${sourceUid}/${nextIdx}`} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-                Глава {nextIdx} <Icon name="chevron_right" size={16} />
-              </Link>
-            )}
-          </nav>
+          <ChapterNav href={(idx) => `/library/${sourceUid}/${idx}`} prevIdx={prevIdx} nextIdx={nextIdx} />
         </div>
       )}
 

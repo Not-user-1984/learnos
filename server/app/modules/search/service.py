@@ -11,6 +11,7 @@ from sqlalchemy import text
 from ...kernel.asyncio_bridge import run_coro_sync
 from ...kernel.db import UnitOfWorkFactory
 from ...kernel.errors import LLMError
+from ..knowledge.public import plain_text
 
 if TYPE_CHECKING:
     from ...llm.router import ModelRouter
@@ -242,8 +243,6 @@ class SearchService:
 
     def on_block_saved(self, block_uid: str) -> None:
         """Переиндексировать один блок (события BlockSaved/BlockUpdated)."""
-        from ..knowledge.domain import plain_text
-
         try:
             block = self._kb.get_block(block_uid)
         except Exception:  # noqa: BLE001 — блок мог быть удалён

@@ -30,6 +30,20 @@
 
 Сквозные слои: `kernel` (config/db/errors/events/tools), `llm` (провайдеры + ModelRouter по ролям из `config/llm.yaml`), `agent` (AgentRuntime с субагентами `run_agent`, трейсы `agent_runs` c `parent_run_id`).
 
+## Как добавить модуль (B-009)
+
+1. `modules/<name>/__init__.py` — класс `<Name>Module(Module)`: `wire` (сервисы в контейнер),
+   `routers` (REST), `tools` (MCP/агенты), `subscribe` (реакции на чужие события).
+2. Межмодульные связи — только два пути:
+   - **события** (`<name>/events.py`, dataclass-наследник `DomainEvent`): реакция на чужое —
+     подписка в `subscribe(bus, c)`; шина рассылает после коммита транзакции;
+   - **порты/фасад** (`<name>/public.py` и публичные методы сервисов): когда нужен ответ.
+     Импорт чужих `service/agents/domain/schemas/infra` запрещён контрактами import-linter
+     («Внутренности … закрыты»); свои use-cases живут в `<name>/usecases/` и держат ссылку
+     на свой сервис — god-сервисы распилены на классы одной ответственности.
+3. Контракт линтера: `uv run lint-imports` — 7 контрактов, включая «Learning не зависит
+   от courses/review» и закрытые внутренности knowledge/library/learning.
+
 ## Ключевые потоки
 
 - **Оркестратор (эпик T-034)**: `/chat` — один вход; новый разговор всегда root. Претрекер распознаёт контент сообщения без LLM (заметка в system_extra с готовыми действиями), root сам отвечает на простое и зовёт субагентов `run_agent` (каталог `list_agents`); предложения — карточками `action_offer`. Сценарии входа — интентами (`review/study/session/quote/tune/reinforce` с первым сообщением → директива агенту). Legacy-режимы free/quick/session/tuning/`agent:<name>` живут для старых разговоров и MCP.

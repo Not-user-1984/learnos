@@ -118,6 +118,14 @@ class ActivityRepository:
         row = session.execute(stmt).first()
         return _activity_dict(row) if row else None
 
+    def count_for_course(self, session: Session, course_id: int) -> int:
+        """Число активностей курса (порт для courses, B-009)."""
+        from sqlalchemy import func
+
+        return int(
+            session.execute(select(func.count()).where(activities.c.course_id == course_id)).scalar_one()
+        )
+
     def ids_for_source(self, session: Session, source_id: int) -> list[int]:
         """id активностей источника (фильтр разговоров по главе)."""
         rows = session.execute(select(activities.c.id).where(activities.c.source_id == source_id)).all()

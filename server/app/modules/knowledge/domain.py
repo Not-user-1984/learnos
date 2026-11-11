@@ -345,3 +345,67 @@ def category_ancestors(path: str) -> list[str]:
     """Пути всех предков (включая сам путь)."""
     parts = path.split("/")
     return ["/".join(parts[: i + 1]) for i in range(len(parts))]
+
+
+def with_ancestors(path: str) -> list[str]:
+    """Путь и все его префиксы."""
+    parts = path.split("/")
+    return ["/".join(parts[: i + 1]) for i in range(len(parts))]
+
+
+def writer_out_to_draft(out, kind: str) -> BlockDraft:
+    """Выход block_writer (pydantic) → доменный BlockDraft."""
+    from .domain import BlockSource, Concept, PracticeStep
+
+    return BlockDraft(
+        title=out.title,
+        summary=out.summary,
+        kind=kind if kind in {"lesson", "note", "runbook"} else "lesson",
+        concepts=tuple(Concept(c.term, c.definition) for c in out.concepts),
+        theses=tuple(out.theses),
+        my_examples=tuple(out.my_examples),
+        mermaid=out.mermaid,
+        practice=tuple(PracticeStep(p.machine, p.command, p.explanation, p.result) for p in out.practice),
+        weak_spots=tuple(out.weak_spots),
+        open_questions=tuple(out.open_questions),
+        links=tuple(link for link in out.links if link.startswith("blk_")),
+        tags=tuple(out.tags),
+        category_suggestion=out.category_suggestion,
+        # источник — только реальный uid (модель любит подставить заголовок)
+        sources=tuple(
+            BlockSource(source=s.source, chapter=s.chapter, title=s.title)
+            for s in getattr(out, "sources", []) or []
+            if str(s.source).startswith("src_")
+        ),
+    )
+
+
+def dict_of_meta(meta: BlockMeta) -> dict:
+    return {
+        "uid": meta.uid,
+        "title": meta.title,
+        "kind": meta.kind,
+        "summary": meta.summary,
+        "category_path": meta.category_path,
+        "category_status": meta.category_status,
+        "tags": meta.tags,
+        "sources": meta.sources,
+        "session_uid": meta.session_uid,
+        "conversation_uid": meta.conversation_uid,
+        "activity_uid": meta.activity_uid,
+        "version": meta.version,
+        "created": meta.created,
+        "updated": meta.updated,
+        "links": meta.links,
+        "weak_spots_count": meta.weak_spots_count,
+        "path": meta.path,
+        "verified": meta.verified,
+    }
+
+
+def assemble_frontmatter(meta_raw: dict, body: str) -> str:
+    """Склеить frontmatter + тело обратно в MD."""
+    import yaml
+
+    fm = yaml.safe_dump(meta_raw, allow_unicode=True, sort_keys=False).strip()
+    return f"---\n{fm}\n---\n\n{body}"

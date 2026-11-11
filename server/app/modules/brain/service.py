@@ -7,7 +7,8 @@
 import hashlib
 import re
 
-from ..knowledge.domain import BlockDraft
+from ..knowledge.public import BlockDraft
+from ..library.public import is_youtube_url
 
 # тег-хэш для дедупа текста: sha256 нормализованного текста, укороченный
 _HASH_TAG_LEN = 23  # "sha256:" + 16 символов
@@ -67,8 +68,6 @@ class BrainService:
         return {"error": "validation_failed", "message": "kind должен быть text|url"}
 
     def _capture_url(self, url: str, title: str | None) -> dict:
-        from ..library.domain import is_youtube_url
-
         kind = "video" if is_youtube_url(url) else ("book" if url.lower().endswith(".pdf") else "web")
         out = self._lib.add_source(kind, title or url, url=url)
         if not out.get("created", True):

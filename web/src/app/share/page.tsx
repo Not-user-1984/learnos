@@ -5,6 +5,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { addSourceFromUrl, apiPost } from "@/lib/api";
+import { isYoutubeUrl } from "@/lib/youtube";
 import { Button } from "@/components/ui/button";
 
 function ShareForm() {
@@ -18,7 +19,7 @@ function ShareForm() {
   const [result, setResult] = useState<{ uid: string; kind: string; processed: boolean } | null>(null);
 
   const url = urlDraft ?? sharedUrl;
-  const isYoutube = /youtu\.?be/i.test(url);
+  const isYoutube = isYoutubeUrl(url);
 
   const save = async () => {
     setStatus("saving");

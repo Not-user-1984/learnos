@@ -101,6 +101,9 @@ def _svc_with_source(lang: str | None):
     from app.modules.chat.service import ChatService
 
     svc = ChatService.__new__(ChatService)
+    from app.modules.chat.usecases.context import ContextBuilder
+
+    svc._context_uc = ContextBuilder(svc)  # use-cases после разреза (B-009)
     svc._profile = SimpleNamespace(
         person_brief=lambda: "имя", machines_brief=lambda: "машины", learning_brief=lambda: "стиль"
     )

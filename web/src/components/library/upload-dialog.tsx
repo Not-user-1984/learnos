@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import { apiPost, apiUpload } from "@/lib/api";
+import { fetchYoutubeTitle } from "@/lib/youtube";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -38,14 +39,7 @@ export function AddSourceButton() {
     setBusy(true);
     try {
       let videoTitle = title;
-      if (!videoTitle) {
-        try {
-          const resp = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
-          if (resp.ok) videoTitle = ((await resp.json()) as { title?: string }).title ?? "";
-        } catch {
-          videoTitle = "";
-        }
-      }
+      if (!videoTitle) videoTitle = (await fetchYoutubeTitle(url)) ?? ""; // общий хелпер (B-009)
       const src = await apiPost<{ uid: string; id: number }>("/sources", { kind: "video", title: videoTitle || url, url });
       await apiPost<{ ok: boolean }>(`/sources/${src.id}/process`, {}).catch(() => undefined);
       toast.success("Видео добавлено, транскрипт обрабатывается");

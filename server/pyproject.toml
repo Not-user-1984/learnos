@@ -91,6 +91,26 @@ type = "independence"
 modules = ["app.modules.*.infra"]
 
 [[tool.importlinter.contracts]]
+name = "Внутренности knowledge закрыты (только public/events)"
+ignore_imports = ["app.modules.knowledge.public -> app.modules.knowledge.schemas", "app.modules.knowledge.public -> app.modules.knowledge.domain"]
+type = "forbidden"
+source_modules = ["app.modules.chat", "app.modules.courses", "app.modules.learning", "app.modules.search", "app.modules.export", "app.modules.brain", "app.modules.review", "app.modules.messenger", "app.modules.today", "app.modules.tuning", "app.modules.revision", "app.modules.mcpext", "app.modules.profile", "app.modules.research", "app.modules.skills", "app.modules.library"]
+forbidden_modules = ["app.modules.knowledge.service", "app.modules.knowledge.agents", "app.modules.knowledge.domain", "app.modules.knowledge.schemas", "app.modules.knowledge.infra", "app.modules.knowledge.usecases"]
+
+[[tool.importlinter.contracts]]
+name = "Внутренности library закрыты (только public/events)"
+ignore_imports = ["app.modules.library.public -> app.modules.library.domain"]
+type = "forbidden"
+source_modules = ["app.modules.chat", "app.modules.courses", "app.modules.knowledge", "app.modules.search", "app.modules.export", "app.modules.brain", "app.modules.review", "app.modules.messenger", "app.modules.today", "app.modules.tuning", "app.modules.revision", "app.modules.mcpext", "app.modules.profile", "app.modules.research", "app.modules.skills", "app.modules.learning"]
+forbidden_modules = ["app.modules.library.service", "app.modules.library.domain", "app.modules.library.infra", "app.modules.library.usecases"]
+
+[[tool.importlinter.contracts]]
+name = "Внутренности learning закрыты (только public/events)"
+type = "forbidden"
+source_modules = ["app.modules.chat", "app.modules.courses", "app.modules.knowledge", "app.modules.search", "app.modules.export", "app.modules.brain", "app.modules.review", "app.modules.messenger", "app.modules.today", "app.modules.tuning", "app.modules.revision", "app.modules.mcpext", "app.modules.profile", "app.modules.research", "app.modules.skills", "app.modules.library"]
+forbidden_modules = ["app.modules.learning.service", "app.modules.learning.domain", "app.modules.learning.infra"]
+
+[[tool.importlinter.contracts]]
 name = "Learning не зависит от курсов и повторений"
 type = "forbidden"
 source_modules = ["app.modules.learning"]

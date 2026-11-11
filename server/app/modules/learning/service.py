@@ -7,6 +7,7 @@ from ...kernel.clock import Clock, now_iso
 from ...kernel.db import UnitOfWorkFactory
 from ...kernel.errors import Conflict, InvalidState, NotFound
 from ...kernel.ids import IdGenerator
+from ..knowledge.public import BlockDraftIn, BlockSource
 from .domain import allowed_events, can_finish, transcript_entry, transition
 from .events import ActivityProgressed, ChapterRead, SessionFinished, SessionStarted
 from .infra.sql_repo import ActivityRepository, SessionRepository
@@ -26,6 +27,7 @@ class LearningService:
         clock: Clock,
         knowledge=None,
         profile=None,
+        library=None,
     ) -> None:
         self._uow = uow
         self._sessions = sessions
@@ -34,6 +36,7 @@ class LearningService:
         self._clock = clock
         self._knowledge = knowledge
         self._profile = profile
+        self._library = library  # публичный сервис библиотеки (порты вместо infra, B-009)
         self._chat = None  # ставится в bootstrap (отвязка разговоров при удалении активности)
 
     def bind_chat(self, chat) -> None:
@@ -49,20 +52,14 @@ class LearningService:
         активности с курсором 1 — возвращается действующая, прогресс книги
         не размазывается по дублям.
         """
-        from sqlalchemy import select
-
-        from ..library.infra.tables import sources
-
+        src = self._library.resolve_ref(source_ref)  # порт вместо чтения infra (B-009)
         now = now_iso(self._clock)
         with self._uow() as uow:
-            row = uow.session.execute(select(sources).where(_ref_cond(sources, source_ref))).first()
-            if row is None:
-                raise NotFound(f"источник '{source_ref}' не найден")
-            act, existing = self._find_or_create_activity(uow.session, row, course_id, now)
+            act, existing = self._find_or_create_activity(uow.session, src, course_id, now)
             out = {
                 "id": act["id"],
                 "uid": act["uid"],
-                "source_id": row.id,
+                "source_id": src["id"],
                 "title": act["title"],
                 "status": act["status"],
                 "cursor_chapter": act["cursor_chapter"],
@@ -73,54 +70,25 @@ class LearningService:
 
     def list_activities(self, status: str | None = None) -> list[dict]:
         """Активности с прогрессом (глав пройдено / всего)."""
-        from sqlalchemy import func, select
-
-        from ..library.infra.tables import chapters, sources
-
         with self._uow() as uow:
             acts = self._acts.list(uow.session, status=status)
-            for a in acts:
-                total = uow.session.execute(
-                    select(func.count()).where(chapters.c.source_id == a["source_id"])
-                ).scalar_one()
-                a["total_chapters"] = int(total)
-                a["source_uid"] = uow.session.execute(
-                    select(sources.c.uid).where(sources.c.id == a["source_id"])
-                ).scalar_one()
-            return acts
+        for a in acts:  # прогресс — портами библиотеки, без чужой infra (B-009)
+            a["total_chapters"] = self._library.chapters_count(a["source_id"])
+            a["source_uid"] = self._library.source_ref(a["source_id"])["uid"]
+        return acts
 
     def get_activity(self, ref: str | int) -> dict:
         """Активность с прогрессом — точечный запрос (R-27: было N+1 через list)."""
-        from sqlalchemy import func, select
-
-        from ..library.infra.tables import chapters, sources
-
         with self._uow() as uow:
             act = self._acts.get(uow.session, ref)
-            act["total_chapters"] = int(
-                uow.session.execute(
-                    select(func.count()).where(chapters.c.source_id == act["source_id"])
-                ).scalar_one()
-            )
-            act["source_uid"] = uow.session.execute(
-                select(sources.c.uid).where(sources.c.id == act["source_id"])
-            ).scalar_one()
-            return act
+        act["total_chapters"] = self._library.chapters_count(act["source_id"])
+        act["source_uid"] = self._library.source_ref(act["source_id"])["uid"]
+        return act
 
     def activity_ids_for_source(self, source_ref: str | int) -> list[int]:
         """id активностей источника — для фильтра «история разговоров по главе»."""
+        src_id = self._library.resolve_ref(source_ref)["id"]  # порт вместо infra (B-009)
         with self._uow() as uow:
-            from sqlalchemy import select as sa_select
-
-            from ..library.infra.tables import sources as sources_t
-
-            src_id = uow.session.execute(
-                sa_select(sources_t.c.id).where(sources_t.c.uid == str(source_ref))
-            ).scalar()
-            if src_id is None and str(source_ref).isdigit():
-                src_id = int(source_ref)
-            if src_id is None:
-                raise NotFound(f"источник '{source_ref}' не найден")
             return self._acts.ids_for_source(uow.session, int(src_id))
 
     def release_activities(self, activity_ids: list[int]) -> None:
@@ -329,15 +297,7 @@ class LearningService:
             self._sessions.update(uow.session, s["id"], status="finished", state="done", ended_at=now)
             activity = self._acts.find(uow.session, s["activity_id"]) if s["activity_id"] else None
             if activity:
-                from sqlalchemy import func, select
-
-                from ..library.infra.tables import chapters
-
-                total = int(
-                    uow.session.execute(
-                        select(func.count()).where(chapters.c.source_id == activity["source_id"])
-                    ).scalar_one()
-                )
+                total = self._library.chapters_count(activity["source_id"])  # порт (B-009)
                 cursor = max(activity["cursor_chapter"], (s["chapter_idx"] or 0) + 1)
                 status = "done" if cursor > total else activity["status"]
                 self._acts.update(
@@ -433,7 +393,7 @@ class LearningService:
                 act = self._acts.get(uow.session, activity_id)
             else:
                 raise NotFound("активность не задана (activity или conversation)")
-            total = self._total_chapters(uow.session, act["source_id"])
+            total = self._library.chapters_count(act["source_id"])  # порт (B-009)
             target = chapter if chapter is not None and chapter > 0 else act["cursor_chapter"]
             out = self._advance_cursor(uow, act, target, total, now)
             # курсы помечают элемент главы read (B-004)
@@ -454,27 +414,21 @@ class LearningService:
         повторный клик идемпотентен, глава позади курсора его не двигает,
         последняя глава завершает изучение. Разговор не создаётся.
         """
-        from sqlalchemy import select
-
-        from ..library.infra.tables import sources
-
+        src_row = self._library.resolve_ref(source_ref)  # порт вместо infra (B-009)
+        total = self._library.chapters_count(src_row["id"])
+        if total == 0:
+            raise InvalidState(f"у источника «{src_row['title']}» нет глав — прогресс нечего двигать")
+        if not 1 <= chapter <= total:
+            raise InvalidState(f"номер главы должен быть от 1 до {total}")
         now = now_iso(self._clock)
         with self._uow() as uow:
-            row = uow.session.execute(select(sources).where(_ref_cond(sources, source_ref))).first()
-            if row is None:
-                raise NotFound(f"источник '{source_ref}' не найден")
-            total = self._total_chapters(uow.session, row.id)
-            if total == 0:
-                raise InvalidState(f"у источника «{row.title}» нет глав — прогресс нечего двигать")
-            if not 1 <= chapter <= total:
-                raise InvalidState(f"номер главы должен быть от 1 до {total}")
-            act, _existing = self._find_or_create_activity(uow.session, row, None, now)
+            act, _existing = self._find_or_create_activity(uow.session, src_row, None, now)
             out = self._advance_cursor(uow, act, chapter, total, now)
             # «прочитал сам» засчитывается элементу курса как read (B-004)
             uow.emit(
                 ChapterRead(
                     activity_uid=act["uid"],
-                    source_uid=row.uid,
+                    source_uid=src_row["uid"],
                     chapter_idx=chapter,
                     course_id=act.get("course_id"),
                 )
@@ -486,6 +440,16 @@ class LearningService:
         with self._uow() as uow:
             s = self._sessions.find_by_conversation(uow.session, conversation_id)
             return self._state_out(s) if s else None
+
+    def count_sessions_for_course(self, course_id: int) -> int:
+        """Число сессий курса — порт для courses (проверка перед удалением, B-009)."""
+        with self._uow() as uow:
+            return self._sessions.count_for_course(uow.session, course_id)
+
+    def count_activities_for_course(self, course_id: int) -> int:
+        """Число активностей курса — порт для courses (B-009)."""
+        with self._uow() as uow:
+            return self._acts.count_for_course(uow.session, course_id)
 
     def active_sessions(self) -> list[dict]:
         """Незакрытые сессии (свежие первыми) — для дашборда «Сегодня» (B-005)."""
@@ -502,16 +466,16 @@ class LearningService:
         Возвращает (активность, существовала ли): повторный старт не плодит
         активности — один курсор на книгу.
         """
-        existing = self._acts.find_active(session, source_row.id, course_id)
+        existing = self._acts.find_active(session, source_row["id"], course_id)
         if existing is not None:
             return existing, True
         uid = self._ids.new("act")
         act_id = self._acts.insert(
             session,
             uid=uid,
-            source_id=source_row.id,
+            source_id=source_row["id"],
             course_id=course_id,
-            title=source_row.title,
+            title=source_row["title"],
             status="active",
             cursor_chapter=1,
             created_at=now,
@@ -519,36 +483,21 @@ class LearningService:
         )
         return self._acts.get(session, act_id), False
 
-    @staticmethod
-    def _total_chapters(session, source_id: int) -> int:
-        from sqlalchemy import func, select
+    def _source_uid(self, session, source_id: int) -> str | None:
+        """uid источника по id — порт библиотеки (B-009)."""
+        del session
+        try:
+            return self._library.source_ref(source_id)["uid"]
+        except NotFound:
+            return None
 
-        from ..library.infra.tables import chapters
-
-        return int(
-            session.execute(select(func.count()).where(chapters.c.source_id == source_id)).scalar_one()
-        )
-
-    @staticmethod
-    def _source_uid(session, source_id: int) -> str | None:
-        """uid источника по id (для событий и block_sources)."""
-        from sqlalchemy import select
-
-        from ..library.infra.tables import sources
-
-        return session.execute(select(sources.c.uid).where(sources.c.id == source_id)).scalar()
-
-    @classmethod
-    def _activity_source(cls, session, activity: dict) -> dict | None:
-        """Источник активности: uid и название — для block_sources урока."""
-        from sqlalchemy import select
-
-        from ..library.infra.tables import sources
-
-        row = session.execute(
-            select(sources.c.uid, sources.c.title).where(sources.c.id == activity["source_id"])
-        ).first()
-        return {"uid": row.uid, "title": row.title} if row else None
+    def _activity_source(self, session, activity: dict) -> dict | None:
+        """Источник активности (uid+title) для block_sources — порт библиотеки (B-009)."""
+        del session
+        try:
+            return self._library.source_ref(activity["source_id"])
+        except NotFound:
+            return None
 
     def _advance_cursor(self, uow, act: dict, target: int, total: int, now: str) -> dict:
         """Курсор активности вперёд до target+1 (не назад); выход за total завершает."""
@@ -576,9 +525,6 @@ class LearningService:
         элемент курса типа chapter никогда не закрывался.
         """
         from dataclasses import replace
-
-        from ..knowledge.domain import BlockSource
-        from ..knowledge.schemas import BlockDraftIn
 
         with self._uow() as uow:
             activity = self._acts.find(uow.session, s["activity_id"]) if s["activity_id"] else None

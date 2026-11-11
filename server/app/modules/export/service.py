@@ -6,7 +6,7 @@ import zipfile
 from datetime import UTC, datetime
 
 from ...kernel.errors import NotFound, ValidationFailed
-from ..knowledge.domain import WIKILINK
+from ..knowledge.public import WIKILINK, slugify
 
 
 class ExportService:
@@ -136,7 +136,6 @@ class ExportService:
 
 def _anchor(title: str) -> str:
     """Якорь заголовка в MD (латиница/цифры/дефисы)."""
-    from ..knowledge.domain import slugify
 
     return slugify(title).lower()
 
@@ -157,6 +156,5 @@ def _link_md_wikilink(m: re.Match, titles: dict[str, str]) -> str:
 
 
 def _slug(title: str) -> str:
-    from ..knowledge.domain import slugify
 
     return slugify(title)

@@ -68,7 +68,7 @@ def make_service(tmp_path: Path) -> tuple[LibraryService, FakeSources, FakeChapt
 
 def test_run_web_creates_chapters_and_title(tmp_path):
     svc, sources, chapters = make_service(tmp_path)
-    result = svc._run_web(sources.row, "https://example.com/x")  # noqa: SLF001
+    result = svc._processing_uc._run_web(sources.row, "https://example.com/x")  # noqa: SLF001
     assert result["ok"] and result["chapters"] == 2 and result["title"] == "Гайд по observability"
     assert [c["idx"] for c in chapters.inserted] == [1, 2]
     first = chapters.inserted[0]
@@ -92,5 +92,5 @@ def test_run_web_without_research_reports_error(tmp_path):
         settings=SimpleNamespace(data_dir=str(tmp_path)),
         research=None,
     )
-    result = svc._run_web(sources.row, "https://x")  # noqa: SLF001
+    result = svc._processing_uc._run_web(sources.row, "https://x")  # noqa: SLF001
     assert "error" in result

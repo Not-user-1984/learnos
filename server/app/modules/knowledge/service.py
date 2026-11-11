@@ -1,28 +1,28 @@
 """Сервис базы знаний: сохранение, правка, версии, категории, reindex."""
 
-import json
 import logging
 from typing import Any
 
-from ...agent.spec import AgentContext
-from ...kernel.asyncio_bridge import run_coro_sync
 from ...kernel.clock import Clock, now_iso
 from ...kernel.errors import Conflict, NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
-from ..library.domain import SourceKind  # noqa: F401 — реэкспорт для удобства слоёв выше
 from .domain import (
     Block,
     BlockDraft,
     BlockMeta,
     Category,
     apply_patch,
-    default_categories,
     normalize_category_path,
     parse_markdown,
 )
-from .events import BlockDeleted, BlockSaved, BlockUpdated, CategoryConfirmed
+from .domain import assemble_frontmatter as _assemble  # noqa: F401 — используют usecases
+from .domain import dict_of_meta as _dict_of  # noqa: F401
+from .domain import writer_out_to_draft as _writer_out_to_draft  # noqa: F401 — тесты/легаси
+from .events import BlockDeleted, BlockSaved, BlockUpdated
 from .infra.md_store import MdBlockStore
 from .infra.sql_repo import BlockRepository, CategoryRepository
+from .infra.versions_repo import BlockVersionsRepository
+from .usecases.frontmatter import draft_from_frontmatter
 
 log = logging.getLogger("learnos.knowledge")
 
@@ -35,6 +35,7 @@ class KnowledgeService:
         uow,
         files: MdBlockStore,
         blocks: BlockRepository,
+        versions: "BlockVersionsRepository",
         categories: CategoryRepository,
         ids: IdGenerator,
         clock: Clock,
@@ -44,12 +45,26 @@ class KnowledgeService:
         self._uow = uow
         self._files = files
         self._blocks = blocks
+        self._versions = versions
         self._cats = categories
         self._ids = ids
         self._clock = clock
         self._runtime = runtime
         self._profile = profile
         self._courses = None  # ставится в bootstrap (проверка ссылки из элемента курса)
+        self._generation = None  # ставится в wire модуля (usecases/generation, B-009)
+
+    def bind_generation(self, generation) -> None:
+        """Use-cases генерации (B-009)."""
+        self._generation = generation
+
+    def bind_categories(self, categories_uc) -> None:
+        """Use-cases категорий (B-009)."""
+        self._categories_uc = categories_uc
+
+    def bind_blocks_ops(self, blocks_ops) -> None:
+        """Use-cases операций над блоками (B-009)."""
+        self._blocks_ops = blocks_ops
 
     def bind_courses(self, courses) -> None:
         """Публичный сервис курсов — для запрета удаления блока из элементов курса."""
@@ -129,7 +144,7 @@ class KnowledgeService:
                 new_draft = apply_patch(draft, patch)
             except ValueError as e:
                 raise ValidationFailed(str(e)) from e
-            self._blocks.add_version(
+            self._versions.add_version(
                 uow.session, uid, block.meta.version, content, reason, conversation_uid, now
             )
             version = block.meta.version + 1
@@ -171,37 +186,8 @@ class KnowledgeService:
             return Block(meta=new_meta, content=self._files.read(stem))
 
     def restore_version(self, uid: str, version: int, reason: str = "откат") -> Block:
-        """Откат к версии: текущий контент сохраняется как версия, файл перезаписывается старым."""
-        now = now_iso(self._clock)
-        with self._uow() as uow:
-            block = self._blocks.get(uow.session, uid)
-            old_content = self._blocks.get_version(uow.session, uid, version)
-            current_content = self._files.read(block.meta.path)
-            self._blocks.add_version(
-                uow.session,
-                uid,
-                block.meta.version,
-                current_content,
-                f"перед откатом к v{version}",
-                None,
-                now,
-            )
-            self._files.write_raw(block.meta.path, old_content)
-            meta_raw, _ = parse_markdown(old_content)
-            restored = BlockMeta(
-                **{
-                    **_dict_of(block.meta),
-                    "title": meta_raw.get("title", block.meta.title),
-                    "kind": meta_raw.get("kind", block.meta.kind),
-                    "summary": meta_raw.get("summary") or "",
-                    "tags": tuple(meta_raw.get("tags") or ()),
-                    "version": block.meta.version + 1,
-                    "updated": now,
-                }
-            )
-            self._blocks.update_row(uow.session, restored)
-            uow.emit(BlockUpdated(block_uid=uid, version=restored.version, reason=reason))
-            return Block(meta=restored, content=old_content)
+        """Откат к версии (usecases/blocks_ops, B-009)."""
+        return self._blocks_ops.restore_version(uid, version, reason)
 
     # --- чтение ---
 
@@ -236,12 +222,12 @@ class KnowledgeService:
         """История версий блока."""
         with self._uow() as uow:
             self._blocks.get(uow.session, uid)  # 404, если блока нет
-            return self._blocks.versions(uow.session, uid)
+            return self._versions.versions(uow.session, uid)
 
     def get_version_content(self, uid: str, version: int) -> str:
         """Полный MD-контент версии."""
         with self._uow() as uow:
-            return self._blocks.get_version(uow.session, uid, version)
+            return self._versions.get_version(uow.session, uid, version)
 
     def tags(self) -> dict[str, int]:
         """Теги с числом блоков."""
@@ -319,223 +305,57 @@ class KnowledgeService:
         self._files.delete(block.meta.path)
         return {"ok": True, "deleted": uid}
 
-    # --- категории ---
+    # --- категории (перенесено в usecases/categories.py, B-009) ---
 
     def category_tree(self) -> list[dict]:
-        """Дерево категорий со счётчиками (включая подкатегории)."""
-        with self._uow() as uow:
-            cats = self._cats.all(uow.session)
-            counts = self._cats.counts_by_prefix(uow.session)
-        total: dict[str, int] = {}
-        for cat in cats:
-            for anc in _with_ancestors(cat.path):
-                total[anc] = total.get(anc, 0) + counts.get(cat.path, 0)
-        nodes = {
-            c.path: {
-                "path": c.path,
-                "title": c.title,
-                "color": c.color,
-                "icon": c.icon,
-                "count": total.get(c.path, 0),
-                "children": [],
-            }
-            for c in cats
-        }
-        roots = []
-        for c in cats:
-            node = nodes[c.path]
-            if c.parent_path and c.parent_path in nodes:
-                nodes[c.parent_path]["children"].append(node)
-            else:
-                roots.append(node)
-        return roots
+        """Дерево категорий со счётчиками."""
+        return self._categories_uc.tree()
 
     def ensure_categories_default(self) -> None:
-        """Записать стартовое дерево, если категорий нет вообще (миграция/первый старт).
-
-        Если категории в БД есть, а YAML-файл пропал (чистый сброс данных) —
-        восстанавливаем файл из БД, чтобы kb/ не расходился с деревом.
-        """
-        with self._uow() as uow:
-            existing = self._cats.all(uow.session)
-            if existing:
-                if not (self._files.blocks_dir.parent / "categories.yaml").exists():
-                    self._files.write_categories(existing)
-                return
-            cats = default_categories()
-            for cat in cats:
-                self._cats.ensure(uow.session, cat)
-        self._files.write_categories(default_categories())
+        """Записать стартовое дерево, если категорий нет."""
+        self._categories_uc.ensure_default()
 
     def create_category(
         self, path: str, title: str, color: str | None = None, icon: str | None = None, sort: int = 0
     ) -> Category:
-        """Создать узел дерева (агент может, если ни один не подходит); пишет YAML и индекс."""
-        normalized = normalize_category_path(path)
-        parent = "/".join(normalized.split("/")[:-1]) or None
-        cat = Category(path=normalized, title=title, parent_path=parent, color=color, icon=icon, sort=sort)
-        with self._uow() as uow:
-            self._cats.ensure(uow.session, cat)
-            cats = self._cats.all(uow.session)
-        self._files.write_categories(cats)
-        return cat
+        """Создать узел дерева."""
+        return self._categories_uc.create(path, title, color, icon, sort)
 
     def update_category(self, path: str, **kwargs: Any) -> Category:
         """Переименовать/перекрасить категорию."""
-        with self._uow() as uow:
-            cat = self._cats.update(uow.session, path, **kwargs)
-            cats = self._cats.all(uow.session)
-        self._files.write_categories(cats)
-        return cat
+        return self._categories_uc.update(path, **kwargs)
 
     def list_categories(self) -> list[Category]:
         """Плоский список категорий."""
-        with self._uow() as uow:
-            return self._cats.all(uow.session)
+        return self._categories_uc.list()
 
     def set_block_category(self, uid: str, path: str | None, confirm: bool) -> Block:
-        """Поставить блоку категорию; confirm=true — подтверждение пользователем (правит frontmatter)."""
-        now = now_iso(self._clock)
-        if path:
-            normalized = normalize_category_path(path)
-            self._ensure_category(normalized)
-        else:
-            normalized = None
-        with self._uow() as uow:
-            block = self._blocks.get(uow.session, uid)
-            content = self._files.read(block.meta.path)
-            meta_raw, body = parse_markdown(content)
-            meta_raw["category"] = normalized
-            meta_raw["category_status"] = "confirmed" if confirm else "suggested"
-            meta_raw["updated"] = now
-            new_content = _assemble(meta_raw, body)
-            self._files.write_raw(block.meta.path, new_content)
-            from dataclasses import replace
-
-            new_meta = replace(
-                block.meta,
-                category_path=normalized,
-                category_status="confirmed" if confirm else "suggested",
-                updated=now,
-            )
-            self._blocks.update_row(uow.session, new_meta)
-            if confirm:
-                uow.emit(CategoryConfirmed(block_uid=uid, path=normalized or ""))
-            return Block(meta=new_meta, content=new_content)
+        """Поставить блоку категорию."""
+        return self._categories_uc.set_block_category(uid, path, confirm)
 
     # --- reindex ---
 
     def reindex(self) -> dict:
-        """Пересобрать индекс знаний из kb/ (после ручной правки MD)."""
-        from .domain import extract_links
+        """Пересобрать индекс знаний из kb/ (usecases/blocks_ops, B-009)."""
+        return self._blocks_ops.reindex()
 
-        created, updated = 0, 0
-        with self._uow() as uow:
-            known = set(self._blocks.uids(uow.session))
-            for stem in self._files.list_stems():
-                try:
-                    meta = self._files.read_meta(stem)
-                except (NotFound, ValueError) as e:
-                    log.warning("reindex: пропуск %s: %s", stem, e)
-                    continue
-                meta = BlockMeta(
-                    **{
-                        **_dict_of(meta),
-                        "path": stem,
-                        "links": extract_links(self._files.read(stem).split("---", 2)[-1]),
-                    }
-                )
-                if meta.uid in known:
-                    self._blocks.update_row(uow.session, meta)
-                    updated += 1
-                else:
-                    self._blocks.save(uow.session, meta)
-                    created += 1
-        return {"ok": True, "created": created, "updated": updated}
+    # --- генерация блока агентами (перенесено в usecases/generation.py, B-009) ---
 
-    # --- генерация блока агентами ---
+    def generate_from_dialog(self, dialog: str, kind: str = "note", extra_lines: list[str] | None = None):
+        """Драфт блока из переписки разговора (порт для chat, B-009)."""
+        return self._generation.generate_from_dialog(dialog, kind=kind, extra_lines=extra_lines)
 
-    def generate_from_transcript(self, session: dict) -> BlockDraft:
-        """Собрать BlockDraft из транскрипта сессии (block_writer + categorizer)."""
-        if self._runtime is None:
-            raise NotFound("агентный рантайм недоступен")
-        from .agents import block_writer
+    def generate_from_transcript(self, session: dict):
+        """Собрать BlockDraft из транскрипта сессии."""
+        return self._generation.generate_from_transcript(session)
 
-        transcript = session.get("transcript") or []
-        dialog = "\n".join(
-            f"[{e['state']}/{e['event']}] {json.dumps(e.get('payload') or {}, ensure_ascii=False)}"
-            for e in transcript
-        )
-        existing = self.list_blocks(limit=50)
-        existing_brief = "\n".join(f"- {m.uid}: {m.title}" for m in existing) or "(пусто)"
-        cats = "\n".join(f"- {c.path}" for c in self.list_categories()) or "(пусто)"
-        profile_brief = self._profile_brief() if self._profile else ""
-        extra = (
-            f"Существующие блоки (links — только эти uid):\n{existing_brief}\n\nДерево категорий:\n{cats}"
-            + (f"\n\n{profile_brief}" if profile_brief else "")
-        )
-        ctx = AgentContext(system_extra=extra)
-        out = run_coro_sync(self._runtime.run_structured(block_writer, ctx, f"Транскрипт сессии:\n{dialog}"))
-        draft = _writer_out_to_draft(out, kind=session.get("block_kind", "lesson"))
-        return self.categorize_draft(draft)
+    def categorize_draft(self, draft):
+        """Проставить драфту category_suggestion через categorizer."""
+        return self._generation.categorize_draft(draft)
 
-    def categorize_draft(self, draft: BlockDraft) -> BlockDraft:
-        """Проставить драфту category_suggestion через categorizer (не критично при падении)."""
-        if self._runtime is None:
-            return draft
-        from dataclasses import replace
-
-        from .agents import categorizer
-
-        cats = "\n".join(f"- {c.path}" for c in self.list_categories()) or "(пусто)"
-        try:
-            cat_ctx = AgentContext(system_extra=f"Дерево:\n{cats}")
-            cat_out = run_coro_sync(
-                self._runtime.run_structured(categorizer, cat_ctx, f"Блок: {draft.title}\n{draft.summary}")
-            )
-            path = cat_out.path
-            # R-31: новый корень дереву не создаём — только подкатегории существующих
-            # корней (иначе categorizer плодит мусорные корни вроде «kubernetes»)
-            normalized = normalize_category_path(path)
-            roots = {c.path.split("/")[0] for c in self.list_categories()}
-            if normalized.split("/")[0] not in roots:
-                log.info("categorizer предложил новый корень %s — оставляем без категории", path)
-                return draft
-            if getattr(cat_out, "new_category_title", None):
-                self.create_category(path, cat_out.new_category_title)
-            return replace(draft, category_suggestion=path)
-        except Exception:  # noqa: BLE001 — категория не критична
-            log.info("categorizer не сработал, категория не проставлена")
-            return draft
-
-    def generate_runbook(self, session: dict, lesson_uid: str) -> BlockDraft:
-        """Собрать runbook-драфт из practice_log транскрипта (runbook_writer)."""
-        if self._runtime is None:
-            raise NotFound("агентный рантайм недоступен")
-        from dataclasses import replace
-
-        from ...kernel.asyncio_bridge import run_coro_sync
-        from .agents import runbook_writer
-
-        transcript = session.get("transcript") or []
-        dialog = "\n".join(
-            f"[{e['state']}/{e['event']}] {json.dumps(e.get('payload') or {}, ensure_ascii=False)}"
-            for e in transcript
-        )
-        ctx = AgentContext(system_extra=f"Связанный урок: {lesson_uid}\nПрофиль:\n{self._profile_brief()}")
-        out = run_coro_sync(
-            self._runtime.run_structured(runbook_writer, ctx, f"Транскрипт сессии:\n{dialog}")
-        )
-        draft = _writer_out_to_draft(out, kind="runbook")
-        return replace(draft, links=(lesson_uid,))
-
-    def _profile_brief(self) -> str:
-        try:
-            return (
-                f"Профиль пользователя:\n{self._profile.machines_brief()}\n{self._profile.learning_brief()}"
-            )
-        except Exception:  # noqa: BLE001
-            return ""
+    def generate_runbook(self, session: dict, lesson_uid: str):
+        """Собрать runbook-драфт из practice_log транскрипта."""
+        return self._generation.generate_runbook(session, lesson_uid)
 
     # --- внутреннее ---
 
@@ -557,198 +377,8 @@ class KnowledgeService:
             self._files.write_categories(all_cats)
 
     def _draft_from_frontmatter(self, meta_raw: dict, content: str) -> BlockDraft:
-        """Разобрать текущий MD обратно в драфт (для патчей) — без потерь секций.
-
-        Парсеры зеркальны рендеру draft_to_markdown: concepts/practice/weak_spots
-        восстанавливаются полностью, иначе любая правка блока стирала бы их.
-        """
-        from .domain import BlockSource
-
-        body = content.split("---", 2)[-1]
-        theses = _section_items(body, "Тезисы")
-        examples = [x.strip("«» ") for x in _section_items(body, "Как я это понял")]
-        weak = _weak_spots(body)
-        mermaid = None
-        if "```mermaid\n" in body:
-            mermaid = body.split("```mermaid\n", 1)[1].split("\n```", 1)[0]
-        links = tuple(meta_raw.get("links") or ()) or tuple(
-            lk for lk in _section_items(body, "Связи") if lk.startswith("[[") and lk.endswith("]]")
-        )
-        return BlockDraft(
-            title=meta_raw.get("title", "Без названия"),
-            summary=meta_raw.get("summary") or "",
-            kind=meta_raw.get("kind", "lesson"),
-            concepts=tuple(_concepts(body)),
-            theses=tuple(theses),
-            my_examples=tuple(examples),
-            mermaid=mermaid,
-            practice=tuple(_practice(body)),
-            weak_spots=tuple(w for w in weak if w),
-            open_questions=tuple(_section_items(body, "Вопросы на потом")),
-            links=tuple(lk[2:-2] if lk.startswith("[[") else lk for lk in links),
-            tags=tuple(meta_raw.get("tags") or ()),
-            category_suggestion=meta_raw.get("category"),
-            sources=tuple(
-                BlockSource(source=s.get("source", ""), chapter=s.get("chapter"), title=s.get("title", ""))
-                for s in (meta_raw.get("sources") or [])
-            ),
-        )
+        """Парсинг frontmatter+тела в BlockDraft — usecases/frontmatter (B-009)."""
+        return draft_from_frontmatter(meta_raw, content)
 
 
-def _section_items(body: str, section: str) -> list[str]:
-    """Пункты секции «## section» до следующего заголовка."""
-    import re
-
-    m = re.search(rf"^## {re.escape(section)}\s*$(.*?)(?=^## |\Z)", body, re.M | re.S)
-    if not m:
-        return []
-    items = []
-    for line in m.group(1).strip().splitlines():
-        line = line.strip()
-        if line.startswith(("- ", "> ")) or (line and line[0].isdigit() and ". " in line[:5]):
-            items.append(line.lstrip("- ").lstrip("> "))
-    return items
-
-
-def _weak_spots(body: str) -> list[str]:
-    """Пункты «Дозакрепить»: каждый callout — блок от маркера «> [!WARNING]» до пустой строки.
-
-    Понимает и старый слитный формат (callout'ы без пустой строки между ними) —
-    маркер начинает новый пункт.
-    """
-    import re
-
-    m = re.search(r"^## Дозакрепить\s*$(.*?)(?=^## |\Z)", body, re.M | re.S)
-    if not m:
-        return []
-    out: list[str] = []
-    buf: list[str] = []
-
-    def flush() -> None:
-        if buf:
-            text = " ".join(buf).strip()
-            if text and text != "[!WARNING]":
-                out.append(text)
-        buf.clear()
-
-    for raw in m.group(1).splitlines():
-        line = raw.strip()
-        if line.startswith("> [!WARNING]"):
-            flush()
-        elif line.startswith(">"):
-            buf.append(line.lstrip("> ").strip())
-        elif line == "":
-            flush()
-        elif buf:
-            buf.append(line)
-    flush()
-    return out
-
-
-def _concepts(body: str) -> list:
-    """Понятия из «Ключевые понятия»: строки «- **термин** — определение»."""
-    import re
-
-    from .domain import Concept
-
-    out = []
-    for line in _section_items(body, "Ключевые понятия"):
-        m = re.match(r"^\*\*(.+?)\*\* — (.*)$", line)
-        if m:
-            out.append(Concept(term=m.group(1).strip(), definition=m.group(2).strip()))
-    return out
-
-
-def _practice(body: str) -> list:
-    """Шаги из «Практика»: «N. **машина** · `команда` — пояснение; результат: …; проверка: …»."""
-    import re
-
-    from .domain import PracticeStep
-
-    out = []
-    for line in _section_items(body, "Практика"):
-        m = re.match(r"^\d+\.\s+\*\*(.+?)\*\* · `(.+?)` — (.*)$", line)
-        if not m:
-            continue
-        machine, command, rest = m.group(1).strip(), m.group(2), m.group(3)
-        # split с захватом метки: [пояснение, 'результат', val, 'проверка', val, ...]
-        chunks = re.split(r"; (результат|проверка|откат): ", rest)
-        explanation = chunks[0].strip()
-        extras = {"результат": None, "проверка": None, "откат": None}
-        for i in range(1, len(chunks) - 1, 2):
-            extras[chunks[i]] = chunks[i + 1].strip() or None
-        out.append(
-            PracticeStep(
-                machine=machine,
-                command=command,
-                explanation=explanation,
-                result=extras["результат"],
-                verify=extras["проверка"],
-                cleanup=extras["откат"],
-            )
-        )
-    return out
-
-
-def _with_ancestors(path: str) -> list[str]:
-    """Путь и все его префиксы."""
-    parts = path.split("/")
-    return ["/".join(parts[: i + 1]) for i in range(len(parts))]
-
-
-def _writer_out_to_draft(out, kind: str) -> BlockDraft:
-    """Выход block_writer (pydantic) → доменный BlockDraft."""
-    from .domain import BlockSource, Concept, PracticeStep
-
-    return BlockDraft(
-        title=out.title,
-        summary=out.summary,
-        kind=kind if kind in {"lesson", "note", "runbook"} else "lesson",
-        concepts=tuple(Concept(c.term, c.definition) for c in out.concepts),
-        theses=tuple(out.theses),
-        my_examples=tuple(out.my_examples),
-        mermaid=out.mermaid,
-        practice=tuple(PracticeStep(p.machine, p.command, p.explanation, p.result) for p in out.practice),
-        weak_spots=tuple(out.weak_spots),
-        open_questions=tuple(out.open_questions),
-        links=tuple(link for link in out.links if link.startswith("blk_")),
-        tags=tuple(out.tags),
-        category_suggestion=out.category_suggestion,
-        # источник — только реальный uid (модель любит подставить заголовок)
-        sources=tuple(
-            BlockSource(source=s.source, chapter=s.chapter, title=s.title)
-            for s in getattr(out, "sources", []) or []
-            if str(s.source).startswith("src_")
-        ),
-    )
-
-
-def _dict_of(meta: BlockMeta) -> dict:
-    return {
-        "uid": meta.uid,
-        "title": meta.title,
-        "kind": meta.kind,
-        "summary": meta.summary,
-        "category_path": meta.category_path,
-        "category_status": meta.category_status,
-        "tags": meta.tags,
-        "sources": meta.sources,
-        "session_uid": meta.session_uid,
-        "conversation_uid": meta.conversation_uid,
-        "activity_uid": meta.activity_uid,
-        "version": meta.version,
-        "created": meta.created,
-        "updated": meta.updated,
-        "links": meta.links,
-        "weak_spots_count": meta.weak_spots_count,
-        "path": meta.path,
-        "verified": meta.verified,
-    }
-
-
-def _assemble(meta_raw: dict, body: str) -> str:
-    """Склеить frontmatter + тело обратно в MD."""
-    import yaml
-
-    fm = yaml.safe_dump(meta_raw, allow_unicode=True, sort_keys=False).strip()
-    return f"---\n{fm}\n---\n\n{body}"
+# чистые функции переехали в domain (B-009); алиасы для старых вызовов

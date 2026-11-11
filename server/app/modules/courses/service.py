@@ -98,22 +98,14 @@ class CoursesService:
         Зависимости (сессии/активности курса) проверяем явно — IntegrityError
         отдавал 500 вместо понятного 409 (R-16).
         """
-        from sqlalchemy import func, select
-
-        from ..learning.infra.tables import activities as acts
-        from ..learning.infra.tables import sessions as ses
-
         with self._uow() as uow:
             course = self._repo.get(uow.session, ref)
             deps = []
-            n_sessions = int(
-                uow.session.execute(select(func.count()).where(ses.c.course_id == course["id"])).scalar_one()
-            )
+            # счётчики — портами learning, без чтения чужой infra (B-009)
+            n_sessions = self._learning.count_sessions_for_course(course["id"])
             if n_sessions:
                 deps.append(f"сессий: {n_sessions}")
-            n_acts = int(
-                uow.session.execute(select(func.count()).where(acts.c.course_id == course["id"])).scalar_one()
-            )
+            n_acts = self._learning.count_activities_for_course(course["id"])
             if n_acts:
                 deps.append(f"активностей: {n_acts}")
             if deps:

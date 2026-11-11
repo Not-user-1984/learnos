@@ -22,8 +22,11 @@ def make_draft(title: str = "Логирование в Python") -> BlockDraft:
 
 
 def make_chat_service() -> ChatService:
+    from app.modules.chat.usecases.drafts import DraftUseCases
+
     svc = ChatService.__new__(ChatService)
     svc._previews = {}
+    svc._drafts_uc = DraftUseCases(svc)  # use-cases после разреза сервиса (B-009)
     return svc
 
 

@@ -8,7 +8,7 @@ TOTAL = 3  # ENTRIES без front_matter (Титул, Оглавление): к�
 def _book(container) -> dict:
     """Источник-книга из 3 глав после куратора структуры."""
     src = _add_book_source(container)
-    container.library._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
+    container.library._processing_uc._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
     return src
 
 

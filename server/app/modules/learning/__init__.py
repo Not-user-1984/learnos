@@ -20,6 +20,7 @@ class LearningModule(Module):
             clock=c.clock,
             knowledge=c.knowledge,
             profile=c.profile,
+            library=c.library,
         )
 
     def routers(self, c):

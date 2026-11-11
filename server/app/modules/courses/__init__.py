@@ -1,6 +1,7 @@
 """Модуль «Курсы»: подборки источников/глав/блоков с прогрессом и планировщиком."""
 
 from ...kernel.module import Module
+from ..learning.events import ChapterRead, SessionFinished, SessionStarted
 
 
 class CoursesModule(Module):
@@ -32,8 +33,6 @@ class CoursesModule(Module):
         return [make_router(c.courses, chat=c.chat)]
 
     def subscribe(self, bus, c) -> None:
-        from ..learning.events import ChapterRead, SessionFinished, SessionStarted
-
         # доска статусов элементов курса живёт событиями (B-004): learning о курсах не знает
         bus.subscribe(SessionStarted.name(), c.courses.on_session_started)
         bus.subscribe(SessionFinished.name(), c.courses.on_session_finished)

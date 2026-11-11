@@ -12,18 +12,26 @@ class KnowledgeModule(Module):
         from .agents import register_agents
         from .infra.md_store import MdBlockStore
         from .infra.sql_repo import BlockRepository, CategoryRepository
+        from .infra.versions_repo import BlockVersionsRepository
         from .service import KnowledgeService
+        from .usecases.blocks_ops import BlocksOpsUseCases
+        from .usecases.categories import CategoryUseCases
+        from .usecases.generation import GenerationUseCases
 
         c.knowledge = KnowledgeService(
             uow=c.uow,
             files=MdBlockStore(c.settings.kb_dir),
             blocks=BlockRepository(),
+            versions=BlockVersionsRepository(),
             categories=CategoryRepository(),
             ids=c.ids,
             clock=c.clock,
             runtime=c.agent_runtime,
             profile=c.profile,
         )
+        c.knowledge.bind_generation(GenerationUseCases(c.knowledge))
+        c.knowledge.bind_categories(CategoryUseCases(c.knowledge))
+        c.knowledge.bind_blocks_ops(BlocksOpsUseCases(c.knowledge))
         register_agents(c)
 
     def routers(self, c):

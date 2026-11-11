@@ -3,7 +3,6 @@
 /** Лента чата: сообщения, SSE-стриминг, чипы инструментов, карточки, композер. */
 
 import { Suspense, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
@@ -13,29 +12,19 @@ import { streamChat, streamResume } from "@/lib/chat/stream";
 import { apiPost, apiUpload } from "@/lib/api";
 import { CatToggle, ChatCat, useCatVisible } from "@/components/chat/chat-cat";
 import { Markdown } from "@/components/markdown/Markdown";
-import { CardView, stripCommandFences } from "@/components/chat/cards";
+import { CardView } from "@/components/chat/cards";
+import { EmptyHint, Message, ToolChipView, type ToolChip } from "@/components/chat/message";
+import { AgentStateBanner, ReviewProgressBar, SessionAside, SessionPanelDialog, StreamErrorBar } from "@/components/chat/status-bars";
 import { NextSteps } from "@/components/chat/next-steps";
 import { TuningEmptyState } from "@/components/chat/tuning-panel";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { agentLabel, modeLabel } from "@/lib/format";
 import type { ChatScenario } from "@/lib/scenarios";
 
-type ToolChip = {
-  call_id: string;
-  name: string;
-  label: string;
-  ok?: boolean;
-  summary?: string;
-  open?: boolean;
-  count?: number;
-};
 
-const SESSION_STEPS = ["theory", "check", "practice", "debrief", "done"];
-const STEP_LABELS: Record<string, string> = { theory: "Теория", check: "Вопросы", practice: "Практика", debrief: "Разбор", done: "Готово" };
 
 /** Вложение композера: PDF уже загружен в Библиотеку, уйдёт с следующим сообщением. */
 type PendingAttachment = { uid: string; title: string };
@@ -423,45 +412,14 @@ export function ChatView({ conversation, variant = "page", insert, onTimecode }:
             видео и материалы без глав (total ≤ 1) полосу не показывают */}
         {reviewProgress && reviewProgress.total_chapters > 1 && <ReviewProgressBar progress={reviewProgress} />}
 
-        {/* живой статус агента: бейдж работы (поллинг detail) или баннер прерывания с «Продолжить» */}
-        {!streaming && (agentState?.working || agentState?.interrupted || reconnecting || busyHint) && (
-          <div className="flex flex-col gap-1.5 border-b px-4 py-2">
-            {agentState?.working && (
-              <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                <Icon name="progress_activity" size={15} className="animate-spin shrink-0" />
-                <span className="min-w-0">
-                  агент работает:{" "}
-                  {agentState.runs
-                    .map((r) => [r.agent, r.steps ? `шаг ${r.steps}` : "", r.current].filter(Boolean).join(" · "))
-                    .join(" / ") || "…"}
-                </span>
-                <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={() => void stop()}>
-                  <Icon name="stop_circle" size={14} /> Остановить
-                </Button>
-                {reconnecting && <span className="text-amber-600 dark:text-amber-400">· связь прервалась, догоняю ответ…</span>}
-              </p>
-            )}
-            {busyHint && (
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Icon name="hourglass_top" size={15} className="shrink-0 text-primary" />
-                {busyHint}
-              </p>
-            )}
-            {!agentState?.working && reconnecting && (
-              <p className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                <Icon name="progress_activity" size={15} className="animate-spin" /> связь прервалась — догоняю ответ агента…
-              </p>
-            )}
-            {agentState?.interrupted && !agentState.working && (
-              <div className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm">
-                <Icon name="restart_alt" size={16} className="shrink-0 text-amber-600 dark:text-amber-400" />
-                <span className="flex-1">Генерация прервана — сервер перезапускался. Ответ можно дописать.</span>
-                <Button size="sm" variant="outline" onClick={resumeGeneration}>
-                  Продолжить
-                </Button>
-              </div>
-            )}
-          </div>
+        {!streaming && (
+          <AgentStateBanner
+            agentState={agentState}
+            reconnecting={reconnecting}
+            busyHint={busyHint}
+            onStop={() => void stop()}
+            onResume={resumeGeneration}
+          />
         )}
 
         {/* лента + кот-питомец на полке у нижней границы: оверлей не мешает кликам,
@@ -513,24 +471,8 @@ export function ChatView({ conversation, variant = "page", insert, onTimecode }:
           {variant === "page" && <ChatCat />}
         </div>
 
-        {streamError && (
-          <div className="mx-auto mb-2 max-w-3xl px-4">
-            <div className="flex items-center gap-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm">
-              <span className="text-rose-500">⚠</span>
-              <span className="flex-1">Ошибка агента: {streamError}</span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setStreamError(null);
-                  void send(input || lastSentRef.current);
-                }}
-              >
-                Повторить
-              </Button>
-            </div>
-          </div>
-        )}
+        <StreamErrorBar message={streamError ?? ""} onRetry={() => { setStreamError(null); void send(input || lastSentRef.current); }} />
+
         {/* B-003: один контекстный ряд «что дальше» вместо двух рядов чипов;
             скрыт при стриме и пока есть неотвеченные решения */}
         <NextSteps
@@ -613,27 +555,7 @@ export function ChatView({ conversation, variant = "page", insert, onTimecode }:
         </div>
       </div>
 
-      {session && variant === "page" && (
-        <>
-          <aside className="hidden w-64 shrink-0 flex-col gap-4 border-l p-4 text-sm lg:flex">
-            <div>
-              <h2 className="mb-2 font-medium">Сессия</h2>
-              <ol className="flex flex-col gap-1">
-                {SESSION_STEPS.map((st) => (
-                  <li key={st} className={cn("flex items-center gap-2 rounded-md px-2 py-1", session.state === st && "bg-accent")}>
-                    <span className={cn("h-2 w-2 rounded-full", SESSION_STEPS.indexOf(st) <= SESSION_STEPS.indexOf(session.state) ? "bg-emerald-500" : "bg-muted-foreground/30")} />
-                    {STEP_LABELS[st]}
-                  </li>
-                ))}
-              </ol>
-            </div>
-            {session.chapter_idx && <p className="text-muted-foreground">Глава {session.chapter_idx}</p>}
-            <Link href="/kb?view=inbox" className="text-primary hover:underline">
-              Входящие блоков →
-            </Link>
-          </aside>
-        </>
-      )}
+      {session && variant === "page" && <SessionAside session={session} />}
     </div>
   );
 }
@@ -641,100 +563,6 @@ export function ChatView({ conversation, variant = "page", insert, onTimecode }:
 /** Статус-бар быстрого разбора книги: сколько глав пройдено / всего, какая текущая.
  *  Прогресс разбора — отдельно от сессии-урока: это курсор книги из активности
  *  разговора, данные из БД — полоса переживает уход из разговора и возврат. */
-function ReviewProgressBar({ progress }: { progress: ReviewProgress }) {
-  const { done_chapters: done, total_chapters: total } = progress;
-  const finished = progress.status === "done" || done >= total;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  // до ~30 глав — сегменты по главам (видно, какие разобраны и какая сейчас); дальше — полоса
-  const segmented = total <= 30;
-  return (
-    <div className="border-b px-4 py-2">
-      <div className="mx-auto max-w-3xl">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Icon
-            name={finished ? "task_alt" : "auto_stories"}
-            size={15}
-            className="shrink-0 text-primary"
-          />
-          <span className="min-w-0 shrink truncate font-medium">{progress.title}</span>
-          <span className="shrink-0 tabular-nums">
-            {done}/{total} глав
-          </span>
-          <span
-            className={cn(
-              "ml-auto min-w-0 shrink truncate",
-              finished && "text-emerald-600 dark:text-emerald-400",
-            )}
-          >
-            {finished ? "книга разобрана" : progress.current_title ? `сейчас: ${progress.current_title}` : ""}
-          </span>
-        </div>
-        {segmented ? (
-          <div className="mt-1.5 flex gap-0.5" role="img" aria-label={`Пройдено ${done} из ${total} глав`}>
-            {Array.from({ length: total }, (_, i) => (
-              <span
-                key={i}
-                className={cn(
-                  "h-1.5 flex-1 rounded-full",
-                  i < done ? "bg-primary" : i === done && !finished ? "bg-primary/40" : "bg-muted",
-                )}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-500"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SessionPanelDialog({ session }: { session: NonNullable<ConversationDetail["session"]> }) {
-  const [open, setOpen] = useState(false);
-  const done = SESSION_STEPS.indexOf(session.state) + 1;
-  return (
-    <div className="lg:hidden">
-      <button
-        onClick={() => setOpen(true)}
-        className="flex shrink-0 items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs text-muted-foreground transition hover:text-foreground"
-        aria-label="Прогресс сессии"
-      >
-        <span className="flex gap-0.5">
-          {SESSION_STEPS.map((st, i) => (
-            <span
-              key={st}
-              className={cn("h-1.5 w-1.5 rounded-full", i < done ? "bg-emerald-500" : "bg-muted-foreground/30")}
-            />
-          ))}
-        </span>
-        {done}/{SESSION_STEPS.length}
-      </button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-xs">
-          <DialogHeader>
-            <DialogTitle>Сессия</DialogTitle>
-          </DialogHeader>
-          <ol className="flex flex-col gap-1 text-sm">
-            {SESSION_STEPS.map((st) => (
-              <li key={st} className={cn("flex items-center gap-2 rounded-md px-2 py-1.5", session.state === st && "bg-accent")}>
-                <span className={cn("h-2 w-2 rounded-full", SESSION_STEPS.indexOf(st) <= SESSION_STEPS.indexOf(session.state) ? "bg-emerald-500" : "bg-muted-foreground/30")} />
-                {STEP_LABELS[st]}
-              </li>
-            ))}
-          </ol>
-          {session.chapter_idx && <p className="mt-2 text-muted-foreground">Глава {session.chapter_idx}</p>}
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-const CHAT_PROSE = "prose-headings:mt-5 prose-headings:mb-2 prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-p:my-3";
 
 /** note_draft → uid ближайшего block_saved ПОЗЖЕ этого сообщения: превью,
  *  по которому блок уже записан, показывает ссылку вместо кнопок (B-003). */
@@ -751,115 +579,10 @@ function noteDraftOutcomes(messages: ChatMessage[]): Map<number, string | undefi
   return out;
 }
 
-function Message({
-  message,
-  onInsert,
-  onSend,
-  conversationUid,
-  noteSavedBlockUid,
-  onTimecode,
-}: {
-  message: ChatMessage;
-  onInsert?: (t: string) => void;
-  onSend?: (t: string) => void;
-  conversationUid?: string;
-  noteSavedBlockUid?: string;
-  onTimecode?: (seconds: number) => void;
-}) {
-  const time = new Date(message.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-  if (message.role === "user") {
-    const attached = (message.cards ?? []).filter((c) => c.type === "attachment");
-    return (
-      <div className="flex flex-col items-end gap-1.5">
-        <p className="px-1 text-xs text-muted-foreground">
-          Ты · {time}
-        </p>
-        <div className="user-bubble max-w-[85%] rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground">
-          <Markdown content={message.content} className="[&_p]:my-0" />
-        </div>
-        {attached.map((c, i) => (
-          <div key={i} className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-1.5 text-sm">
-            <Icon name="picture_as_pdf" size={16} className="shrink-0 text-primary" />
-            <span className="max-w-64 truncate">{c.title}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  // команда показывается один раз: fenced-дубль карточки command гасится (B-003)
-  const commandTexts = new Set(
-    (message.cards ?? [])
-      .filter((c) => c.type === "command" && (c.command ?? "").trim())
-      .map((c) => (c.command ?? "").trim()),
-  );
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="flex items-center gap-1 px-1 text-xs text-muted-foreground"><Icon name="smart_toy" size={14} /> Агент · {time}</p>
-      <div className="rounded-2xl border bg-muted/50 px-5 py-4">
-        <Markdown
-          content={stripCommandFences(message.content, commandTexts)}
-          className={CHAT_PROSE}
-          onTimecode={onTimecode}
-        />
-      </div>
-      {message.cards?.map((c, i) => (
-        <CardView
-          key={c.card_id ?? i}
-          card={c}
-          onInsert={onInsert}
-          onSend={onSend}
-          conversationUid={conversationUid}
-          noteSavedBlockUid={noteSavedBlockUid}
-        />
-      ))}
-    </div>
-  );
-}
-
-function ToolChipView({ chip }: { chip: ToolChip }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="mb-1">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
-          chip.ok === false
-            ? "border-rose-500/40 text-rose-500"
-            : chip.ok
-              ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
-              : "text-muted-foreground",
-        )}
-      >
-        <Icon name="terminal" size={12} />
-        {chip.label || chip.name}
-        {(chip.count ?? 1) > 1 && (
-          <span
-            key={chip.count}
-            className="rounded-full bg-muted px-1.5 py-px text-[10px] font-medium tabular-nums animate-in fade-in zoom-in duration-300"
-          >
-            ×{chip.count}
-          </span>
-        )}
-        {chip.ok === undefined && <Icon name="progress_activity" size={12} className="animate-spin" />}
-      </button>
-      {open && chip.summary && <p className="mt-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{chip.summary}</p>}
-    </div>
-  );
-}
-
 export function ChatViewWithInitial(props: { conversation: ConversationDetail }) {
   return (
     <Suspense fallback={null}>
       <ChatView {...props} />
     </Suspense>
-  );
-}
-
-function EmptyHint() {
-  return (
-    <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-      Спроси что угодно. Агент ищет по базе знаний, правит блоки по просьбе («добавь в блок про поды…») и сохраняет конспекты по слову «сохрани».
-    </p>
   );
 }

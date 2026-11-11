@@ -8,7 +8,7 @@ from tests.api.test_sse import parse_sse
 def _review_conversation(container) -> dict:
     """Разговор quick-разбора по книге из 3 глав (после куратора структуры)."""
     src = _add_book_source(container)
-    container.library._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
+    container.library._processing_uc._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
     act = container.learning.start_activity(src["uid"])
     return container.chat.create_conversation(mode="quick", activity=act["uid"], chapter=1)
 

@@ -10,6 +10,7 @@ import { Icon } from "@/components/ui/icon";
 import { toast } from "sonner";
 import type { ChapterCard, SourceCard } from "@/lib/types";
 import { api, apiPost, apiUpload } from "@/lib/api";
+import { fetchYoutubeTitle } from "@/lib/youtube";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -145,13 +146,7 @@ export function StudyFlowDialog({
     if (!videoUrl.trim()) return;
     setBusy(true);
     try {
-      let title = "";
-      try {
-        const resp = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`);
-        if (resp.ok) title = ((await resp.json()) as { title?: string }).title ?? "";
-      } catch {
-        title = "";
-      }
+      const title = (await fetchYoutubeTitle(videoUrl)) ?? ""; // общий хелпер (B-009)
       const src = await apiPost<{ uid: string; id: number }>("/sources", {
         kind: "video",
         title: title || videoUrl,

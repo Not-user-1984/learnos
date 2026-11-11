@@ -1,6 +1,7 @@
 """Модуль «Повторение»: SM-2 по блокам, вопрос дня в Telegram."""
 
 from ...kernel.module import Module
+from ..learning.events import SessionFinished
 
 
 class ReviewModule(Module):
@@ -29,8 +30,6 @@ class ReviewModule(Module):
         return [make_router(c.review)]
 
     def subscribe(self, bus, c) -> None:
-        from ..learning.events import SessionFinished
-
         # сессия завершена → повторение урока завтра (B-004)
         bus.subscribe(SessionFinished.name(), c.review.on_session_finished)
 

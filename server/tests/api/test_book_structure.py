@@ -70,7 +70,7 @@ def _chapters(container, source_id: int) -> list[dict]:
 def test_curate_book_heuristic_drops_front_matter(client, container):
     """Без LLM: титул/оглавление вырезаны, главы перенумерованы, number из названия книги."""
     src = _add_book_source(container)
-    result = container.library._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
+    result = container.library._processing_uc._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
     assert result["curated"] and result["front_matter_dropped"] == 2
 
     rows = _chapters(container, src["id"])
@@ -105,7 +105,7 @@ def test_curate_book_unnumbered_book_gets_positional_numbers(client, container):
         {"idx": 3, "title": "Основы Git", "start_page": 14, "page_count": 30, "snippet": ""},
     ]
     src = _add_book_source(container, entries=entries)
-    container.library._curate_book(src["id"], src["uid"], {"entries": entries})
+    container.library._processing_uc._curate_book(src["id"], src["uid"], {"entries": entries})
     rows = _chapters(container, src["id"])
     assert [(r["idx"], r["title"], r["number"]) for r in rows] == [
         (1, "Введение", 1),
@@ -137,7 +137,7 @@ def test_curate_book_llm_labels_win(client, container, fake_llm):
         )
     )
     src = _add_book_source(container)
-    container.library._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
+    container.library._processing_uc._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
     rows = _chapters(container, src["id"])
     # «Введение» — chapter без номера (в книге есть «Глава 2» с собственным номером)
     assert [(r["idx"], r["number"]) for r in rows] == [(1, None), (2, 2), (3, None)]
@@ -151,7 +151,7 @@ def test_curate_book_llm_incomplete_falls_back_to_heuristic(client, container, f
 
     fake_llm.queue(FakeTurn(text=json.dumps({"entries": [{"idx": 1, "cls": "chapter"}]})))
     src = _add_book_source(container)
-    result = container.library._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
+    result = container.library._processing_uc._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
     assert result["curated"]
     rows = _chapters(container, src["id"])
     # как в эвристике: 3 главы, Введение — первая
@@ -163,14 +163,16 @@ def test_run_process_skips_curator_for_pages_mode(client, container, monkeypatch
     src = _add_book_source(container)
     curator_calls = []
     monkeypatch.setattr(
-        container.library, "_curate_book", lambda *a, **k: curator_calls.append(1) or {"curated": False}
+        container.library._processing_uc,
+        "_curate_book",
+        lambda *a, **k: curator_calls.append(1) or {"curated": False},
     )
     monkeypatch.setattr(
         container.library._skills,
         "run",
         lambda name, kw: {"ok": True, "mode": "pages", "chapters": [], "entries": []},
     )
-    container.library._run_process({"id": 1, "target": src["uid"]})
+    container.library._processing_uc._run_process({"id": 1, "target": src["uid"]})
     assert curator_calls == []
 
     monkeypatch.setattr(
@@ -178,7 +180,7 @@ def test_run_process_skips_curator_for_pages_mode(client, container, monkeypatch
         "run",
         lambda name, kw: {"ok": True, "mode": "toc", "chapters": [], "entries": ENTRIES},
     )
-    container.library._run_process({"id": 2, "target": src["uid"]})
+    container.library._processing_uc._run_process({"id": 2, "target": src["uid"]})
     assert len(curator_calls) == 1
 
 
@@ -193,7 +195,7 @@ def test_outline_from_db_with_sections_and_numbers(rest_app, client, container):
             .where(chapters.c.source_id == src["id"], chapters.c.idx == 4)
             .values(sections_json=json.dumps([{"title": "Первые шаги", "page": 16}], ensure_ascii=False))
         )
-    container.library._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
+    container.library._processing_uc._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
 
     body = client.get(f"/api/sources/{src['uid']}/outline").json()
     assert body["pages"] == {"1": 5, "2": 14, "3": 400}
@@ -220,7 +222,7 @@ def test_chapter_images_endpoint(rest_app, client, container):
 
 def test_get_source_returns_chapter_numbers(rest_app, client, container):
     src = _add_book_source(container)
-    container.library._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
+    container.library._processing_uc._curate_book(src["id"], src["uid"], {"entries": ENTRIES})
     body = client.get(f"/api/sources/{src['uid']}").json()
     numbers = [(ch["number"], ch["title"]) for ch in body["chapters"]]
     assert numbers == [(None, "Введение"), (2, "Глава 2. Основы Git"), (None, "Приложение A. Шпаргалка")]
