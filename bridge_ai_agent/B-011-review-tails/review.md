@@ -25,3 +25,14 @@
 «messages.content.type is invalid». Консоль смотри текстом (логи next dev / read_console_messages).**
 
 После фикса: проверки, push, на проде убедиться в п.1 (ro), статус `review`.
+
+## Раунд 2 · 2026-11-12 · вердикт: done
+
+- 1 ✅ `docker-compose.yml:35-36` — `/repo:ro` + `.git` rw; на проде `touch /repo/x` → Read-only, `.git` и `/data` пишутся,
+  полный цикл ветки `agent/b011-ro-smoke` прошёл (report.md:83-87).
+- 2 ✅ `proposals/service.py:25-36` `_mask_creds`: user:pass@, token@, token=/authorization:, ghp_/github_pat_; тесты.
+- 3 ✅ причина неудачи PR возвращается в accept и видна в UI (коммит 1131441).
+- 4 ✅ report.md есть, с прод-фактами.
+- 5 ✅ dev-оверлей: гидратация theme-toggle, консоль dev и прод чистая (cf42d26).
+- CI зелёный, прод health ok, embed_configured=true.
+- Заметка в docs не нужна; infra-нюанс `pve.py exec` (кавычки на ssh-хопе) — в report.md, перенести в proxmox-репо при случае.
