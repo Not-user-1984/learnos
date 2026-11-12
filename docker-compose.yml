@@ -22,16 +22,18 @@ services:
       # R-07: bearer-токен API (пусто — auth выключен)
       LEARNOS_API_TOKEN: ${LEARNOS_API_TOKEN:-}
       # ревизия кода агентом-аудитором (T-038): git-рабочая копия, видимая из контейнера;
-      # пусто — инструменты ревизии отвечают «не настроено». rw с B-011: git worktree
-      # (ветки agent/*) пишет в .git рабочей копии; правки кода идут только через worktree
+      # пусто — инструменты ревизии отвечают «не настроено». Дерево ro (B-011): ветки
+      # agent/* живут в worktree data/git-worktrees, запись — только в .git рабочей копии
       LEARNOS_REPO_ROOT: ${LEARNOS_REPO_ROOT:-}
       # GitHub-токен с правом push: accept веток agent/* = push + PR через REST (B-011)
       LEARNOS_GITHUB_TOKEN: ${LEARNOS_GITHUB_TOKEN:-}
     volumes:
       - ./data:/data
       - ./kb:/kb
-      # рабочая копия деплоя: rw — git worktree для веток агента пишет в её .git (B-011)
-      - ./:/repo
+      # рабочая копия деплоя — read-only (ревью B-011): сервис не пишет в исходники
+      # и task_ai прода; rw — только .git (push/worktree пишут туда) и data/git-worktrees (маунт /data)
+      - ./:/repo:ro
+      - ./.git:/repo/.git
       # песочница скиллов (R-06): секреты .env и живая база ./data не видны из /repo
       # (пустая маска поверх маунта; секреты ходят только через env контейнера)
       - /dev/null:/repo/.env:ro
