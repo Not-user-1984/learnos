@@ -431,3 +431,65 @@ def test_detailed_status_reports_disabled_provider_reason(monkeypatch):
     st = ModelRouter(config).detailed_status()
     assert st["configured"] is False
     assert st["providers"]["zai"]["reason"] == "провайдер выключен"
+
+
+# --- прокси провайдера (B-011): OpenAI блокирует регион прода, embed ходит через socks5 ---
+
+
+class _FakeSDK:
+    """Заглушка openai.AsyncOpenAI: запоминает kwargs конструктора."""
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+
+def test_make_client_without_proxy_is_direct(monkeypatch):
+    monkeypatch.setattr("app.llm.providers.openai_compat.openai.AsyncOpenAI", _FakeSDK)
+    provider = OpenAICompatProvider("zai", _URL, ["k1"])
+    client = provider._make_client("k1")
+    assert "http_client" not in client.kwargs
+
+
+def test_make_client_with_proxy_passes_httpx_client(monkeypatch):
+    monkeypatch.setattr("app.llm.providers.openai_compat.openai.AsyncOpenAI", _FakeSDK)
+    provider = OpenAICompatProvider("openai", _URL, ["k1"], proxy_from=lambda: "socks5://xray:1080")
+    client = provider._make_client("k1")
+    hc = client.kwargs.get("http_client")
+    assert isinstance(hc, httpx.AsyncClient)
+
+
+async def test_ensure_client_rebuilds_when_proxy_changes(monkeypatch):
+    monkeypatch.setattr("app.llm.providers.openai_compat.openai.AsyncOpenAI", _FakeSDK)
+    current = {"proxy": "socks5://xray:1080"}
+    provider = OpenAICompatProvider("openai", _URL, ["k1"], proxy_from=lambda: current["proxy"])
+    first = provider._ensure_client(0)
+    same = provider._ensure_client(0)
+    assert first is same  # прокси не менялся — клиент переиспользуется
+    current["proxy"] = ""  # прокси сняли в UI — следующий запрос напрямую
+    rebuilt = provider._ensure_client(0)
+    assert rebuilt is not first
+    assert "http_client" not in rebuilt.kwargs
+
+
+def test_router_wires_proxy_from_use_proxy_flag(monkeypatch):
+    monkeypatch.setenv("K1", "key1")
+    config = LLMConfig(
+        providers={
+            "zai": {"type": "openai_compat", "base_url": _URL, "api_key_envs": ["K1"]},
+            "openai": {
+                "type": "openai_compat",
+                "base_url": _URL,
+                "api_key_envs": ["K1"],
+                "use_proxy": True,
+            },
+        },
+        roles={
+            "chat": RoleBinding(provider="zai", model="glm"),
+            "embed": RoleBinding(provider="openai", model="text-embedding-3-small"),
+        },
+    )
+    router = ModelRouter(config)
+    prov_zai, _, _ = router.resolve("chat")
+    prov_oai, _, _ = router.resolve("embed")
+    assert prov_zai._proxy_from is None
+    assert prov_oai._proxy_from is not None

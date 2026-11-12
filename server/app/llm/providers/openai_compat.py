@@ -7,6 +7,7 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any, TypeVar
 
+import httpx
 import openai
 
 from ...kernel.errors import LLMError
@@ -76,6 +77,7 @@ class OpenAICompatProvider:
         *,
         cooldown_seconds: float = 600.0,
         monotonic: Callable[[], float] = time.monotonic,
+        proxy_from: Callable[[], str] | None = None,
     ) -> None:
         self.name = name
         self.capabilities = capabilities or ProviderCapabilities()
@@ -87,6 +89,10 @@ class OpenAICompatProvider:
         self._cooldown_until: dict[int, float] = {}
         self._clients: dict[int | None, openai.AsyncOpenAI] = {}
         self._loop_id: int | None = None
+        # прокси провайдера (B-011): OpenAI блокирует регион прода — роль embed ходит
+        # через socks5 из настроек связи (UI); пустая строка = напрямую
+        self._proxy_from = proxy_from
+        self._proxy_stamp: str | None = None
         # extra-параметры ролей, отвергнутые провайдером (bad_request) — не шлём до перезапуска
         self._unsupported_extra: set[str] = set()
 
@@ -174,7 +180,23 @@ class OpenAICompatProvider:
 
     # --- клиент ---
 
+    def _current_proxy(self) -> str:
+        """Текущий прокси провайдера (пусто — напрямую). Читается при каждом запросе:
+        смена настроек связи в UI подхватывается без рестарта."""
+        if self._proxy_from is None:
+            return ""
+        return (self._proxy_from() or "").strip()
+
     def _make_client(self, api_key: str | None) -> openai.AsyncOpenAI:
+        proxy = self._current_proxy()
+        if proxy:
+            return openai.AsyncOpenAI(
+                base_url=self._base_url,
+                api_key=api_key or "not-set",
+                timeout=120.0,
+                max_retries=0,
+                http_client=httpx.AsyncClient(proxy=proxy),
+            )
         return openai.AsyncOpenAI(
             base_url=self._base_url, api_key=api_key or "not-set", timeout=120.0, max_retries=0
         )
@@ -185,6 +207,11 @@ class OpenAICompatProvider:
         loop = asyncio.get_running_loop()
         if self._loop_id != id(loop):
             self._loop_id = id(loop)
+            self._clients = {}
+        proxy = self._current_proxy()
+        if proxy != self._proxy_stamp:
+            # сменился прокси (настройки связи из UI) — клиенты пересобираются
+            self._proxy_stamp = proxy
             self._clients = {}
         client = self._clients.get(key_index)
         if client is None:

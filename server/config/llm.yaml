@@ -19,6 +19,9 @@ providers:
     base_url: https://api.openai.com/v1
     api_key_envs: [OPENAI_API_KEY, LEARNOS_OPENAI_API_KEY]
     capabilities: {tools: false, streaming: false, json_schema: false, vision: false}
+    # регион CT 132 блокирован OpenAI (403 unsupported_country_region_territory) —
+    # все запросы провайдера через socks5 из настроек связи (UI: xray sidecar)
+    use_proxy: true
   ollama:
     type: openai_compat
     base_url: http://localhost:11434/v1

@@ -111,8 +111,21 @@ class ModelRouter:
             if ptype == "fake":
                 self._providers[name] = FakeLLMProvider()
             else:
+                proxy_from = None
+                if spec.get("use_proxy"):
+                    # провайдер из региона-блока (OpenAI): ходим через socks5 из настроек связи
+                    from ..kernel.config import get_settings
+
+                    def proxy_from() -> str:  # noqa: F811 — читается живой Settings при каждом запросе
+                        return get_settings().web_proxy
+
                 self._providers[name] = OpenAICompatProvider(
-                    name, spec["base_url"], keys, caps, cooldown_seconds=self._key_cooldown_seconds
+                    name,
+                    spec["base_url"],
+                    keys,
+                    caps,
+                    cooldown_seconds=self._key_cooldown_seconds,
+                    proxy_from=proxy_from,
                 )
         return self._providers[name]
 
