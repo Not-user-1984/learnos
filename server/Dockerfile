@@ -12,7 +12,8 @@ ENV PYTHONUNBUFFERED=1 \
 COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /usr/local/bin/uv
 
 # ffmpeg + deno: yt-dlp требует JS-runtime для YouTube (PO-токены), иначе субтитры падают на 429
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl unzip \
+# git: ветки agent/* — git worktree + push accept'ом из контейнера (B-011)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl unzip git \
     && rm -rf /var/lib/apt/lists/*
 ARG TARGETARCH
 RUN case "$TARGETARCH" in \

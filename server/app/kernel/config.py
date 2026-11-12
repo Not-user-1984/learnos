@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     repo_root: str = ""
     # Дневной бюджет подготовленных агентом веток agent/* (ступень 2 ревизии)
     git_branch_budget: int = 3
+    # GitHub-токен с правом push (B-011): accept веток agent/* — push + PR через REST;
+    # пусто — push идёт с кредами окружения, PR — только через gh, если он есть
+    github_token: str = ""  # LEARNOS_GITHUB_TOKEN
     # Ресёрч (модуль research): провайдер поиска и прокси для внешних запросов
     search_provider: str = "chain"  # цепочка [платный по ключу → ddg → wikipedia → hn]; см. T-019
     web_proxy: str = ""  # например socks5://192.168.0.10:1080 (vpn-gw) — если регион блокирует

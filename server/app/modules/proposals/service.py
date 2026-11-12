@@ -9,11 +9,17 @@ import re
 import subprocess
 from pathlib import Path
 
+import httpx
+
 from ...kernel.clock import SystemClock, now_iso
 from ...kernel.errors import NotFound, ValidationFailed
 from .infra.sql_repo import DecisionRepository
 
 TASK_FRONTMATTER = re.compile(r"^---\n(.*?)\n---", re.S)
+
+GITHUB_API = "https://api.github.com"
+# признаки отказа auth в выводе git push — к ним добавляем подсказку про токен
+PUSH_AUTH_HINTS = ("Authentication failed", "could not read Username", "403", "401", "permission")
 
 
 def _frontmatter(text: str) -> dict:
@@ -102,15 +108,65 @@ class ProposalsService:
         root = self._repo_root()
         if not (root / ".git").exists():
             raise NotFound(f"{root} — не git-репозиторий")
-        push = subprocess.run(
-            ["git", "push", "origin", branch], cwd=root, capture_output=True, text=True, timeout=120
-        )
+        # полный refspec: короткое имя ветки неоднозначно, если существует тег с тем же именем
+        argv = [
+            "git",
+            *self._push_auth_args(),
+            "push",
+            "origin",
+            f"refs/heads/{branch}:refs/heads/{branch}",
+        ]
+        try:
+            push = subprocess.run(argv, cwd=root, capture_output=True, text=True, timeout=120)
+        except FileNotFoundError as e:
+            raise ValidationFailed(
+                "git не найден в окружении сервиса — push ветки невозможен (нужен git в образе)"
+            ) from e
+        except subprocess.TimeoutExpired as e:
+            raise ValidationFailed("git push: таймаут 120 с — попробуйте ещё раз") from e
         if push.returncode != 0:
-            raise ValidationFailed(f"push не удался: {push.stderr[-300:]}")
+            tail = (push.stderr or push.stdout or "")[-300:].strip()
+            hint = (
+                " — проверьте токен доступа к GitHub (LEARNOS_GITHUB_TOKEN)"
+                if any(h in tail for h in PUSH_AUTH_HINTS)
+                else ""
+            )
+            raise ValidationFailed(f"push ветки {branch} не удался: {tail}{hint}")
         pr_url = self._create_pr(root, branch)
-        return {"pushed": True, "pr_url": pr_url}
+        return {
+            "pushed": True,
+            "pr_url": pr_url,
+            "compare_url": self._compare_url(root, branch),
+        }
+
+    def _push_auth_args(self) -> list[str]:
+        """Креды push из env-токена: хелпер-файл в data (токен не светится в argv).
+
+        Без токена — пусто: push использует creds окружения (локальная разработка).
+        """
+        token = (getattr(self._settings, "github_token", "") or "").strip()
+        if not token:
+            return []
+        helper = self._settings.data_dir / "git-cred.sh"
+        try:
+            if not helper.exists():
+                helper.write_text(
+                    '#!/bin/sh\necho "username=x-access-token"\necho "password=$LEARNOS_GITHUB_TOKEN"\n',
+                    encoding="utf-8",
+                )
+                helper.chmod(0o700)
+        except OSError:
+            return []  # data недоступна для записи — push попробует creds окружения
+        # пустое значение сбрасывает системных хелперов: используем только наш токен
+        return ["-c", "credential.helper=", "-c", f"credential.helper={helper}"]
 
     def _create_pr(self, root: Path, branch: str) -> str | None:
+        url = self._pr_via_gh(root, branch)
+        if url:
+            return url
+        return self._pr_via_api(root, branch)
+
+    def _pr_via_gh(self, root: Path, branch: str) -> str | None:
         try:
             pr = subprocess.run(
                 ["gh", "pr", "create", "--fill", "--head", branch],
@@ -123,4 +179,67 @@ class ProposalsService:
                 return pr.stdout.strip().splitlines()[-1] if pr.stdout.strip() else None
         except (OSError, subprocess.SubprocessError):
             pass
-        return None  # gh нет/не настроен — push есть, PR создаст человек по ссылке compare
+        return None  # gh нет/не настроен — пробуем REST с env-токеном
+
+    def _pr_via_api(self, root: Path, branch: str) -> str | None:
+        """PR через GitHub REST с токеном сервиса (gh в контейнере нет, B-011)."""
+        token = (getattr(self._settings, "github_token", "") or "").strip()
+        slug = self._repo_slug(root)
+        if not token or not slug:
+            return None
+        summary = next(
+            (
+                b.get("summary") or b.get("message")
+                for b in self._revision.prepared_branches()
+                if b.get("branch") == branch
+            ),
+            None,
+        )
+        title = f"{branch}: {summary}" if summary else branch
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        try:
+            resp = httpx.post(
+                f"{GITHUB_API}/repos/{slug}/pulls",
+                headers=headers,
+                json={"title": title[:120], "head": branch, "base": "main"},
+                timeout=30,
+            )
+            if resp.status_code in (200, 201):
+                return str(resp.json().get("html_url") or "") or None
+            if resp.status_code == 422:  # PR уже есть — отдаём ссылку на него
+                listed = httpx.get(
+                    f"{GITHUB_API}/repos/{slug}/pulls",
+                    headers=headers,
+                    params={"head": f"{slug.split('/')[0]}:{branch}", "state": "open"},
+                    timeout=30,
+                )
+                items = listed.json() if listed.status_code == 200 else []
+                if isinstance(items, list) and items:
+                    return str(items[0].get("html_url") or "") or None
+        except httpx.HTTPError:
+            return None
+        return None  # PR не создан — человек пройдёт по compare_url
+
+    def _repo_slug(self, root: Path) -> str | None:
+        """owner/repo из remote origin (поддержка https и ssh-вида)."""
+        try:
+            out = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=True,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return None
+        m = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$", out)
+        return m.group(1) if m else None
+
+    def _compare_url(self, root: Path, branch: str) -> str | None:
+        slug = self._repo_slug(root)
+        return f"https://github.com/{slug}/compare/main...{branch}" if slug else None

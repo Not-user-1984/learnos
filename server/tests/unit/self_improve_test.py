@@ -83,4 +83,70 @@ def test_proposals_list_and_decide(container, monkeypatch, tmp_path):
     )
     out = container.proposals.decide("branch", "agent/fix-readme", "accepted")
     assert out["pushed"] is True
-    assert pushes and pushes[0][0][1] == "push"
+    assert pushes, "git push должен был вызваться"
+    push_argv = pushes[0][0]
+    assert "push" in push_argv
+    # полный refspec: короткое имя неоднозначно при одноимённом теге (B-011)
+    assert "refs/heads/agent/fix-readme:refs/heads/agent/fix-readme" in push_argv
+
+
+def test_accept_branch_push_errors_are_clear(container, monkeypatch, tmp_path):
+    """Push без git в окружении и auth-отказ — понятный текст ошибки (B-011)."""
+    import pytest
+
+    from app.kernel.errors import ValidationFailed
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(type(container.proposals), "_repo_root", lambda self: tmp_path, raising=False)
+
+    # git нет в образе/окружении
+    def no_git(*a, **k):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr("app.modules.proposals.service.subprocess.run", no_git)
+    with pytest.raises(ValidationFailed, match="git не найден"):
+        container.proposals.decide("branch", "agent/x", "accepted")
+
+    # auth-отказ с подсказкой про токен
+    monkeypatch.setattr(
+        "app.modules.proposals.service.subprocess.run",
+        lambda *a, **k: __import__("types").SimpleNamespace(
+            returncode=1, stdout="", stderr="remote: Authentication failed\nfatal: 403"
+        ),
+    )
+    with pytest.raises(ValidationFailed, match="LEARNOS_GITHUB_TOKEN"):
+        container.proposals.decide("branch", "agent/x", "accepted")
+
+
+def test_pr_via_github_rest(container, monkeypatch, tmp_path):
+    """gh нет — PR создаётся REST-запросом с токеном настроек (B-011)."""
+    import types
+
+    (tmp_path / ".git").mkdir()
+    svc = container.proposals
+    monkeypatch.setattr(type(svc), "_repo_root", lambda self: tmp_path, raising=False)
+    monkeypatch.setattr(svc._settings, "github_token", "tok", raising=False)
+
+    calls = []
+
+    def fake_run(argv, **k):
+        if argv[:3] == ["git", "remote", "get-url"]:
+            return types.SimpleNamespace(returncode=0, stdout="https://github.com/x/learnos.git\n", stderr="")
+        raise AssertionError(f"неожиданный subprocess-вызов: {argv}")
+
+    monkeypatch.setattr("app.modules.proposals.service.subprocess.run", fake_run)
+
+    def fake_post(url, **kw):
+        calls.append(("post", url, kw.get("json"), kw.get("headers")))
+        return types.SimpleNamespace(
+            status_code=201, json=lambda: {"html_url": "https://github.com/o/r/pull/9"}
+        )
+
+    monkeypatch.setattr("app.modules.proposals.service.httpx.post", fake_post)
+
+    url = svc._pr_via_api(tmp_path, "agent/fix")  # noqa: SLF001 — прямой вызов вместо gh
+    assert url == "https://github.com/o/r/pull/9"
+    _, url_called, body, headers = calls[0]
+    assert "/repos/x/learnos/pulls" in url_called
+    assert body["head"] == "agent/fix" and body["base"] == "main"
+    assert headers["Authorization"] == "Bearer tok"

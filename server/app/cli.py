@@ -15,7 +15,10 @@ def main() -> None:
     reindex_p.add_argument(
         "--embeddings", action="store_true", help="векторы тоже (инкрементально по хэшу, B-008)"
     )
-    sub.add_parser("smoke-llm", help="живая проверка LLM: ответ, стрим, tool call")
+    smoke_p = sub.add_parser(
+        "smoke-llm", help="живая проверка LLM: ответ, стрим, tool call; --embed — роль embed"
+    )
+    smoke_p.add_argument("--embed", action="store_true", help="живой вызов /embeddings роли embed (B-011)")
     sub.add_parser("seed-demo", help="демо-данные в текущие LEARNOS_DATA_DIR/LEARNOS_KB_DIR")
     args = parser.parse_args()
     from .bootstrap import build_container
@@ -35,7 +38,7 @@ def main() -> None:
         if args.embeddings:
             _reindex_embeddings(container)
     elif args.cmd == "smoke-llm":
-        asyncio.run(_smoke_llm(container))
+        asyncio.run(_smoke_llm(container, embed=getattr(args, "embed", False)))
     elif args.cmd == "seed-demo":
         _seed_demo(container)
 
@@ -66,8 +69,8 @@ def _reindex_embeddings(container) -> None:
     print(f"embeddings: блоков {done} (+{skipped} пропущено), глав {chapters_done}")
 
 
-async def _smoke_llm(container) -> None:
-    """Три проверки LLM: обычный ответ, стрим, вызов инструмента echo."""
+async def _smoke_llm(container, embed: bool = False) -> None:
+    """Три проверки LLM: обычный ответ, стрим, вызов инструмента echo; опционально embed."""
     from .llm.types import LLMRequest, Message, ToolSchema
 
     provider, model, _params = container.llm_router.resolve("chat")
@@ -103,6 +106,25 @@ async def _smoke_llm(container) -> None:
             calls_text = f"{ev.tool_call.name}({ev.tool_call.arguments})"
     print(f"3) tool call: {calls_text!r}")
     if "echo" not in calls_text:
+        sys.exit(1)
+    if embed:
+        await _smoke_embed(container)
+
+
+async def _smoke_embed(container) -> None:
+    """Живой вызов /embeddings роли embed (B-011): имя модели и размерность."""
+    from .kernel.errors import LLMError
+
+    try:
+        provider, model, _params = container.llm_router.resolve("embed")
+    except LLMError:
+        print("4) embed: роль не настроена в config/llm.yaml — пропускаю (поиск остаётся на FTS)")
+        return
+    print(f"4) embed: {provider.name}/{model}")
+    vectors = await provider.embed(model, ["привет", "hello"])
+    dims = {len(v) for v in vectors}
+    print(f"   векторов: {len(vectors)}, размерность: {dims}")
+    if len(vectors) != 2 or len(dims) != 1:
         sys.exit(1)
 
 

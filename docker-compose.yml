@@ -20,17 +20,18 @@ services:
       # R-07: bearer-токен API (пусто — auth выключен)
       LEARNOS_API_TOKEN: ${LEARNOS_API_TOKEN:-}
       # ревизия кода агентом-аудитором (T-038): git-рабочая копия, видимая из контейнера;
-      # пусто — инструменты ревизии отвечают «не настроено». Рабочую копию смонтировать
-      # в volumes (rw — git worktree пишет в её .git), например: ../:/repo
+      # пусто — инструменты ревизии отвечают «не настроено». rw с B-011: git worktree
+      # (ветки agent/*) пишет в .git рабочей копии; правки кода идут только через worktree
       LEARNOS_REPO_ROOT: ${LEARNOS_REPO_ROOT:-}
+      # GitHub-токен с правом push: accept веток agent/* = push + PR через REST (B-011)
+      LEARNOS_GITHUB_TOKEN: ${LEARNOS_GITHUB_TOKEN:-}
     volumes:
       - ./data:/data
       - ./kb:/kb
-      # рабочая копия деплоя — read-only для аудитора (ступень 1); git-ветки (ступень 2)
-      # требуют rw и uv в образе — включим отдельно, пока read-only
-      - ./:/repo:ro
+      # рабочая копия деплоя: rw — git worktree для веток агента пишет в её .git (B-011)
+      - ./:/repo
       # песочница скиллов (R-06): секреты .env и живая база ./data не видны из /repo
-      # (пустая маска поверх ro-маунта; секреты ходят только через env контейнера)
+      # (пустая маска поверх маунта; секреты ходят только через env контейнера)
       - /dev/null:/repo/.env:ro
       - ./deploy/repo-mask/data:/repo/data:ro
     ports:
