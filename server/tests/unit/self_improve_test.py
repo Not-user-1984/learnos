@@ -150,3 +150,21 @@ def test_pr_via_github_rest(container, monkeypatch, tmp_path):
     assert "/repos/x/learnos/pulls" in url_called
     assert body["head"] == "agent/fix" and body["base"] == "main"
     assert headers["Authorization"] == "Bearer tok"
+
+
+def test_decide_route_accepts_slashed_branch_ref(client):
+    """Маршрут decide принимает ветку со слэшем agent/x: ref:path (B-011).
+
+    Обычный сегмент пути не матчит «agent/b011-accept-smoke» — accept ветки
+    из UI падал 404 ещё до push.
+    """
+    res = client.post(
+        "/api/proposals/branch/agent/b011-smoke/decide",
+        json={"decision": "rejected"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["kind"] == "branch" and body["ref"] == "agent/b011-smoke"
+
+    # решение скрыло ветку из «нерешённых» — список не падает
+    assert client.get("/api/proposals").status_code == 200

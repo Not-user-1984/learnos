@@ -15,7 +15,8 @@ def make_router(svc) -> APIRouter:
     def list_proposals():
         return svc.list()
 
-    @r.post("/{kind}/{ref}/decide")
+    # ref:path — ветка содержит слэш (agent/fix-x), обычный сегмент даёт 404 (B-011)
+    @r.post("/{kind}/{ref:path}/decide")
     def decide(kind: str, ref: str, body: DecisionIn):
         return svc.decide(kind, ref, body.decision)
 
