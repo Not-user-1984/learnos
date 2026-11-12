@@ -11,7 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 type Proposals = {
-  tasks: { id: string; title: string; from: string; path: string }[];
+  tasks: {
+    id: string;
+    title: string;
+    from: string;
+    path: string;
+    source?: "git" | "data";
+    text?: string;
+  }[];
   branches: { branch?: string; commit?: string; summary?: string; diffstat?: string }[];
   prompt_changes: { id: number; agent?: string; summary?: string }[];
 };
@@ -24,16 +31,40 @@ export default function ProposalsPage() {
     void load();
   }, []);
 
-  const decide = async (kind: string, ref: string, decision: "accepted" | "rejected") => {
+  const decide = async (
+    kind: string,
+    ref: string,
+    decision: "accepted" | "rejected",
+    task?: Proposals["tasks"][number],
+  ) => {
     try {
-      const out = await apiPost<{ pr_url?: string | null }>(`/proposals/${kind}/${ref}/decide`, { decision });
-      toast.success(
-        decision === "accepted"
-          ? out?.pr_url
-            ? `Ветка отправлена, PR: ${out.pr_url}`
-            : "Принято"
-          : "Отклонено",
+      const out = await apiPost<{ pr_url?: string | null; compare_url?: string | null; task_text?: string }>(
+        `/proposals/${kind}/${ref}/decide`,
+        { decision },
       );
+      if (decision === "accepted") {
+        if (kind === "branch") {
+          toast.success(out?.pr_url ? `Ветка отправлена, PR: ${out.pr_url}` : "Ветка отправлена");
+        } else if (kind === "task") {
+          // задача из data (git-дерево прода read-only): текст — в буфер, человек
+          // переносит файл в бэклог сам (B-011)
+          const text = out?.task_text ?? task?.text;
+          if (text) {
+            try {
+              await navigator.clipboard.writeText(text);
+              toast.success("Принято: текст задачи скопирован — вставь файлом в task_ai/tasks");
+            } catch {
+              toast.success("Принято: скопируй текст задачи из карточки в task_ai/tasks");
+            }
+          } else {
+            toast.success("Принято: файл задачи уже в task_ai/tasks");
+          }
+        } else {
+          toast.success("Принято");
+        }
+      } else {
+        toast.success("Отклонено");
+      }
       void load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "не удалось");
@@ -67,9 +98,24 @@ export default function ProposalsPage() {
                       <p className="font-medium">{t.title}</p>
                       <p className="text-xs text-muted-foreground">
                         {t.id} · {t.from}
+                        {t.source === "data" && " · вне git (прод)"}
                       </p>
                     </div>
-                    <Button size="sm" onClick={() => void decide("task", t.id, "accepted")}>
+                    {t.source === "data" && t.text && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          void navigator.clipboard
+                            .writeText(t.text ?? "")
+                            .then(() => toast.success("Текст задачи скопирован"))
+                            .catch(() => toast.error("Не удалось скопировать"));
+                        }}
+                      >
+                        <Icon name="content_copy" size={15} className="mr-1" /> Текст
+                      </Button>
+                    )}
+                    <Button size="sm" onClick={() => void decide("task", t.id, "accepted", t)}>
                       <Icon name="check" size={15} className="mr-1" /> Взять в работу
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => void decide("task", t.id, "rejected")}>

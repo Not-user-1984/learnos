@@ -64,24 +64,50 @@ class ProposalsService:
         return {"tasks": tasks, "branches": branches, "prompt_changes": prompts}
 
     def _idea_tasks(self) -> list[dict]:
-        """Задачи task_ai/tasks со статусом idea (создают auditor/repo_scout)."""
+        """Задачи агентов со статусом idea: task_ai/tasks (git) + data/proposals/tasks (B-011).
+
+        Человек в «Предложениях» видит только агентское: метка `author: agent`
+        (ставит create_task_file) или старое `from: ревизия кода…`; задачи из
+        data создаёт только сервис — они агентские по определению.
+        """
+        out: list[dict] = []
         root = self._repo_root()
-        out = []
-        tasks_dir = root / "task_ai" / "tasks"
-        if not tasks_dir.is_dir():
-            return out
-        for path in sorted(tasks_dir.glob("T-*.md")):
-            meta = _frontmatter(path.read_text(encoding="utf-8", errors="replace"))
-            if meta.get("status") != "idea":
-                continue
-            out.append(
-                {
-                    "id": meta.get("id") or path.stem,
-                    "title": meta.get("title") or path.stem,
-                    "from": meta.get("from", ""),
-                    "path": f"task_ai/tasks/{path.name}",
-                }
-            )
+        git_dir = root / "task_ai" / "tasks"
+        if git_dir.is_dir():
+            for path in sorted(git_dir.glob("T-*.md")):
+                meta = _frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+                if meta.get("status") != "idea":
+                    continue
+                origin = meta.get("from", "")
+                if meta.get("author") != "agent" and not origin.startswith("ревизия кода"):
+                    continue  # бэклог человека — не предложение агента (B-011)
+                out.append(
+                    {
+                        "id": meta.get("id") or path.stem,
+                        "title": meta.get("title") or path.stem,
+                        "from": origin,
+                        "path": f"task_ai/tasks/{path.name}",
+                        "source": "git",
+                    }
+                )
+        data_dir = self._settings.data_dir / "proposals" / "tasks"
+        if data_dir.is_dir():
+            for path in sorted(data_dir.glob("T-*.md")):
+                meta = _frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+                if meta.get("status") != "idea":
+                    continue
+                out.append(
+                    {
+                        "id": meta.get("id") or path.stem,
+                        "title": meta.get("title") or path.stem,
+                        "from": meta.get("from", ""),
+                        "path": f"data/proposals/tasks/{path.name}",
+                        "source": "data",
+                        # полный текст: файл вне git-дерева — в бэклог его переносит
+                        # человек копированием (B-011)
+                        "text": path.read_text(encoding="utf-8", errors="replace"),
+                    }
+                )
         return out
 
     def _repo_root(self) -> Path:
@@ -97,9 +123,18 @@ class ProposalsService:
         extra: dict = {}
         if kind == "branch":
             extra = self._accept_branch(ref) if decision == "accepted" else {}
+        elif kind == "task" and decision == "accepted":
+            extra = self._task_copy_text(ref)
         with self._uow() as uow:
             self._decisions.decide(uow.session, kind, ref, decision, now_iso(self._clock))
         return {"ok": True, "kind": kind, "ref": ref, "decision": decision, **extra}
+
+    def _task_copy_text(self, task_id: str) -> dict:
+        """Задача из data (прод): текст для переноса в бэклог руками (B-011)."""
+        for t in self._idea_tasks():
+            if t["id"] == task_id and t.get("source") == "data":
+                return {"task_text": t["text"]}
+        return {}
 
     def _accept_branch(self, branch: str) -> dict:
         """Ветка agent/* → GitHub: push и PR (мердж — только человек)."""

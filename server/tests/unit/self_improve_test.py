@@ -54,7 +54,7 @@ def test_proposals_list_and_decide(container, monkeypatch, tmp_path):
     tasks_dir = tmp_path / "task_ai" / "tasks"
     tasks_dir.mkdir(parents=True)
     (tasks_dir / "T-901-test-idea.md").write_text(
-        "---\nid: T-901\ntitle: Идея скаута\nstatus: idea\nfrom: repo_scout\n---\n\nтело",
+        "---\nid: T-901\ntitle: Идея скаута\nstatus: idea\nfrom: ревизия кода (auditor)\n---\n\nтело",
         encoding="utf-8",
     )
     (tasks_dir / "T-902-done.md").write_text(
@@ -150,6 +150,75 @@ def test_pr_via_github_rest(container, monkeypatch, tmp_path):
     assert "/repos/x/learnos/pulls" in url_called
     assert body["head"] == "agent/fix" and body["base"] == "main"
     assert headers["Authorization"] == "Bearer tok"
+
+
+def test_proposals_only_agent_tasks(container, monkeypatch, tmp_path):
+    """«Предложения» — только задачи агентов: author: agent или from: ревизия кода (B-011)."""
+    tasks_dir = tmp_path / "task_ai" / "tasks"
+    tasks_dir.mkdir(parents=True)
+    files = {
+        "T-910-agent.md": (
+            "---\nid: T-910\ntitle: Новая агентская\nstatus: idea\nauthor: agent\nfrom: x\n---\n"
+        ),
+        "T-911-old-agent.md": (
+            "---\nid: T-911\ntitle: Старая агентская\nstatus: idea\nfrom: ревизия кода (auditor)\n---\n"
+        ),
+        "T-912-human.md": "---\nid: T-912\ntitle: Бэклог человека\nstatus: idea\nfrom: этап 8\n---\n",
+    }
+    for name, text in files.items():
+        (tasks_dir / name).write_text(text, encoding="utf-8")
+    monkeypatch.setattr(type(container.proposals), "_repo_root", lambda self: tmp_path, raising=False)
+
+    out = container.proposals.list()
+    ids = [t["id"] for t in out["tasks"]]
+    assert ids == ["T-910", "T-911"]
+
+
+def test_proposals_data_tasks(container, monkeypatch, tmp_path):
+    """Задачи из data (прод, read-only репо) видны с текстом; accept отдаёт текст (B-011)."""
+    (tmp_path / "task_ai" / "tasks").mkdir(parents=True)
+    data_dir = container.proposals._settings.data_dir / "proposals" / "tasks"  # noqa: SLF001
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "T-AGENT-2026-11-12-smoke.md").write_text(
+        "---\nid: T-AGENT-2026-11-12-smoke\ntitle: Дымовая\nstatus: idea\nauthor: agent\n"
+        "from: ревизия кода (auditor)\n---\n\n## Что нужно\n\nпроверить",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(type(container.proposals), "_repo_root", lambda self: tmp_path, raising=False)
+
+    out = container.proposals.list()
+    data_tasks = [t for t in out["tasks"] if t.get("source") == "data"]
+    assert len(data_tasks) == 1 and "## Что нужно" in data_tasks[0]["text"]
+
+    accepted = container.proposals.decide("task", "T-AGENT-2026-11-12-smoke", "accepted")
+    assert "## Что нужно" in accepted.get("task_text", "")
+
+
+def test_create_task_file_fallback_to_data(container, monkeypatch, tmp_path):
+    """Read-only git-дерево: задача агента уходит в data/proposals/tasks (B-011)."""
+    import pathlib
+
+    tasks_dir = tmp_path / "task_ai" / "tasks"
+    tasks_dir.mkdir(parents=True)
+    (tmp_path / ".git").mkdir()
+    rev = container.revision
+    monkeypatch.setattr(type(rev), "_root", lambda self: tmp_path, raising=False)
+
+    real_write = pathlib.Path.write_text
+
+    def ro_write(self, data, encoding=None, errors=None, newline=None):
+        if self.parent == tasks_dir:
+            raise OSError(30, "Read-only file system")
+        return real_write(self, data, encoding=encoding, errors=errors, newline=newline)
+
+    monkeypatch.setattr(pathlib.Path, "write_text", ro_write)
+
+    out = rev.create_task_file("Дымовая задача прод", "тело")
+    assert out["location"] == "data"
+    assert out["task_id"].startswith("T-AGENT-")
+    assert out["file"].startswith("data/proposals/tasks/")
+    text = rev._settings.data_dir.joinpath(*out["file"].split("/")[1:]).read_text(encoding="utf-8")  # noqa: SLF001
+    assert "author: agent" in text and "status: idea" in text
 
 
 def test_decide_route_accepts_slashed_branch_ref(client):
