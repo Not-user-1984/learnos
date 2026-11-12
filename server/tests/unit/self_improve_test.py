@@ -118,6 +118,43 @@ def test_accept_branch_push_errors_are_clear(container, monkeypatch, tmp_path):
         container.proposals.decide("branch", "agent/x", "accepted")
 
 
+def test_push_error_masks_credentials(container, monkeypatch, tmp_path):
+    """Креды в stderr git push не попадают в ответ API (ревью B-011)."""
+    import pytest
+
+    from app.kernel.errors import ValidationFailed
+    from app.modules.proposals.service import _mask_creds
+
+    # прямая проверка масок: user:pass@, token@, token=…, ghp_…
+    dirty = (
+        "fatal: Authentication failed for "
+        "'https://x-access-token:ghp_abc123SECRET@github.com/o/r.git/'\n"
+        "remote: token=gho_xyz987 is revoked\n"
+        "remote: Authorization: Bearer github_pat_QQ\n"
+        "hint: see https://user@github.com/help"
+    )
+    masked = _mask_creds(dirty)
+    for secret in ("ghp_abc123SECRET", "gho_xyz987", "github_pat_QQ", "x-access-token:"):
+        assert secret not in masked
+    assert "https://***@github.com/o/r.git/" in masked  # двойная маска: user:pass@ → ***@
+    assert "https://***@github.com/help" in masked
+
+    # и через decide: хвост stderr с кредами маскируется в тексте ошибки
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(type(container.proposals), "_repo_root", lambda self: tmp_path, raising=False)
+    monkeypatch.setattr(
+        "app.modules.proposals.service.subprocess.run",
+        lambda *a, **k: __import__("types").SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="fatal: unable to access 'https://x-access-token:s3cr3t@github.com/o/r.git/': 403",
+        ),
+    )
+    with pytest.raises(ValidationFailed) as err:
+        container.proposals.decide("branch", "agent/leak", "accepted")
+    assert "s3cr3t" not in str(err.value) and "x-access-token" not in str(err.value)
+
+
 def test_pr_via_github_rest(container, monkeypatch, tmp_path):
     """gh нет — PR создаётся REST-запросом с токеном настроек (B-011)."""
     import types
@@ -144,12 +181,52 @@ def test_pr_via_github_rest(container, monkeypatch, tmp_path):
 
     monkeypatch.setattr("app.modules.proposals.service.httpx.post", fake_post)
 
-    url = svc._pr_via_api(tmp_path, "agent/fix")  # noqa: SLF001 — прямой вызов вместо gh
-    assert url == "https://github.com/o/r/pull/9"
+    url, note = svc._pr_via_api(tmp_path, "agent/fix")  # noqa: SLF001 — прямой вызов вместо gh
+    assert url == "https://github.com/o/r/pull/9" and note is None
     _, url_called, body, headers = calls[0]
     assert "/repos/x/learnos/pulls" in url_called
     assert body["head"] == "agent/fix" and body["base"] == "main"
     assert headers["Authorization"] == "Bearer tok"
+
+
+def test_pr_via_api_returns_reason(container, monkeypatch, tmp_path):
+    """PR не создался — accept отдаёт причину, а не молчание (ревью B-011)."""
+    import types
+
+    (tmp_path / ".git").mkdir()
+    svc = container.proposals
+    monkeypatch.setattr(type(svc), "_repo_root", lambda self: tmp_path, raising=False)
+
+    def fake_run(argv, **k):
+        if argv[:3] == ["git", "remote", "get-url"]:
+            return types.SimpleNamespace(returncode=0, stdout="https://github.com/x/learnos.git\n", stderr="")
+        raise AssertionError(f"неожиданный subprocess-вызов: {argv}")
+
+    monkeypatch.setattr("app.modules.proposals.service.subprocess.run", fake_run)
+
+    # токена нет — причина, а не None
+    monkeypatch.setattr(svc._settings, "github_token", "", raising=False)
+    _, note = svc._pr_via_api(tmp_path, "agent/fix")  # noqa: SLF001
+    assert note and "LEARNOS_GITHUB_TOKEN" in note
+
+    # GitHub отклонил токен — код в причине
+    monkeypatch.setattr(svc._settings, "github_token", "tok", raising=False)
+    monkeypatch.setattr(
+        "app.modules.proposals.service.httpx.post",
+        lambda *a, **k: types.SimpleNamespace(status_code=403, json=lambda: {}),
+    )
+    _, note = svc._pr_via_api(tmp_path, "agent/fix")  # noqa: SLF001
+    assert note and "403" in note
+
+    # сеть недоступна — причина про прокси
+    def no_net(*a, **k):
+        import httpx
+
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr("app.modules.proposals.service.httpx.post", no_net)
+    _, note = svc._pr_via_api(tmp_path, "agent/fix")  # noqa: SLF001
+    assert note and "прокси" in note
 
 
 def test_proposals_only_agent_tasks(container, monkeypatch, tmp_path):

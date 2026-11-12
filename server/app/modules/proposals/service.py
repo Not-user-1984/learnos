@@ -21,6 +21,20 @@ GITHUB_API = "https://api.github.com"
 # признаки отказа auth в выводе git push — к ним добавляем подсказку про токен
 PUSH_AUTH_HINTS = ("Authentication failed", "could not read Username", "403", "401", "permission")
 
+# креды в выводе git маскируем до показа человеку (ревью B-011: хвост stderr уходит в API)
+CRED_URL_RE = re.compile(r"(https?://)[^/@\s:]+:[^/@\s]+@")  # user:password@host
+CRED_URL_USER_RE = re.compile(r"(https?://)[^/@\s]+@")  # token@host
+TOKEN_VALUE_RE = re.compile(r"\b((?:token|authorization|password)[=:]\s*)[^\s,;]+", re.I)
+TOKEN_PREFIX_RE = re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]+\b")
+
+
+def _mask_creds(text: str) -> str:
+    """Убрать креды из текста ошибки: URL с паролем, token=…, ghp_… (B-011)."""
+    text = CRED_URL_RE.sub(r"\1***:***@", text)
+    text = CRED_URL_USER_RE.sub(r"\1***@", text)
+    text = TOKEN_VALUE_RE.sub(r"\1***", text)
+    return TOKEN_PREFIX_RE.sub("***", text)
+
 
 def _frontmatter(text: str) -> dict:
     m = TASK_FRONTMATTER.match(text)
@@ -160,17 +174,18 @@ class ProposalsService:
         except subprocess.TimeoutExpired as e:
             raise ValidationFailed("git push: таймаут 120 с — попробуйте ещё раз") from e
         if push.returncode != 0:
-            tail = (push.stderr or push.stdout or "")[-300:].strip()
+            tail = _mask_creds((push.stderr or push.stdout or "")[-300:].strip())
             hint = (
                 " — проверьте токен доступа к GitHub (LEARNOS_GITHUB_TOKEN)"
                 if any(h in tail for h in PUSH_AUTH_HINTS)
                 else ""
             )
             raise ValidationFailed(f"push ветки {branch} не удался: {tail}{hint}")
-        pr_url = self._create_pr(root, branch)
+        pr_url, pr_note = self._create_pr(root, branch)
         return {
             "pushed": True,
             "pr_url": pr_url,
+            "pr_note": pr_note,
             "compare_url": self._compare_url(root, branch),
         }
 
@@ -195,10 +210,11 @@ class ProposalsService:
         # пустое значение сбрасывает системных хелперов: используем только наш токен
         return ["-c", "credential.helper=", "-c", f"credential.helper={helper}"]
 
-    def _create_pr(self, root: Path, branch: str) -> str | None:
+    def _create_pr(self, root: Path, branch: str) -> tuple[str | None, str | None]:
+        """PR через gh, иначе через REST; возвращаем (ссылка, причина неудачи)."""
         url = self._pr_via_gh(root, branch)
         if url:
-            return url
+            return url, None
         return self._pr_via_api(root, branch)
 
     def _pr_via_gh(self, root: Path, branch: str) -> str | None:
@@ -216,12 +232,18 @@ class ProposalsService:
             pass
         return None  # gh нет/не настроен — пробуем REST с env-токеном
 
-    def _pr_via_api(self, root: Path, branch: str) -> str | None:
-        """PR через GitHub REST с токеном сервиса (gh в контейнере нет, B-011)."""
+    def _pr_via_api(self, root: Path, branch: str) -> tuple[str | None, str | None]:
+        """PR через GitHub REST с токеном сервиса (gh в контейнере нет, B-011).
+
+        Ошибка не глотается: причина возвращается в ответ accept и показывается
+        в UI рядом со ссылкой (ревью B-011).
+        """
         token = (getattr(self._settings, "github_token", "") or "").strip()
         slug = self._repo_slug(root)
-        if not token or not slug:
-            return None
+        if not token:
+            return None, "PR не создан: не задан LEARNOS_GITHUB_TOKEN — пройдите по compare"
+        if not slug:
+            return None, "PR не создан: origin не распознан как GitHub-репозиторий"
         summary = next(
             (
                 b.get("summary") or b.get("message")
@@ -244,7 +266,7 @@ class ProposalsService:
                 timeout=30,
             )
             if resp.status_code in (200, 201):
-                return str(resp.json().get("html_url") or "") or None
+                return (str(resp.json().get("html_url") or "") or None), None
             if resp.status_code == 422:  # PR уже есть — отдаём ссылку на него
                 listed = httpx.get(
                     f"{GITHUB_API}/repos/{slug}/pulls",
@@ -254,10 +276,13 @@ class ProposalsService:
                 )
                 items = listed.json() if listed.status_code == 200 else []
                 if isinstance(items, list) and items:
-                    return str(items[0].get("html_url") or "") or None
+                    return (str(items[0].get("html_url") or "") or None), None
+                return None, "PR не создан: PR уже открыт, но получить ссылку не удалось"
+            if resp.status_code in (401, 403):
+                return None, f"PR не создан: токен GitHub отклонён ({resp.status_code})"
+            return None, f"PR не создан: GitHub ответил {resp.status_code}"
         except httpx.HTTPError:
-            return None
-        return None  # PR не создан — человек пройдёт по compare_url
+            return None, "PR не создан: api.github.com недоступен (сеть/прокси) — compare доступен"
 
     def _repo_slug(self, root: Path) -> str | None:
         """owner/repo из remote origin (поддержка https и ssh-вида)."""
