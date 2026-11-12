@@ -2,6 +2,7 @@
 
 /** Переключатель тем: тёмная → пергамент → светлая (циклом). */
 
+import { useSyncExternalStore } from "react";
 import { Icon } from "@/components/ui/icon";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -14,9 +15,16 @@ const TITLE: Record<string, string> = {
   light: "Светлая → Тёмная",
 };
 
+const noopSubscribe = () => () => {};
+/** «Мы на клиенте»: до монтирования иконка детерминирована — resolvedTheme на
+ * сервере нет, а на клиенте он уже из localStorage; рендер «по теме» здесь
+ * ломал гидратацию (текст глифа не совпадал, оверлей дев-режима, ревью B-011). */
+const useMounted = () => useSyncExternalStore(noopSubscribe, () => true, () => false);
+
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
-  const current = resolvedTheme ?? "dark";
+  const mounted = useMounted();
+  const current = mounted ? (resolvedTheme ?? "dark") : "dark";
   return (
     <Button
       variant="ghost"

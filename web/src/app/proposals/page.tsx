@@ -38,13 +38,23 @@ export default function ProposalsPage() {
     task?: Proposals["tasks"][number],
   ) => {
     try {
-      const out = await apiPost<{ pr_url?: string | null; compare_url?: string | null; task_text?: string }>(
-        `/proposals/${kind}/${ref}/decide`,
-        { decision },
-      );
+      const out = await apiPost<{
+        pr_url?: string | null;
+        pr_note?: string | null;
+        compare_url?: string | null;
+        task_text?: string;
+      }>(`/proposals/${kind}/${ref}/decide`, { decision });
       if (decision === "accepted") {
         if (kind === "branch") {
-          toast.success(out?.pr_url ? `Ветка отправлена, PR: ${out.pr_url}` : "Ветка отправлена");
+          toast.success(
+            out?.pr_url
+              ? `Ветка отправлена, PR: ${out.pr_url}`
+              : out?.compare_url
+                ? `Ветка отправлена: ${out.compare_url}`
+                : "Ветка отправлена",
+          );
+          // PR мог не создаться (токен/сеть) — причина рядом со ссылкой (ревью B-011)
+          if (out?.pr_note) toast.info(out.pr_note);
         } else if (kind === "task") {
           // задача из data (git-дерево прода read-only): текст — в буфер, человек
           // переносит файл в бэклог сам (B-011)
