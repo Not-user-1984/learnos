@@ -125,3 +125,18 @@ export function EmptyHint() {
     </p>
   );
 }
+
+/** note_draft → uid ближайшего block_saved ПОЗЖЕ этого сообщения: превью,
+ *  по которому блок уже записан, показывает ссылку вместо кнопок (B-003). */
+export function noteDraftOutcomes(messages: ChatMessage[]): Map<number, string | undefined> {
+  const out = new Map<number, string | undefined>();
+  let saved: string | undefined;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "assistant") continue;
+    const bs = (m.cards ?? []).find((c) => c.type === "block_saved" && c.block_uid);
+    if (bs?.block_uid) saved = bs.block_uid;
+    if ((m.cards ?? []).some((c) => c.type === "note_draft")) out.set(m.id, saved);
+  }
+  return out;
+}
