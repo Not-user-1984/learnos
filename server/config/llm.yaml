@@ -11,6 +11,14 @@ providers:
     # цепочка ключей: фейловер по квоте, порядок = порядок списка; пустые env пропускаются
     api_key_envs: [ZAI_API_KEY, ZAI_API_KEY_2, ZAI_API_KEY_3, ZAI_API_KEY_4]
     capabilities: {tools: true, streaming: true, json_schema: false, vision: false}
+  # эмбеддинги гибридного поиска (B-011): OpenAI /v1/embeddings — у z.ai совместимой
+  # модели нет (решение 2026-11-12). Ключ на проде — OPENAI_API_KEY, локально —
+  # LEARNOS_OPENAI_API_KEY из Keychain (sec exec); пустые env пропускаются
+  openai:
+    type: openai_compat
+    base_url: https://api.openai.com/v1
+    api_key_envs: [OPENAI_API_KEY, LEARNOS_OPENAI_API_KEY]
+    capabilities: {tools: false, streaming: false, json_schema: false, vision: false}
   ollama:
     type: openai_compat
     base_url: http://localhost:11434/v1
@@ -42,7 +50,7 @@ roles:
   structured: {provider: zai, model: glm-5.3-flash, params: {thinking: {type: disabled}}}
   fast:       {provider: zai, model: glm-5.3-flash, params: {thinking: {type: disabled}}}
   vision:     {provider: zai, model: glm-4.6v}
-  # эмбеддинги для гибридного поиска (B-008): OpenAI-совместимый /embeddings;
-  # модель уточняй в доке провайдера — смена модели = полный reindex --embeddings.
-  # Роль не настроена/нет ключа → поиск честно работает на чистом FTS.
-  # embed:     {provider: zai, model: embedding-3}
+  # эмбеддинги для гибридного поиска (B-008/B-011): OpenAI-совместимый /embeddings;
+  # смена модели = полный reindex --embeddings. Роль не настроена/нет ключа →
+  # поиск честно работает на чистом FTS.
+  embed:      {provider: openai, model: text-embedding-3-small}
