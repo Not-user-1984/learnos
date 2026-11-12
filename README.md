@@ -5,6 +5,7 @@
 - **Пользователь**: Дмитрий. Язык кода-документации и общения — русский.
 - **LLM**: z.ai GLM (OpenAI-совместимый API), роли chat/structured/fast/vision с per-role params в `llm.yaml` (быстрые роли — на flash-модели с выключенным thinking).
 - **Прод**: Proxmox CT `learnos` (192.168.0.132), доступен по LAN и через NPM-роут.
+- **Смоук**: ветка agent/b011-ro-smoke — проверка ro-маунта /repo (B-011), удалить после.
 
 ## Быстрый старт
 
