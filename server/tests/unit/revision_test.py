@@ -85,7 +85,12 @@ def test_repo_read_denies_traversal(repo, tmp_path):
 
 
 def test_revision_not_configured(tmp_path):
-    settings = Settings(data_dir=tmp_path / "data", kb_dir=tmp_path / "kb", llm_config=tmp_path / "l.yaml")
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        kb_dir=tmp_path / "kb",
+        llm_config=tmp_path / "l.yaml",
+        repo_root="",  # явно: ambient-LEARNOS_REPO_ROOT не должен влиять (B-011)
+    )
     with pytest.raises(NotFound, match="не настроена"):
         RevisionService(settings).repo_list()
 

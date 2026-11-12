@@ -18,11 +18,17 @@ SKILLS_DIR = SERVER_DIR / "skills"
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    """Env на временные каталоги + сброс кэша get_settings между тестами."""
+    """Env на временные каталоги + сброс кэша get_settings между тестами.
+
+    Наследственные LEARNOS_* (например REPO_ROOT прода) вычищаем: тесты строят
+    свои Settings и не должны зависеть от окружения, где запущен pytest (B-011).
+    """
     data_dir = tmp_path / "data"
     kb_dir = tmp_path / "kb"
     monkeypatch.setenv("LEARNOS_DATA_DIR", str(data_dir))
     monkeypatch.setenv("LEARNOS_KB_DIR", str(kb_dir))
+    monkeypatch.delenv("LEARNOS_REPO_ROOT", raising=False)
+    monkeypatch.delenv("LEARNOS_GITHUB_TOKEN", raising=False)
     get_settings.cache_clear()
     yield {"tmp_path": tmp_path, "data_dir": data_dir, "kb_dir": kb_dir}
     get_settings.cache_clear()

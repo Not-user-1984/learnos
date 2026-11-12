@@ -167,7 +167,11 @@ class RevisionService:
     # --- ступень 1: задачи ---
 
     def create_task_file(self, title: str, body: str, author: str = "") -> dict:
-        """Создать файл задачи в task_ai/tasks/ по шаблону; только создание."""
+        """Создать файл задачи агента в task_ai/tasks/ по шаблону; только создание.
+
+        На проде git-дерево смонтировано read-only — задача уходит в
+        data/proposals/tasks/ (B-011): человек переносит её в бэклог сам.
+        """
         root = self._root()
         tasks_dir = root / "task_ai" / "tasks"
         if not tasks_dir.is_dir():
@@ -183,12 +187,41 @@ class RevisionService:
         path = tasks_dir / name
         if path.exists():
             raise Conflict(f"файл задачи уже существует: {path.name}")
-        content = (
+        try:
+            path.write_text(self._task_template(task_id, title, body, author), encoding="utf-8")
+            location, rel = "git", f"task_ai/tasks/{name}"
+        except OSError:
+            # read-only git-дерево (прод): задача агента живёт в data (B-011)
+            task_id = f"T-AGENT-{now_iso(self._clock)[:10]}-{slug}"[:60].rstrip("-")
+            fallback_dir = self._settings.data_dir / "proposals" / "tasks"
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            path = fallback_dir / f"{task_id}.md"
+            if path.exists():
+                raise Conflict(f"файл задачи уже существует: {path.name}") from None
+            path.write_text(self._task_template(task_id, title, body, author), encoding="utf-8")
+            location, rel = "data", f"data/proposals/tasks/{task_id}.md"
+        return {
+            "task_id": task_id,
+            "file": rel,
+            "location": location,
+            "message": (
+                f"задача {task_id} создана со статусом idea"
+                + (
+                    " (в data: git-дерево read-only — перенесите файл в task_ai/tasks вручную)"
+                    if location == "data"
+                    else ""
+                )
+            ),
+        }
+
+    def _task_template(self, task_id: str, title: str, body: str, author: str) -> str:
+        return (
             "---\n"
             f"id: {task_id}\n"
             f"title: {title}\n"
             "status: idea\n"
             "priority: medium\n"
+            "author: agent\n"
             f"from: ревизия кода (auditor{f'/{author}' if author else ''})\n"
             f"created: {now_iso(self._clock)[:10]}\n"
             "---\n\n"
@@ -199,12 +232,6 @@ class RevisionService:
             "## Заметки\n\n"
             "(создано агентом-аудитором)\n"
         )
-        path.write_text(content, encoding="utf-8")
-        return {
-            "task_id": task_id,
-            "file": f"task_ai/tasks/{name}",
-            "message": f"задача {task_id} создана со статусом idea",
-        }
 
     def _next_task_number(self, root: Path) -> int:
         """Максимальный существующий номер задачи (tasks + архив) + 1."""
@@ -425,13 +452,18 @@ class RevisionService:
         marker.unlink(missing_ok=True)
 
     def _run_checks_in(self, repo_dir: Path) -> dict:
-        """Команды проверок сервера; результат — коды выхода и хвосты логов."""
+        """Команды проверок сервера; результат — коды выхода и хвосты логов.
+
+        Env герметичен: LEARNOS_* прод-окружения не должен влиять на тесты
+        (LEARNOS_REPO_ROOT=/repo на проде ломал «ревизия не настроена», B-011).
+        """
+        env = {k: v for k, v in os.environ.items() if not k.startswith("LEARNOS_")}
         results = []
         ok = True
         for name, argv, timeout in SERVER_CHECKS:
             try:
                 proc = subprocess.run(
-                    argv, cwd=repo_dir / "server", capture_output=True, text=True, timeout=timeout
+                    argv, cwd=repo_dir / "server", capture_output=True, text=True, timeout=timeout, env=env
                 )
                 code, log = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
             except FileNotFoundError as e:
