@@ -5,7 +5,7 @@ import logging
 
 from ...kernel.clock import Clock, now_iso
 from ...kernel.db import UnitOfWorkFactory
-from ...kernel.errors import Conflict, InvalidState, NotFound
+from ...kernel.errors import Conflict, InvalidState, NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
 from ..knowledge.public import BlockDraftIn, BlockSource
 from .domain import allowed_events, can_finish, transcript_entry, transition
@@ -302,17 +302,10 @@ class LearningService:
             self._sessions.update(uow.session, s["id"], status="finished", state="done", ended_at=now)
             activity = self._acts.find(uow.session, s["activity_id"]) if s["activity_id"] else None
             if activity:
+                # курсор/место — единая точка правды _advance_cursor: позиция
+                # двигается только при реальном прогрессе (fix ревью B-013)
                 total = self._library.chapters_count(activity["source_id"])  # порт (B-009)
-                cursor = max(activity["cursor_chapter"], (s["chapter_idx"] or 0) + 1)
-                status = "done" if cursor > total else activity["status"]
-                self._acts.update(
-                    uow.session, activity["id"], cursor_chapter=cursor, status=status, updated_at=now
-                )
-                uow.emit(
-                    ActivityProgressed(
-                        activity_uid=activity["uid"], cursor_chapter=cursor, total_chapters=total
-                    )
-                )
+                self._advance_cursor(uow, activity, s["chapter_idx"] or 0, total, now)
             # курсы закрывают элемент, повторения заводят review_item (B-004)
             uow.emit(
                 SessionFinished(
@@ -444,14 +437,18 @@ class LearningService:
         """Место чтения в активности (B-013): глава + страница PDF от ридера (дебаунс на клиенте).
 
         Курсор прогресса не трогаем: место — «где читатель», курсор — «что пройдено».
+        Границы — как у mark_read: глава существует, страница ≥ 1 (fix ревью B-013).
         """
         if chapter < 1:
-            raise InvalidState("номер главы должен быть ≥ 1")
+            raise ValidationFailed("номер главы должен быть ≥ 1")
         if page is not None and page < 1:
-            raise InvalidState("номер страницы должен быть ≥ 1")
+            raise ValidationFailed("номер страницы должен быть ≥ 1")
         now = now_iso(self._clock)
         with self._uow() as uow:
             act = self._acts.get(uow.session, activity_ref)
+            total = self._library.chapters_count(act["source_id"])  # порт (B-009)
+            if total == 0 or chapter > total:
+                raise ValidationFailed(f"у источника «{act['title']}» нет главы {chapter} (глав: {total})")
             self._acts.update(
                 uow.session,
                 act["id"],
@@ -479,6 +476,8 @@ class LearningService:
 
         Живёт в check (мини-фейнман: 1–2 вопроса «перескажи своими словами»),
         завершается commit_chapter — блоком с block_sources=(источник, глава).
+        Идемпотентна: чужая активная сессия — отказ; записанная глава (finished
+        с блоком) — возвращается как есть, второй блок не создаётся (fix ревью).
         """
         info = self._chat.conversation_info(conversation_uid)
         if info.get("activity_id") is None:
@@ -486,7 +485,18 @@ class LearningService:
         with self._uow() as uow:
             existing = self._sessions.find_by_conversation(uow.session, info["id"])
             if existing is not None:
+                kind = (existing.get("config") or {}).get("kind")
+                if kind != "chapter":
+                    raise InvalidState(
+                        "в разговоре идёт сессия-урок — «Записать в базу» доступно после её завершения"
+                    )
                 return self._state_out(existing)
+            # записанная ранее глава: finished chapter-сессия с живым блоком
+            for s in self._sessions.all_for_conversation(uow.session, info["id"]):
+                if (s.get("config") or {}).get("kind") != "chapter" or s["status"] != "finished":
+                    continue
+                if self._knowledge is not None and self._knowledge.block_card_for_session(s["uid"]):
+                    return self._state_out(s)  # блок уже есть — не плодим второй
         return self.start_session(
             activity_ref=info["activity_id"],
             chapter_idx=info.get("chapter_idx"),
@@ -498,14 +508,30 @@ class LearningService:
     def finish_chapter_for_conversation(self, conversation_uid: str, block_draft: dict | None = None) -> dict:
         """commit_chapter: сохранить блок из разговора главы (мини-фейнман уже прошёл).
 
+        Повторный коммит уже записанной главы возвращает существующий блок
+        (already_committed=True), дубль не создаётся.
+
         Raises:
             NotFound: у разговора нет главы-сессии.
+            InvalidState: сессия главы закрыта без блока.
         """
         info = self._chat.conversation_info(conversation_uid)
         with self._uow() as uow:
-            s = self._sessions.find_by_conversation(uow.session, info["id"])
-            if s is None or (s.get("config") or {}).get("kind") != "chapter":
+            chapter_sessions = [
+                s
+                for s in self._sessions.all_for_conversation(uow.session, info["id"])
+                if (s.get("config") or {}).get("kind") == "chapter"
+            ]
+            if not chapter_sessions:
                 raise NotFound("у разговора главы нет сессии «Записать в базу» — сначала commit")
+            s = next((x for x in chapter_sessions if x["status"] == "active"), chapter_sessions[0])
+            if s["status"] == "finished":
+                card = (
+                    self._knowledge.block_card_for_session(s["uid"]) if self._knowledge is not None else None
+                )
+                if card:
+                    return {"ok": True, "already_committed": True, **card}
+                raise InvalidState("сессия главы уже закрыта, а блока нет (удалён?) — начни запись заново")
         return self.finish_session(s["uid"], block_draft)
 
     def count_sessions_for_course(self, course_id: int) -> int:
@@ -569,19 +595,18 @@ class LearningService:
     def _advance_cursor(self, uow, act: dict, target: int, total: int, now: str) -> dict:
         """Курсор активности вперёд до target+1 (не назад); выход за total завершает.
 
-        Место чтения следует за прогрессом: следующая глава с начала (B-013).
+        Место чтения двигается только при реальном прогрессе (fix ревью B-013):
+        курсор ушёл вперёд → следующая глава с начала; не сдвинулся — не трогаем,
+        иначе mark-read позади главы затирал бы страницу, где читатель стоит.
         """
         cursor = max(act["cursor_chapter"], target + 1)
         status = "done" if cursor > total > 0 else act["status"]
-        self._acts.update(
-            uow.session,
-            act["id"],
-            cursor_chapter=cursor,
-            status=status,
-            position_chapter=cursor,
-            position_page=None,
-            updated_at=now,
-        )
+        moved = cursor > act["cursor_chapter"]
+        values: dict = {"cursor_chapter": cursor, "status": status, "updated_at": now}
+        if moved:
+            values["position_chapter"] = cursor
+            values["position_page"] = None
+        self._acts.update(uow.session, act["id"], **values)
         uow.emit(ActivityProgressed(activity_uid=act["uid"], cursor_chapter=cursor, total_chapters=total))
         return {
             "activity": act["uid"],

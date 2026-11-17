@@ -9,6 +9,26 @@ from app.llm.providers.fake import FakeTurn
 from app.modules.library.infra.tables import chapters as chapters_table
 
 
+def _writer_turn() -> FakeTurn:
+    return FakeTurn(
+        text=json.dumps(
+            {
+                "title": "Глава: суть",
+                "summary": "с",
+                "theses": ["тезис главы"],
+                "concepts": [],
+                "practice": [],
+                "weak_spots": [],
+                "open_questions": [],
+                "links": [],
+                "tags": [],
+                "category_suggestion": "Книги/Тест",
+            },
+            ensure_ascii=False,
+        )
+    )
+
+
 def _mk_source_with_chapters(container, kind: str = "book", n: int = 3) -> dict:
     src = container.library.add_source(kind, f"Книга {kind}", url=None)
     with container.uow() as uow:
@@ -140,3 +160,102 @@ def test_lesson_finish_still_requires_debrief(client, container):
 
     with pytest.raises(InvalidState, match="debrief"):
         container.learning.finish_session(ses["session_uid"])
+
+
+# --- раунд 2: замечания ревью B-013 ---
+
+
+def test_chapter_out_of_range_rejected(client, container):
+    """Разговор/commit по несуществующей главе — 404, курсор и сессии не трогаются (fix п.1)."""
+    src = _mk_source_with_chapters(container)  # 3 главы
+    for path in (
+        f"/api/sources/{src['uid']}/chapters/99/conversation",
+        f"/api/sources/{src['uid']}/chapters/99/conversation/commit",
+    ):
+        assert client.post(path).status_code == 404, path
+    assert client.get("/api/activities").json() == []
+
+
+def test_chapter_session_rejects_foreign_session(client, container):
+    """Активная сессия-урок в разговоре главы блокирует «Записать в базу» (fix п.2)."""
+    import pytest
+
+    src = _mk_source_with_chapters(container)
+    conv = container.chat.chapter_conversation(src["uid"], 1)
+    act = container.learning.start_activity(src["uid"])
+    info = container.chat.conversation_info(conv["uid"])
+    container.learning.start_session(activity_ref=act["uid"], conversation_id=info["id"])
+
+    with pytest.raises(InvalidState, match="сессия-урок"):
+        container.learning.start_chapter_session(conv["uid"])
+
+
+def test_repeated_commit_returns_same_block(client, container, fake_llm):
+    """Повторная запись уже записанной главы — тот же block_uid, без дубля (fix п.3)."""
+    src = _mk_source_with_chapters(container)
+    out = client.post(f"/api/sources/{src['uid']}/chapters/2/conversation/commit").json()
+    ses = out["session_uid"]
+    container.learning.advance(ses, "ask", {"question": "суть?"})
+    container.learning.advance(ses, "answer", {"answer": "вот такая"})
+    fake_llm.queue(_writer_turn())
+    first = container.learning.finish_chapter_for_conversation(out["conversation_uid"])
+    assert first["ok"] and not first.get("already_committed")
+
+    # повторный старт не создаёт вторую сессию, повторный коммит — тот же блок
+    again_session = container.learning.start_chapter_session(out["conversation_uid"])
+    assert again_session["status"] == "finished" and again_session["session_uid"] == ses
+    second = container.learning.finish_chapter_for_conversation(out["conversation_uid"])
+    assert second.get("already_committed") is True
+    assert second["block_uid"] == first["block_uid"]
+    blocks = container.knowledge.list_blocks(source=src["uid"])
+    assert len(blocks) == 1
+
+
+def test_position_survives_backward_mark_read(client, container):
+    """mark-read позади курсора не затирает место чтения; прогресс двигает место (fix п.4)."""
+    src = _mk_source_with_chapters(container)
+    client.post("/api/activities/mark-read", json={"source": src["uid"], "chapter": 2})  # курсор 3
+    act = client.get("/api/activities").json()[0]
+    client.post(f"/api/activities/{act['uid']}/position", json={"chapter": 3, "page": 5})
+
+    client.post("/api/activities/mark-read", json={"source": src["uid"], "chapter": 1})  # назад
+    fresh = client.get("/api/activities").json()[0]
+    assert fresh["cursor_chapter"] == 3
+    assert fresh["position_chapter"] == 3 and fresh["position_page"] == 5  # не затёрто
+
+    client.post("/api/activities/mark-read", json={"source": src["uid"], "chapter": 3})  # вперёд
+    fresh = client.get("/api/activities").json()[0]
+    assert fresh["cursor_chapter"] == 4  # total+1 → done
+    assert fresh["position_chapter"] == 4 and fresh["position_page"] is None
+
+
+def test_finish_chapter_session_syncs_position(client, container, fake_llm):
+    """Финиш главы-сессии синхронизирует место с курсором (fix п.4)."""
+    src = _mk_source_with_chapters(container)
+    act = container.learning.start_activity(src["uid"])
+    container.learning.set_position(act["uid"], 1, 9)  # читал главу 1, страницу 9
+    out = client.post(f"/api/sources/{src['uid']}/chapters/1/conversation/commit").json()
+    container.learning.advance(out["session_uid"], "ask", {"question": "суть?"})
+    container.learning.advance(out["session_uid"], "answer", {"answer": "такая"})
+    fake_llm.queue(_writer_turn())
+    container.learning.finish_chapter_for_conversation(out["conversation_uid"])
+
+    fresh = client.get("/api/activities").json()[0]
+    assert fresh["cursor_chapter"] == 2
+    assert fresh["position_chapter"] == 2 and fresh["position_page"] is None
+
+
+def test_set_position_validates_bounds(client, container):
+    """Место чтения: глава ≤ total, страница ≥ 1 — иначе 422 (fix п.5)."""
+    src = _mk_source_with_chapters(container)  # 3 главы
+    act = container.learning.start_activity(src["uid"])
+    assert (
+        client.post(f"/api/activities/{act['uid']}/position", json={"chapter": 99, "page": 1}).status_code
+        == 422
+    )
+    assert (
+        client.post(f"/api/activities/{act['uid']}/position", json={"chapter": 2, "page": 0}).status_code
+        == 422
+    )
+    ok = client.post(f"/api/activities/{act['uid']}/position", json={"chapter": 3, "page": 7})
+    assert ok.status_code == 200

@@ -79,6 +79,12 @@ class CommitChapterArgs(BaseModel):
     )
 
 
+class StartChapterCommitArgs(BaseModel):
+    """start_chapter_commit: создать сессию записи главы в разговоре главы."""
+
+    pass
+
+
 class RefArgs(BaseModel):
     """Ссылка на активность/сессию."""
 
@@ -152,6 +158,12 @@ def learning_tools(c) -> list[ToolSpec]:
         return svc.mark_chapter_done(
             activity_ref=args.activity, chapter=args.chapter, conversation_uid=ctx.conversation_uid
         )
+
+    def start_chapter_commit(args: StartChapterCommitArgs, ctx: ToolContext):
+        del args
+        if not ctx.conversation_uid:
+            raise NotFound("start_chapter_commit работает только из разговора главы")
+        return svc.start_chapter_session(ctx.conversation_uid)
 
     def commit_chapter(args: CommitChapterArgs, ctx: ToolContext):
         if not ctx.conversation_uid:
@@ -239,6 +251,19 @@ def learning_tools(c) -> list[ToolSpec]:
             args_model=MarkChapterDoneArgs,
             handler=mark_chapter_done,
             label="Глава пройдена",
+        ),
+        ToolSpec(
+            name="start_chapter_commit",
+            module="learning",
+            description=(
+                "Начать «Записать главу в базу» в разговоре главы (B-013): создаёт лёгкую "
+                "сессию мини-фейнмана (state=check). Дальше задай 1–2 вопроса «перескажи суть "
+                "своими словами» (advance: ask → answer) и заверши commit_chapter. Идемпотентен: "
+                "уже записанная глава вернёт её сессию без нового блока."
+            ),
+            args_model=StartChapterCommitArgs,
+            handler=start_chapter_commit,
+            label="Запись главы: старт",
         ),
         ToolSpec(
             name="commit_chapter",

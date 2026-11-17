@@ -164,13 +164,21 @@ export function ChatView({ conversation, variant = "page", insert, onTimecode }:
   };
 
   // «Записать в базу» разговора главы (B-013): commit-роут создаёт лёгкую
-  // сессию мини-фейнмана, агент ведёт её и завершает тулом commit_chapter
+  // сессию мини-фейнмана, агент ведёт её и завершает тулом commit_chapter.
+  // Уже записанная глава (state=done) — сообщаем, дубль не начинаем (fix ревью).
   const commitChapter = async () => {
     const ref = conversation.context_ref;
     if (!ref) return;
     const [srcUid, ch] = ref.split(":");
     try {
-      await apiPost(`/sources/${srcUid}/chapters/${ch}/conversation/commit`, {});
+      const out = await apiPost<{ state: string }>(
+        `/sources/${srcUid}/chapters/${ch}/conversation/commit`,
+        {},
+      );
+      if (out.state === "done") {
+        toast.info("Эта глава уже записана в базу знаний");
+        return;
+      }
       await send(
         "Запиши эту главу в базу знаний: задай мне 1–2 контрольных вопроса «перескажи суть своими словами», выслушай ответы и сохрани блок.",
       );

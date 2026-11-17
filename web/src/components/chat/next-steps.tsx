@@ -32,7 +32,7 @@ export function hasPendingDecision(messages: ChatMessage[]): boolean {
 type NextStepsProps = {
   streaming: boolean;
   messages: ChatMessage[];
-  session: { state: string } | null;
+  session: { state: string; config?: Record<string, unknown> } | null;
   mode: string;
   /** Разговор главы (context_ref): доступен «Записать главу в базу» (B-013). */
   canCommitChapter?: boolean;
@@ -55,13 +55,14 @@ export function NextSteps({
 }: NextStepsProps) {
   if (streaming || hasPendingDecision(messages)) return null;
 
+  const isChapterSession = session?.config?.kind === "chapter";
   const items: { icon: string; label: string; run: () => void }[] = [];
   if (session && session.state !== "done" && SESSION_ACTIONS[session.state]) {
     // в сессии — одно основное действие текущей фазы
     const a = SESSION_ACTIONS[session.state];
     items.push({ icon: a.icon, label: a.label, run: () => onSend(a.text) });
-    // глава-сессия: «что дальше» после фейнмана — записать главу (B-013)
-    if (session.state === "check" && canCommitChapter && onCommitChapter) {
+    // глава-сессия (не урок): после фейнмана — записать главу (B-013, fix ревью)
+    if (isChapterSession && session.state === "check" && canCommitChapter && onCommitChapter) {
       items.push({ icon: "library_add", label: "Записать в базу", run: onCommitChapter });
     }
   } else if (["root", "free", "quick"].includes(mode)) {

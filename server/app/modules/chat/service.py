@@ -9,7 +9,7 @@ from typing import Any
 from ...agent.runtime import AgentRuntime
 from ...agent.spec import CancellationToken
 from ...kernel.clock import Clock, now_iso
-from ...kernel.errors import Conflict, ValidationFailed
+from ...kernel.errors import Conflict, NotFound, ValidationFailed
 from ...kernel.ids import IdGenerator
 from ...llm.router import ModelRouter
 from ...llm.types import Message
@@ -128,8 +128,14 @@ class ChatService:
 
     def chapter_conversation(self, source_ref: str | int, chapter_idx: int) -> dict:
         """Разговор главы источника (get-or-create, split-view B-006): повторное
-        открытие главы продолжает тот же разговор, история не размножается."""
+        открытие главы продолжает тот же разговор, история не размножается.
+
+        Глава обязана существовать: разговор и commit по ней двигают курсор
+        книги (fix ревью B-013).
+        """
         src = self._library.get_source(source_ref)
+        if not any(c["idx"] == chapter_idx for c in src.get("chapters", [])):
+            raise NotFound(f"у источника «{src['title']}» нет главы {chapter_idx}")
         context_ref = f"{src['uid']}:{chapter_idx}"
         with self._uow() as uow:
             existing = self._convs.find_by_context_ref(uow.session, context_ref)

@@ -4,7 +4,7 @@
  *  оглавление, клавиатура, место чтения на сервере, «Глава прочитана» и
  *  подсказка «Разобрать главу». Чат главы — справа (ReaderSplit). */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,7 @@ export function PdfReader({
   const urlSync = useRef<ReturnType<typeof setTimeout> | null>(null);
   const positionSync = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [readSet, setReadSet] = useState<Set<number>>(new Set()); // главы, отмеченные «прочитано»
+  const markedRef = useRef<Set<number>>(new Set()); // гарда от повторной отметки (события, не рендер)
   const [readHint, setReadHint] = useState<number | null>(null); // глава свежепрочитана → «Разобрать?»
   const [quote, setQuote] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -143,24 +144,36 @@ export function PdfReader({
   }, [initialDiscuss, onDiscuss]);
 
   /** Отметить главу прочитанной (один раз за сессию читалки) и предложить разбор. */
-  const markRead = (chapter: number) => {
-    if (readSet.has(chapter)) return;
-    setReadSet((prev) => new Set(prev).add(chapter));
-    if (!activityUid) return; // без активности прогресс не ведём — кнопка просто скрывается
-    void apiPost("/activities/mark-read", { source: sourceUid, chapter })
-      .then(() => setReadHint(chapter))
-      .catch(() =>
-        setReadSet((prev) => {
-          const next = new Set(prev);
-          next.delete(chapter);
-          return next;
-        }),
-      );
-  };
+  const markRead = useCallback(
+    (chapter: number) => {
+      if (markedRef.current.has(chapter)) return;
+      markedRef.current.add(chapter);
+      setReadSet((prev) => new Set(prev).add(chapter));
+      if (!activityUid) return; // без активности прогресс не ведём — кнопка просто скрывается
+      void apiPost("/activities/mark-read", { source: sourceUid, chapter })
+        .then(() => setReadHint(chapter))
+        .catch(() => {
+          markedRef.current.delete(chapter);
+          setReadSet((prev) => {
+            const next = new Set(prev);
+            next.delete(chapter);
+            return next;
+          });
+        });
+    },
+    [activityUid, sourceUid],
+  );
+
+  // уход на следующую главу по порядку = предыдущая дочитана — независимо от того,
+  // как перешли: кнопка, скролл или листание страниц (fix ревью B-013, один раз на главу)
+  const prevChapterRef = useRef(initialChapter);
+  useEffect(() => {
+    const prev = prevChapterRef.current;
+    prevChapterRef.current = currentChapter;
+    if (currentChapter === prev + 1) markRead(prev);
+  }, [currentChapter, markRead]);
 
   const goToChapter = (idx: number) => {
-    // уход на следующую главу = предыдущая дочитана (один раз, B-013)
-    if (idx === currentChapter + 1) markRead(currentChapter);
     const s = starts[String(idx)];
     if (s) {
       setTarget(s);

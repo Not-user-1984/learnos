@@ -93,6 +93,9 @@ quick_reviewer = AgentSpec(
             "offer_replies",
             "show_chapter_review",
             "commit_chapter",
+            "start_chapter_commit",
+            "advance",
+            "get_session_state",
             "send_telegram_text",
             "send_block_to_telegram",
             "send_chapter_to_telegram",
@@ -188,7 +191,7 @@ root = AgentSpec(
         | ENTRY_TOOLS
         | {"get_session_state", "mark_chapter_done", "get_review_queue", "answer_review"}
         # «Записать главу в базу» в разговоре главы (B-013)
-        | {"commit_chapter"}
+        | {"commit_chapter", "start_chapter_commit"}
         # разбор главы карточкой: root ведёт интент «review» (единый вход) сам
         | {"show_chapter_review"}
         # состояние LLM и сброс cooldown ключей (BB-005): оркестратор видит свою систему

@@ -43,6 +43,15 @@ class SessionRepository:
         ).first()
         return _session_dict(row) if row else None
 
+    def all_for_conversation(self, session: Session, conversation_id: int) -> list[dict]:
+        """Все сессии разговора (включая закрытые) — идемпотентный commit главы (B-013 fix)."""
+        rows = session.execute(
+            select(sessions)
+            .where(sessions.c.conversation_id == conversation_id)
+            .order_by(sessions.c.id.desc())
+        ).all()
+        return [_session_dict(r) for r in rows]
+
     def count_for_course(self, session: Session, course_id: int) -> int:
         return int(
             session.execute(select(func.count()).where(sessions.c.course_id == course_id)).scalar_one()
@@ -117,6 +126,15 @@ class ActivityRepository:
         stmt = stmt.order_by(activities.c.cursor_chapter.desc(), activities.c.id.desc())
         row = session.execute(stmt).first()
         return _activity_dict(row) if row else None
+
+    def all_for_conversation(self, session: Session, conversation_id: int) -> list[dict]:
+        """Все сессии разговора (включая закрытые) — идемпотентный commit главы (B-013 fix)."""
+        rows = session.execute(
+            select(sessions)
+            .where(sessions.c.conversation_id == conversation_id)
+            .order_by(sessions.c.id.desc())
+        ).all()
+        return [_session_dict(r) for r in rows]
 
     def count_for_course(self, session: Session, course_id: int) -> int:
         """Число активностей курса (порт для courses, B-009)."""

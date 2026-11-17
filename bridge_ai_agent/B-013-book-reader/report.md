@@ -74,3 +74,45 @@
 - Обе критические правки вне плана (verified в `_meta_dict`, block_kind из config) — маленькие
   баг-фиксы по ходу дела, без них пункты плана не выполнялись бы. Вынести в B-012-хвосты или
   оставить здесь?
+
+---
+
+# Раунд 2 — исправления ревью (2026-11-17)
+
+1. **Валидация главы** — `chat/service.py::chapter_conversation`: глава обязана существовать
+   (`src.chapters`), иначе NotFound/404 — покрывает и commit-роут; глава 999 больше не создаёт
+   сессий и не уводит курсор. Тест: разговор/commit по главе 99 → 404, активностей нет.
+2. **kind сессии** — `start_chapter_session`: активная чужая (неглавная) сессия → InvalidState
+   («идёт сессия-урок»). Чип «Записать в базу» в NextSteps показывается только для
+   chapter-сессии (`session.config.kind === "chapter"`) в state=check. Тест: урок в разговоре
+   главы → InvalidState.
+3. **Идемпотентный commit** — repo `all_for_conversation`; `start_chapter_session` возвращает
+   finished chapter-сессию с живым блоком (новую не создаёт); `finish_chapter_for_conversation`
+   для записанной главы возвращает существующий блок с `already_committed=true`; finished без
+   блока (удалён) → InvalidState с подсказкой перезаписать. Веб-клик при state=done не шлёт
+   сообщение, показывает «уже записана». Тест: повторный commit → тот же block_uid, блок 1 шт.
+4. **Позиция** — `_advance_cursor`: место двигается только при реальном продвижении курсора
+   (тогда — начало новой главы), иначе не трогается; `finish_session` сведён к `_advance_cursor`
+   (единая точка правды). Тесты: mark-read назад не затирает (3,5); вперёд → (4, None);
+   финиш главы-сессии синхронизирует место с курсором.
+5. **Границы set_position** — глава ≤ total (и total>0), страница ≥ 1 → ValidationFailed/422.
+   Тест: глава 99 и страница 0 → 422, валидная — 200.
+6. **Авто-«прочитано» при листании/скролле** — pdf-reader: стабильный `markRead` (useCallback +
+   ref-гард) + эффект на смену currentChapter вперёд на 1 (любой способ перехода), по одному
+   разу на главу; из `goToChapter` ручная отметка убрана. Живая проверка CDP: скролл до главы 3
+   → курсор 2→3 автоматически, позиция (3, 8).
+7. **quick-путь книги** — новый тул `start_chapter_commit` (learning, у quick_reviewer и root):
+   агент сам создаёт главу-сессию в разговоре главы; quick_reviewer получил `advance` и
+   `get_session_state`; промпт §5.5 переписан: для книги с главой — start_chapter_commit →
+   ask/answer → commit_chapter (verified-блок), preview_note/save_note — только без привязки
+   к главе книги.
+8. **Тесты п.1–5** — `tests/api/test_chapter_commit.py` +6 (итого 13), все зелёные.
+9. **E2E с живой LLM** — ключ доступен. `smoke-llm` ok (glm-5.3: complete/stream/tool call).
+   Полный сценарий (`/tmp/learnos-b013-e2e/e2e_chapter.py`, контейнер на tmp-каталогах с
+   production-конфигом LLM): commit-роут → «Запиши главу…» → агент сам прочитал главу
+   (read_chapter) и задал контрольные вопросы → ответ пользователя → агент вызвал commit_chapter →
+   `verified=true, kind=note, block_sources=(source, chapter 1)`, 2 раунда. Наблюдение: в этом
+   прогоне block_writer не вернул карточек (короткий транскрипт) — качество генерации карточек
+   остаётся на совести промпта B-014, путь не падает.
+
+Проверки: server ruff/format/lint-imports/pytest (полный прогон) — зелёные; web lint/tsc/build — чисто.
