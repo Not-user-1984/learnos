@@ -18,6 +18,10 @@ class AnswerArgs(BaseModel):
     block_uid: str = Field(description="uid блока (blk_…)")
     answer: str = Field(description="Ответ пользователя своими словами")
     question: str | None = Field(default=None, description="Что спрашивали — контекст для экзаменатора")
+    card_id: str | None = Field(
+        default=None,
+        description="id карточки-суть (из get_review_queue, kind=card): SM-2 двигает карточку",
+    )
 
 
 def review_tools(c) -> list[ToolSpec]:
@@ -30,7 +34,7 @@ def review_tools(c) -> list[ToolSpec]:
 
     def answer_review(args: AnswerArgs, ctx: ToolContext):
         del ctx
-        return svc.answer(args.block_uid, args.answer, question=args.question)
+        return svc.answer(args.block_uid, args.answer, question=args.question, card_id=args.card_id)
 
     return [
         ToolSpec(
@@ -48,7 +52,10 @@ def review_tools(c) -> list[ToolSpec]:
         ToolSpec(
             name="answer_review",
             module="review",
-            description="Оценить ответ повторения: SM-2 сдвигает срок, слабый ответ — в «Дозакрепить».",
+            description=(
+                "Оценить ответ повторения: SM-2 сдвигает срок, слабый ответ — в «Дозакрепить». "
+                "Для карточки-суть передай card_id из очереди — срок сдвинется у карточки."
+            ),
             args_model=AnswerArgs,
             handler=answer_review,
             label="Оценка повторения",

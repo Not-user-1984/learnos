@@ -72,5 +72,12 @@ class ReviewRepository:
         return [dict(r._mapping) for r in rows]
 
     def delete_for_block(self, session: Session, block_uid: str) -> None:
-        """Карточные элементы блока (блок удалён / карточки убраны)."""
+        """Все карточные элементы блока (блок удалён / карточки убраны)."""
         session.execute(review_card_items.delete().where(review_card_items.c.block_uid == block_uid))
+
+    def delete_card_items_except(self, session: Session, block_uid: str, keep_ids: list[str]) -> None:
+        """Карточные элементы исчезнувших карточек (fix ревью B-014)."""
+        stmt = review_card_items.delete().where(review_card_items.c.block_uid == block_uid)
+        if keep_ids:
+            stmt = stmt.where(review_card_items.c.card_id.not_in(keep_ids))
+        session.execute(stmt)

@@ -1,9 +1,9 @@
 """REST базы знаний: /api/kb/* (+алиасы /api/blocks из v1)."""
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
-from .schemas import BlockCard, BlockDetail, CardOut, CategoryIn, CategoryNode, TagCount, VersionInfo
+from .schemas import BlockCard, BlockDetail, CardIn, CardOut, CategoryIn, CategoryNode, TagCount, VersionInfo
 
 
 class SetCategoryBody(BaseModel):
@@ -74,10 +74,27 @@ def make_router(svc) -> APIRouter:
         return {"source": s.source, "chapter": s.chapter, "title": s.title}
 
     class BlockPatchIn(BaseModel):
-        """Правка блока из UI (B-014: карточки)."""
+        """Правка блока из UI (B-014: карточки) — типизированная, мусор → 422.
 
-        patch: dict
+        cards=[] очищает карточки; None — не трогает. Идём через apply_patch.
+        """
+
+        model_config = ConfigDict(extra="forbid")
+
+        cards: list[CardIn] | None = None
+        title: str | None = Field(default=None, min_length=1, max_length=100)
+        summary: str | None = Field(default=None, max_length=280)
         reason: str = "правка из UI"
+
+        def to_patch(self) -> dict:
+            patch: dict = {}
+            if self.cards is not None:
+                patch["cards"] = [c.model_dump() for c in self.cards]
+            if self.title is not None:
+                patch["title"] = self.title
+            if self.summary is not None:
+                patch["summary"] = self.summary
+            return patch
 
     @r.post("/blocks/{uid}/cards")
     def make_cards(uid: str):
@@ -86,8 +103,8 @@ def make_router(svc) -> APIRouter:
 
     @r.patch("/blocks/{uid}")
     def patch_block(uid: str, body: BlockPatchIn):
-        """Правка блока (карточки и другие поля): версия сохраняется."""
-        return _card_with_relations(svc.update_block(uid, body.patch, body.reason).meta)
+        """Правка блока (карточки и другие поля): версия сохраняется, мусор → 422."""
+        return _card_with_relations(svc.update_block(uid, body.to_patch(), body.reason).meta)
 
     @r.get("/blocks/{uid}", response_model=BlockDetail)
     def get_block(uid: str):

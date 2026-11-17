@@ -46,17 +46,28 @@ function CardsSection({ block, onRefresh }: { block: BlockDetail; onRefresh: () 
   const patchCards = async (cardsNext: { id?: string; q: string; a: string }[], reason: string) => {
     setBusy(true);
     try {
-      await fetch(`/api/kb/blocks/${block.block_uid}`, {
+      const res = await fetch(`/api/kb/blocks/${block.block_uid}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patch: { cards: cardsNext }, reason }),
+        body: JSON.stringify({ cards: cardsNext, reason }),
       });
+      if (!res.ok) {
+        // 422 с деталями валидации показываем как есть (fix ревью B-014)
+        const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        const msg =
+          typeof body.detail === "string"
+            ? body.detail
+            : Array.isArray(body.detail)
+              ? body.detail.map((d) => (typeof d === "object" && d && "msg" in d ? String(d.msg) : "")).join("; ")
+              : "не удалось сохранить карточки";
+        throw new Error(msg);
+      }
       markKbListDirty();
       toast.success("Карточки обновлены");
       setEditing(null);
       onRefresh();
-    } catch {
-      toast.error("Не удалось сохранить карточки");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось сохранить карточки");
     } finally {
       setBusy(false);
     }

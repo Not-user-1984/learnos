@@ -122,6 +122,14 @@ def _upgrade(data_dir: Path) -> None:
     command.upgrade(cfg, "head")
 
 
+def _upgrade_to(data_dir: Path, revision: str) -> None:
+    """Прогнать alembic upgrade до конкретной ревизии (для тестов частичных миграций)."""
+    cfg = Config(str(SERVER_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(SERVER_DIR / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{data_dir / 'learnos.db'}")
+    command.upgrade(cfg, revision)
+
+
 def test_v1_to_head_moves_data_and_kb(v1_layout):
     data_dir, kb_dir = v1_layout
     _upgrade(data_dir)
@@ -234,3 +242,37 @@ def test_fresh_empty_db_migrates_to_head(tmp_path, monkeypatch):
         assert {"courses", "sources", "chapters", "sessions", "blocks", "categories"} <= tables
     finally:
         engine.dispose()
+
+
+def test_0023_cards_keeps_existing_review_items(v1_layout):
+    """Миграция 0023 (карточки): старые блочные review_items живы, появились
+    review_card_items и blocks.cards_json (fix ревью B-014)."""
+    import sqlite3
+
+    data_dir, _kb = v1_layout
+    _upgrade_to(data_dir, "0022_activity_position")
+
+    # данные «до карточек»: блоковый элемент повторения со сроком
+    conn = sqlite3.connect(data_dir / "learnos.db")
+    conn.execute(
+        "INSERT INTO review_items (block_uid, ease, interval_days, due_at, last_quality, reps, updated_at) "
+        "VALUES ('blk_test01', 25, 6, '2026-02-01T00:00:00', 4, 2, '2026-01-26T00:00:00')"
+    )
+    conn.commit()
+    conn.close()
+
+    _upgrade(data_dir)
+
+    conn = sqlite3.connect(data_dir / "learnos.db")
+    rows = conn.execute(
+        "SELECT block_uid, interval_days, reps FROM review_items WHERE block_uid='blk_test01'"
+    ).fetchall()
+    cards_table = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='review_card_items'"
+    ).fetchall()
+    blocks_cols = [r[1] for r in conn.execute("PRAGMA table_info(blocks)").fetchall()]
+    conn.close()
+
+    assert rows == [("blk_test01", 6, 2)]  # прогресс не потерян
+    assert cards_table, "review_card_items не создана"
+    assert "cards_json" in blocks_cols

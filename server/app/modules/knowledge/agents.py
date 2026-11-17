@@ -58,7 +58,8 @@ class BlockWriterDraft(BaseModel):
     tags: list[str] = Field(default_factory=list, max_length=8)
     category_suggestion: str | None = None
     sources: list[SourceOut] = Field(default_factory=list)
-    cards: list[CardOut] = Field(default_factory=list, max_length=5)
+    # мягкая граница: 3–5 требует промпт; лишнее отрежет writer_out_to_draft (fix ревью B-014)
+    cards: list[CardOut] = Field(default_factory=list, max_length=12)
 
 
 class CategorizerOutput(BaseModel):
@@ -69,9 +70,13 @@ class CategorizerOutput(BaseModel):
 
 
 class CardsOut(BaseModel):
-    """Выход card_writer: 3–5 карточек-сути по готовому блоку (B-014)."""
+    """Выход card_writer: карточки-суть по готовому блоку (B-014).
 
-    cards: list[CardOut] = Field(min_length=3, max_length=5)
+    Мягкие границы: 3–5 требует промпт; маленький блок — хоть одна,
+    лишние отрежет вызывающий код (fix ревью B-014).
+    """
+
+    cards: list[CardOut] = Field(min_length=1, max_length=12)
 
 
 block_writer = AgentSpec(

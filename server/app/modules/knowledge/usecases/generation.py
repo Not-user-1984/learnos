@@ -89,7 +89,7 @@ class GenerationUseCases:
                 f"Блок базы знаний:\n{block.content[:4000]}",
             )
         )
-        return [{"q": c.q, "a": c.a} for c in out.cards]
+        return [{"q": c.q, "a": c.a} for c in out.cards[:5]]  # 3–5 — промптом, жёстко ≤5
 
     def categorize_draft(self, draft: BlockDraft) -> BlockDraft:
         """Проставить драфту category_suggestion через categorizer (не критично при падении)."""

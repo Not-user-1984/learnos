@@ -7,7 +7,7 @@ from datetime import timedelta
 from ...agent.spec import AgentContext
 from ...kernel.clock import Clock, now_iso
 from ...kernel.db import UnitOfWorkFactory
-from ...kernel.errors import NotFound
+from ...kernel.errors import InvalidState, NotFound
 from .domain import queue_priority, sm2_review
 
 log = logging.getLogger("learnos.review")
@@ -108,46 +108,49 @@ class ReviewService:
         today_start = (
             self._clock.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat(timespec="seconds")
         )
-        items = [*self._block_items(source), *self._card_items(source)]
+        blocks, cards = self._collect_items(source)
+        items = [*blocks, *cards]
         return {
             "due_today": sum(1 for i in items if str(i["due_at"] or "") <= now),
             "overdue": sum(1 for i in items if str(i["due_at"] or "") < today_start),
             "total": len(items),
         }
 
-    def _block_items(self, source: str | None) -> list[dict]:
+    def _collect_items(self, source: str | None) -> tuple[list[dict], list[dict]]:
+        """Блоковые и карточные элементы; блок читается один раз на запрос (fix ревью B-014)."""
         with self._uow() as uow:
-            items = self._repo.all(uow.session)
-        out = []
-        for it in items:
-            try:
-                meta = self._kb.get_block(it["block_uid"]).meta
-            except NotFound:
-                continue
-            if meta.cards:
-                continue  # блок живёт карточками (B-014)
+            block_rows = self._repo.all(uow.session)
+            card_rows = self._repo.all_cards(uow.session)
+        meta_cache: dict[str, object] = {}
+
+        def meta_of(uid: str):
+            if uid not in meta_cache:
+                try:
+                    meta_cache[uid] = self._kb.get_block(uid).meta
+                except NotFound:
+                    meta_cache[uid] = None
+            return meta_cache[uid]
+
+        blocks_out, cards_out = [], []
+        for it in block_rows:
+            meta = meta_of(it["block_uid"])
+            if meta is None or meta.cards:
+                continue  # блок удалён или живёт карточками (B-014)
             if source and not _meta_has_source(meta, source):
                 continue
-            out.append(
+            blocks_out.append(
                 {**it, "kind": "block", "title": meta.title, "weak_spots_count": meta.weak_spots_count}
             )
-        return out
-
-    def _card_items(self, source: str | None) -> list[dict]:
-        with self._uow() as uow:
-            items = self._repo.all_cards(uow.session)
-        out = []
-        for it in items:
-            try:
-                meta = self._kb.get_block(it["block_uid"]).meta
-            except NotFound:
+        for it in card_rows:
+            meta = meta_of(it["block_uid"])
+            if meta is None:
                 continue
             card = next((c for c in meta.cards if c.id == it["card_id"]), None)
             if card is None:
-                continue  # карточку удалили — элемент подберёт ensure_items
+                continue  # карточку удалили — элемент почистит on_block_updated
             if source and not _meta_has_source(meta, source):
                 continue
-            out.append(
+            cards_out.append(
                 {
                     **it,
                     "kind": "card",
@@ -157,13 +160,14 @@ class ReviewService:
                     "weak_spots_count": meta.weak_spots_count,
                 }
             )
-        return out
+        return blocks_out, cards_out
 
     def queue(self, limit: int = 2, source: str | None = None) -> list[dict]:
         """Очередь на день: сначала слабые, затем созревшие; source — «набор по книге» (B-014)."""
         self.ensure_items()
         now = now_iso(self._clock)
-        items = [*self._block_items(source), *self._card_items(source)]
+        blocks, cards = self._collect_items(source)
+        items = [*blocks, *cards]
         enriched = [
             it
             for it in items
@@ -206,16 +210,31 @@ class ReviewService:
             )
         return {"ok": True, "grade": grade, "next_due": due, "interval_days": interval}
 
-    def answer(self, block_uid: str, answer_text: str, question: str | None = None) -> dict:
+    def answer(
+        self, block_uid: str, answer_text: str, question: str | None = None, card_id: str | None = None
+    ) -> dict:
         """Оценить ответ (0–5), применить SM-2, слабые ответы дописывают «Дозакрепить».
 
         question — что именно спрашивали (R-17): экзаменатор оценивает ответ
         относительно вопроса, а не блока в целом.
+        card_id — проговор карточки: SM-2 двигает карточный элемент, блочный
+        не создаётся (fix ревью B-014). Блок с карточками без card_id — отказ:
+        он закрепляется карточками, а не блоковым проговором.
         """
         from ...kernel.asyncio_bridge import run_coro_sync
         from .agents import review_examiner
 
         block = self._kb.get_block(block_uid)
+        if card_id is not None:
+            card = next((c for c in block.meta.cards if c.id == card_id), None)
+            if card is None:
+                raise NotFound(f"карточки {card_id} нет в блоке {block_uid}")
+            return self._answer_card_by_quality(block_uid, card_id, question or card.q, answer_text)
+        if block.meta.cards:
+            raise InvalidState(
+                "блок закрепляется карточками — проговори карточку и передай её card_id "
+                "(get_review_queue отдаёт q/a и card_id)"
+            )
         ctx = AgentContext(
             system_extra=f"Блок: {block.meta.title}\nСлабые места: {block.meta.weak_spots_count}"
         )
@@ -262,6 +281,65 @@ class ReviewService:
             except Exception:  # noqa: BLE001 — правка блока не критична
                 log.warning("не удалось дописать «Дозакрепить»")
         return {"quality": quality, "feedback": feedback, "next_due": due, "interval_days": interval}
+
+    def _answer_card_by_quality(self, block_uid: str, card_id: str, question: str, answer_text: str) -> dict:
+        """Проговор карточки в чате: экзаменатор ставит quality, SM-2 — карточке (B-014 fix)."""
+        from ...kernel.asyncio_bridge import run_coro_sync
+        from .agents import review_examiner
+
+        verdict = run_coro_sync(
+            self._runtime.run_structured(
+                review_examiner,
+                AgentContext(system_extra=f"Карточка блока {block_uid}"),
+                f"Вопрос карточки:\n{question}\n\nОтвет пользователя:\n{answer_text}\n\n"
+                "Оцени, насколько ответ передаёт суть карточки.",
+            )
+        )
+        quality = max(0, min(5, verdict.quality))
+        with self._uow() as uow:
+            item = self._repo.get_card(uow.session, block_uid, card_id) or {
+                "ease": 25,
+                "interval_days": 1,
+                "reps": 0,
+                "due_at": now_iso(self._clock),
+            }
+        ease10, interval, reps = sm2_review(quality, item["ease"] / 10, item["interval_days"], item["reps"])
+        due = (self._clock.now() + timedelta(days=interval)).isoformat(timespec="seconds")
+        with self._uow() as uow:
+            self._repo.upsert_card(
+                uow.session,
+                block_uid=block_uid,
+                card_id=card_id,
+                ease=round(ease10 * 10),
+                interval_days=interval,
+                due_at=due,
+                last_quality=quality,
+                reps=reps,
+                updated_at=now_iso(self._clock),
+            )
+        return {
+            "card_id": card_id,
+            "quality": quality,
+            "feedback": verdict.feedback,
+            "next_due": due,
+            "interval_days": interval,
+        }
+
+    def on_block_updated(self, event) -> None:
+        """Блок обновлён: карточные элементы следуют карточкам — исчезнувшие
+        card_id удаляются, пустой набор карточек чистит все (fix ревью B-014)."""
+        try:
+            meta = self._kb.get_block(event.block_uid).meta
+        except NotFound:
+            return
+        with self._uow() as uow:
+            self._repo.delete_card_items_except(uow.session, event.block_uid, [c.id for c in meta.cards])
+
+    def on_block_deleted(self, event) -> None:
+        """Блок удалён: элементы повторения (карточные и блочный) чистятся (fix ревью B-014)."""
+        with self._uow() as uow:
+            self._repo.delete_for_block(uow.session, event.block_uid)
+            self._repo.delete(uow.session, event.block_uid)
 
     def _make_question(self, block) -> str:
         from ...kernel.asyncio_bridge import run_coro_sync

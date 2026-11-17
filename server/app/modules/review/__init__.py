@@ -1,6 +1,7 @@
 """Модуль «Повторение»: SM-2 по блокам, вопрос дня в Telegram."""
 
 from ...kernel.module import Module
+from ..knowledge.events import BlockDeleted, BlockUpdated
 from ..learning.events import SessionFinished
 
 
@@ -32,6 +33,9 @@ class ReviewModule(Module):
     def subscribe(self, bus, c) -> None:
         # сессия завершена → повторение урока завтра (B-004)
         bus.subscribe(SessionFinished.name(), c.review.on_session_finished)
+        # карточки/блок изменились → карточные элементы следуют реальности (B-014 fix)
+        bus.subscribe(BlockUpdated.name(), c.review.on_block_updated)
+        bus.subscribe(BlockDeleted.name(), c.review.on_block_deleted)
 
     def tools(self, c):
         from .tools import review_tools

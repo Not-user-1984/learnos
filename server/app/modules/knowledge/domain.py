@@ -212,12 +212,17 @@ def apply_patch(draft: BlockDraft, patch: dict) -> BlockDraft:
             elif key == "sources" and value:
                 changes[key] = tuple(BlockSource(**s) for s in value)
             elif key == "cards" and isinstance(value, list):
-                # правка карточек: сохранённые приходят с id, новые без (B-014)
-                changes[key] = tuple(
+                # правка карточек: сохранённые приходят с id, новые без (B-014).
+                # Дубль id — ошибка: SM-2 живёт по card_id (fix ревью B-014)
+                cards = [
                     Card(id=str(c.get("id", "")), q=str(c.get("q", "")), a=str(c.get("a", "")))
                     for c in value
                     if c.get("q") and c.get("a")
-                )
+                ]
+                seen = {c.id for c in cards if c.id}
+                if len(seen) != sum(1 for c in cards if c.id):
+                    raise ValueError("дубли id карточек недопустимы — у каждой свой id")
+                changes[key] = tuple(cards)
             elif key in {"concepts", "practice", "sources", "cards"}:
                 changes[key] = ()
             elif key in seq_fields and isinstance(value, list):
@@ -404,7 +409,8 @@ def writer_out_to_draft(out, kind: str) -> BlockDraft:
         title=out.title,
         summary=out.summary,
         kind=kind if kind in {"lesson", "note", "runbook"} else "lesson",
-        cards=tuple(Card(q=c.q, a=c.a) for c in getattr(out, "cards", None) or ()),
+        # лимит мягкий: 3–5 требует промпт, лишнее отрезаем, блок не роняем (fix ревью B-014)
+        cards=tuple(Card(q=c.q, a=c.a) for c in (getattr(out, "cards", None) or ())[:5]),
         concepts=tuple(Concept(c.term, c.definition) for c in out.concepts),
         theses=tuple(out.theses),
         my_examples=tuple(out.my_examples),
