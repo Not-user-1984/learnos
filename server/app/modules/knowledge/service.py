@@ -12,6 +12,7 @@ from .domain import (
     BlockMeta,
     Category,
     apply_patch,
+    assign_card_ids,
     normalize_category_path,
     parse_markdown,
 )
@@ -83,6 +84,7 @@ class KnowledgeService:
         verified: bool = False,
     ) -> Block:
         """Записать новый блок: MD-файл + индекс; категория — предложенная агентом или None."""
+        draft = assign_card_ids(draft)  # id карточкам-сути (SM-2 живёт по card_id, B-014)
         uid = self._ids.new("blk")
         now = now_iso(self._clock)
         category = draft.category_suggestion
@@ -122,6 +124,7 @@ class KnowledgeService:
             weak_spots_count=draft.weak_spots_count(),
             path=stem,
             verified=verified,
+            cards=draft.cards,
         )
         with self._uow() as uow:
             self._blocks.save(uow.session, meta, concepts=draft.concepts)
@@ -141,7 +144,7 @@ class KnowledgeService:
             meta_raw, _body = parse_markdown(content)
             draft = self._draft_from_frontmatter(meta_raw, content)
             try:
-                new_draft = apply_patch(draft, patch)
+                new_draft = assign_card_ids(apply_patch(draft, patch))
             except ValueError as e:
                 raise ValidationFailed(str(e)) from e
             self._versions.add_version(
@@ -176,6 +179,7 @@ class KnowledgeService:
                     "sources": new_draft.sources,
                     "links": new_draft.links,
                     "weak_spots_count": new_draft.weak_spots_count(),
+                    "cards": new_draft.cards,
                     "version": version,
                     "updated": now,
                     "path": stem,
@@ -352,6 +356,21 @@ class KnowledgeService:
     def categorize_draft(self, draft):
         """Проставить драфту category_suggestion через categorizer."""
         return self._generation.categorize_draft(draft)
+
+    def make_cards(self, uid: str) -> dict:
+        """«Сделать карточки» на старом блоке (B-014): генерация + правка блока.
+
+        Карточки попадают в frontmatter и индекс; версия блока растёт.
+        """
+        block = self.get_block(uid)
+        cards = self._generation.generate_cards(block)
+        updated = self.update_block(uid, {"cards": cards}, "карточки-суть (генерация)")
+        return {
+            "ok": True,
+            "block_uid": uid,
+            "cards": [{"id": c.id, "q": c.q, "a": c.a} for c in updated.meta.cards],
+            "version": updated.meta.version,
+        }
 
     def generate_runbook(self, session: dict, lesson_uid: str):
         """Собрать runbook-драфт из practice_log транскрипта."""

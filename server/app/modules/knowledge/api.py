@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from .schemas import BlockCard, BlockDetail, CategoryIn, CategoryNode, TagCount, VersionInfo
+from .schemas import BlockCard, BlockDetail, CardOut, CategoryIn, CategoryNode, TagCount, VersionInfo
 
 
 class SetCategoryBody(BaseModel):
@@ -63,6 +63,7 @@ def make_router(svc) -> APIRouter:
             category_status=m.category_status,
             tags=list(m.tags),
             sources=[_src(s) for s in m.sources],
+            cards=[CardOut(id=c.id, q=c.q, a=c.a) for c in m.cards],
             weak_spots_count=m.weak_spots_count,
             version=m.version,
             created_at=m.created,
@@ -71,6 +72,22 @@ def make_router(svc) -> APIRouter:
 
     def _src(s):
         return {"source": s.source, "chapter": s.chapter, "title": s.title}
+
+    class BlockPatchIn(BaseModel):
+        """Правка блока из UI (B-014: карточки)."""
+
+        patch: dict
+        reason: str = "правка из UI"
+
+    @r.post("/blocks/{uid}/cards")
+    def make_cards(uid: str):
+        """«Сделать карточки» на старом блоке: card_writer → frontmatter (B-014)."""
+        return svc.make_cards(uid)
+
+    @r.patch("/blocks/{uid}")
+    def patch_block(uid: str, body: BlockPatchIn):
+        """Правка блока (карточки и другие поля): версия сохраняется."""
+        return _card_with_relations(svc.update_block(uid, body.patch, body.reason).meta)
 
     @r.get("/blocks/{uid}", response_model=BlockDetail)
     def get_block(uid: str):

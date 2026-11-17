@@ -5,8 +5,11 @@ from pydantic import BaseModel, Field
 from ...kernel.tools.spec import ToolContext, ToolSpec
 
 
-class NoArgs(BaseModel):
-    """Без аргументов."""
+class QueueArgs(BaseModel):
+    """Очередь повторений (B-014: фильтр по источнику — «закрепить книгу»)."""
+
+    source: str | None = Field(default=None, description="uid источника: набор по книге")
+    limit: int = Field(default=5, description="Сколько элементов отдать")
 
 
 class AnswerArgs(BaseModel):
@@ -21,9 +24,9 @@ def review_tools(c) -> list[ToolSpec]:
     """Инструменты повторений."""
     svc = c.review
 
-    def get_review_queue(args: NoArgs, ctx: ToolContext):
+    def get_review_queue(args: QueueArgs, ctx: ToolContext):
         del ctx
-        return {"items": svc.queue()}
+        return {"items": svc.queue(args.limit, source=args.source)}
 
     def answer_review(args: AnswerArgs, ctx: ToolContext):
         del ctx
@@ -33,8 +36,12 @@ def review_tools(c) -> list[ToolSpec]:
         ToolSpec(
             name="get_review_queue",
             module="review",
-            description="Очередь повторений на день (слабые места + созревшие).",
-            args_model=NoArgs,
+            description=(
+                "Очередь повторений на день (слабые места + созревшие). Карточки-суть "
+                "(kind=card) несут q/a — их можно спрашивать прямо; kind=block — "
+                "повторение блока целиком через чат. source — набор по книге."
+            ),
+            args_model=QueueArgs,
             handler=get_review_queue,
             label="Очередь повторений",
         ),

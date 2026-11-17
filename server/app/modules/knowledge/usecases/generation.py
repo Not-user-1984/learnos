@@ -72,6 +72,25 @@ class GenerationUseCases:
         block_kind = (session.get("config") or {}).get("block_kind") or session.get("block_kind") or "lesson"
         return self.categorize_draft(writer_out_to_draft(out, kind=block_kind))
 
+    def generate_cards(self, block) -> list[dict]:
+        """3–5 карточек-суть по готовому блоку (card_writer, B-014).
+
+        Возвращает [{q, a}] — id назначит сохранение блока.
+        """
+        if self._svc._runtime is None:  # noqa: SLF001 — use-case своего модуля
+            raise NotFound("агентный рантайм недоступен")
+        from ..agents import card_writer
+
+        ctx = AgentContext(system_extra=f"Блок: {block.meta.title}\nКатегория: {block.meta.category_path}")
+        out = run_coro_sync(
+            self._svc._runtime.run_structured(  # noqa: SLF001
+                card_writer,
+                ctx,
+                f"Блок базы знаний:\n{block.content[:4000]}",
+            )
+        )
+        return [{"q": c.q, "a": c.a} for c in out.cards]
+
     def categorize_draft(self, draft: BlockDraft) -> BlockDraft:
         """Проставить драфту category_suggestion через categorizer (не критично при падении)."""
         if self._svc._runtime is None:  # noqa: SLF001

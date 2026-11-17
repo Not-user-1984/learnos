@@ -47,7 +47,7 @@ class MdBlockStore:
 
     def read_meta(self, file_stem: str) -> BlockMeta:
         """Метаданные блока из frontmatter + ссылки из тела."""
-        from ..domain import BlockSource, count_weak_spots, extract_links
+        from ..domain import BlockSource, Card, count_weak_spots, extract_links
 
         content = self.read(file_stem)
         meta_raw, body = parse_markdown(content)
@@ -72,6 +72,11 @@ class MdBlockStore:
             links=extract_links(body),
             weak_spots_count=count_weak_spots(body),
             path=str(self.blocks_dir / f"{file_stem}.md"),
+            cards=tuple(
+                Card(id=str(c.get("id", "")), q=str(c.get("q", "")), a=str(c.get("a", "")))
+                for c in (meta_raw.get("cards") or [])
+                if c.get("q") and c.get("a")
+            ),
         )
 
     def write_raw(self, file_stem: str, content: str) -> None:

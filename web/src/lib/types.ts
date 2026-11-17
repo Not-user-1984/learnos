@@ -9,6 +9,7 @@ export type BlockCard = {
   category_status: "suggested" | "confirmed" | string;
   tags: string[];
   sources: { source: string; chapter: number | null; title: string }[];
+  cards?: BlockCardItemLike[];
   weak_spots_count: number;
   version: number;
   created_at: string;
@@ -221,6 +222,12 @@ export type TodaySnapshot = {
 };
 
 /** Элемент очереди повторений (GET /api/review/queue). */
+export type BlockCardItemLike = {
+  id: string;
+  q: string;
+  a: string;
+};
+
 export type ReviewQueueItem = {
   block_uid: string;
   title: string;
@@ -228,6 +235,11 @@ export type ReviewQueueItem = {
   reps: number;
   interval_days: number;
   weak_spots_count: number;
+  /** card — карточка-суть (быстрое повторение кнопками), block — проговор в чате (B-014) */
+  kind?: "card" | "block";
+  card_id?: string;
+  q?: string;
+  a?: string;
 };
 
 export type Profile = {

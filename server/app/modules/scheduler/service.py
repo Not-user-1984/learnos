@@ -129,7 +129,7 @@ class SchedulerService:
         text = (
             f"Повторения: назрело {stats['due_today']}"
             f"{' · просрочено ' + str(stats['overdue']) if stats['overdue'] else ''}. "
-            "Открой /review и проговори пару блоков."
+            "Открой /review: карточки проговори кнопками, блоки — в чате."
         )
         self._messenger.send_text(text)
 

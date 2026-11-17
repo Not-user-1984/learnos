@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
+
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.orm import Session
 
 from ....kernel.errors import NotFound
-from ..domain import Block, BlockMeta, BlockSource
+from ..domain import Block, BlockMeta, BlockSource, Card
 from .tables import block_links, block_sources, block_tags, block_versions, blocks
 
 
@@ -30,6 +32,7 @@ class BlockRepository:
                 weak_spots_count=meta.weak_spots_count,
                 verified=meta.verified,
                 version=meta.version,
+                cards_json=self._cards_json(meta.cards),
                 created_at=meta.created or meta.updated,
                 updated_at=meta.updated,
             )
@@ -52,6 +55,7 @@ class BlockRepository:
                 weak_spots_count=meta.weak_spots_count,
                 verified=meta.verified,
                 version=meta.version,
+                cards_json=self._cards_json(meta.cards),
                 updated_at=meta.updated,
             )
         )
@@ -192,6 +196,11 @@ class BlockRepository:
         return {r[0]: int(r[1]) for r in rows}
 
     @staticmethod
+    def _cards_json(cards) -> str:
+        """Карточки блока в JSON для колонки индекса (B-014)."""
+        return json.dumps([{"id": c.id, "q": c.q, "a": c.a} for c in cards], ensure_ascii=False)
+
+    @staticmethod
     def _row_to_meta(row) -> BlockMeta:
         return BlockMeta(
             uid=row.block_uid,
@@ -211,6 +220,11 @@ class BlockRepository:
             weak_spots_count=row.weak_spots_count,
             verified=bool(row.verified),
             path=row.path,
+            cards=tuple(
+                Card(id=str(c.get("id", "")), q=str(c.get("q", "")), a=str(c.get("a", "")))
+                for c in (json.loads(row.cards_json or "[]"))
+                if c.get("q") and c.get("a")
+            ),
         )
 
     def _attach_relations(self, session: Session, metas: list[BlockMeta]) -> list[BlockMeta]:
@@ -295,4 +309,5 @@ def _meta_dict(meta: BlockMeta) -> dict:
         "weak_spots_count": meta.weak_spots_count,
         "path": meta.path,
         "verified": meta.verified,
+        "cards": meta.cards,
     }

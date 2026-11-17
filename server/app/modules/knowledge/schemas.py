@@ -31,6 +31,20 @@ class SourceIn(BaseModel):
     title: str = ""
 
 
+class CardIn(BaseModel):
+    """Карточка-суть на входе (правка блока / генерация, B-014)."""
+
+    id: str = ""
+    q: str = Field(min_length=8, max_length=200)
+    a: str = Field(min_length=2, max_length=280)
+
+
+class CardOut(CardIn):
+    """Карточка-суть на выходе — с назначенным id."""
+
+    id: str
+
+
 class BlockDraftIn(BaseModel):
     """Драфт блока (вход для finish_session / save_note / update_block)."""
 
@@ -48,10 +62,12 @@ class BlockDraftIn(BaseModel):
     tags: list[str] = Field(default_factory=list, max_length=8)
     category_suggestion: str | None = None
     sources: list[SourceIn] = Field(default_factory=list)
+    cards: list[CardIn] = Field(default_factory=list, max_length=8)
 
     def to_domain(self):
         """Вход → доменный BlockDraft."""
         from .domain import BlockDraft as D
+        from .domain import Card as CardDomain
         from .domain import Concept, PracticeStep
 
         return D(
@@ -71,6 +87,7 @@ class BlockDraftIn(BaseModel):
             tags=tuple(self.tags),
             category_suggestion=self.category_suggestion,
             sources=tuple(BlockSource(s.source, s.chapter, s.title) for s in self.sources),
+            cards=tuple(CardDomain(c.id, c.q, c.a) for c in self.cards if c.q.strip() and c.a.strip()),
         )
 
 
@@ -85,6 +102,7 @@ class BlockCard(BaseModel):
     category_status: str
     tags: list[str]
     sources: list[SourceIn]
+    cards: list[CardOut] = Field(default_factory=list)
     weak_spots_count: int
     version: int
     created_at: str

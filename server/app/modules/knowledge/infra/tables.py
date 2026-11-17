@@ -41,6 +41,7 @@ blocks = Table(
     Column("verified", Boolean, nullable=False, server_default="0"),  # блок из сессии (R-18)
     Column("version", Integer, nullable=False, server_default="1"),
     Column("review_json", Text, nullable=False, server_default="{}"),
+    Column("cards_json", Text, nullable=False, server_default="[]"),  # карточки-суть (B-014)
     Column("created_at", Text, nullable=False),
     Column("updated_at", Text, nullable=False),
 )

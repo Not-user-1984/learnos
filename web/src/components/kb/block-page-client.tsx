@@ -36,6 +36,182 @@ const fmtDate = (iso: string) =>
     minute: "2-digit",
   });
 
+/** Карточки-суть блока (B-014): список, правка/удаление, «Сделать карточки» для старых. */
+function CardsSection({ block, onRefresh }: { block: BlockDetail; onRefresh: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ q: "", a: "" });
+  const cards = block.cards ?? [];
+
+  const patchCards = async (cardsNext: { id?: string; q: string; a: string }[], reason: string) => {
+    setBusy(true);
+    try {
+      await fetch(`/api/kb/blocks/${block.block_uid}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patch: { cards: cardsNext }, reason }),
+      });
+      markKbListDirty();
+      toast.success("Карточки обновлены");
+      setEditing(null);
+      onRefresh();
+    } catch {
+      toast.error("Не удалось сохранить карточки");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const makeCards = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/kb/blocks/${block.block_uid}/cards`, { method: "POST" });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? "ошибка");
+      toast.success("Карточки собраны");
+      onRefresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "не удалось собрать карточки");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mt-10 mb-10 rounded-xl border bg-card p-4">
+      <h2 className="mb-3 flex items-center gap-1.5 text-sm font-medium">
+        <Icon name="style" size={16} className="text-primary" /> Карточки-суть
+        <span className="text-muted-foreground">· повторения по SM-2</span>
+      </h2>
+      {cards.length === 0 ? (
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <span>Карточек ещё нет — сжатая суть блока для быстрых повторений.</span>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void makeCards()}>
+            {busy ? <Icon name="progress_activity" size={15} className="animate-spin" /> : <Icon name="auto_awesome" size={15} />}
+            Сделать карточки
+          </Button>
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {cards.map((c) => (
+            <li key={c.id} className="rounded-lg border bg-background px-3 py-2">
+              {editing === c.id ? (
+                <div className="flex flex-col gap-2">
+                  <input
+                    className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm"
+                    value={draft.q}
+                    aria-label="Вопрос"
+                    onChange={(e) => setDraft((d) => ({ ...d, q: e.target.value }))}
+                  />
+                  <textarea
+                    className="min-h-16 w-full rounded-md border bg-transparent px-2 py-1.5 text-sm"
+                    value={draft.a}
+                    aria-label="Ответ"
+                    onChange={(e) => setDraft((d) => ({ ...d, a: e.target.value }))}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={busy || !draft.q.trim() || !draft.a.trim()}
+                      onClick={() =>
+                        void patchCards(
+                          cards.map((x) => (x.id === c.id ? { id: x.id, q: draft.q.trim(), a: draft.a.trim() } : x)),
+                          "правка карточки",
+                        )
+                      }
+                    >
+                      Сохранить
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
+                      Отмена
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{c.q}</p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{c.a}</p>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 shrink-0"
+                    aria-label="Править карточку"
+                    disabled={busy}
+                    onClick={() => {
+                      setEditing(c.id);
+                      setDraft({ q: c.q, a: c.a });
+                    }}
+                  >
+                    <Icon name="edit" size={15} />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                    aria-label="Удалить карточку"
+                    disabled={busy}
+                    onClick={() => void patchCards(cards.filter((x) => x.id !== c.id), "удаление карточки")}
+                  >
+                    <Icon name="delete" size={15} />
+                  </Button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {cards.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || cards.length >= 8}
+            onClick={() => {
+              setEditing("new");
+              setDraft({ q: "", a: "" });
+            }}
+          >
+            <Icon name="add" size={15} /> Добавить карточку
+          </Button>
+        </div>
+      )}
+      {editing === "new" && (
+        <div className="mt-2 flex flex-col gap-2 rounded-lg border bg-background px-3 py-2">
+          <input
+            className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm"
+            placeholder="Вопрос: одна идея"
+            value={draft.q}
+            aria-label="Новый вопрос"
+            onChange={(e) => setDraft((d) => ({ ...d, q: e.target.value }))}
+          />
+          <textarea
+            className="min-h-16 w-full rounded-md border bg-transparent px-2 py-1.5 text-sm"
+            placeholder="Ответ: ≤2 предложения"
+            value={draft.a}
+            aria-label="Новый ответ"
+            onChange={(e) => setDraft((d) => ({ ...d, a: e.target.value }))}
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={busy || !draft.q.trim() || !draft.a.trim()}
+              onClick={() =>
+                void patchCards([...cards.map((x) => ({ id: x.id, q: x.q, a: x.a })), { q: draft.q.trim(), a: draft.a.trim() }], "новая карточка")
+              }
+            >
+              Добавить
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
+              Отмена
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function BlockPageClient({
   block,
   versions,
@@ -252,6 +428,8 @@ export function BlockPageClient({
             </Button>
           </section>
         )}
+
+        <CardsSection block={block} onRefresh={() => router.refresh()} />
 
         <Markdown content={block.content} linkTitles={Object.fromEntries(block.links.map((l) => [l, l]))} />
 

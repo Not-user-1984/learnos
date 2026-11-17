@@ -82,6 +82,19 @@ class BlockSource:
 
 
 @dataclass(frozen=True, slots=True)
+class Card:
+    """Карточка-суть блока (B-014): одна идея, вопрос → короткий ответ.
+
+    id устойчив между правками (SM-2 живёт по card_id); пустой id — новой
+    карточке, его назначает сохранение (c1, c2, …).
+    """
+
+    id: str = ""
+    q: str = ""
+    a: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class BlockDraft:
     """Черновик блока знаний, из которого собирается MD-файл."""
 
@@ -99,9 +112,29 @@ class BlockDraft:
     tags: tuple[str, ...] = ()
     category_suggestion: str | None = None
     sources: tuple[BlockSource, ...] = ()
+    cards: tuple[Card, ...] = ()
 
     def weak_spots_count(self) -> int:
         return len(self.weak_spots)
+
+
+def assign_card_ids(draft: BlockDraft) -> BlockDraft:
+    """Назначить id карточкам без них (c1, c2, …), сохранив существующие.
+
+    Правка блока приходит списком карточек: у сохранённых id есть, у новых нет.
+    """
+    next_n = 1
+    for c in draft.cards:
+        if c.id and (m := re.search(r"(\d+)$", c.id)):
+            next_n = max(next_n, int(m.group(1)) + 1)
+    fixed = []
+    for c in draft.cards:
+        if c.id:
+            fixed.append(c)
+        else:
+            fixed.append(Card(id=f"c{next_n}", q=c.q, a=c.a))
+            next_n += 1
+    return replace(draft, cards=tuple(fixed))
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +161,7 @@ class BlockMeta:
     versions_count: int = 0
     back_links: tuple[str, ...] = ()
     verified: bool = False  # «проговорённое» знание: блок из сессии, не конспект (R-18)
+    cards: tuple[Card, ...] = ()  # карточки-суть (B-014)
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,7 +211,14 @@ def apply_patch(draft: BlockDraft, patch: dict) -> BlockDraft:
                 changes[key] = tuple(PracticeStep(**p) for p in value)
             elif key == "sources" and value:
                 changes[key] = tuple(BlockSource(**s) for s in value)
-            elif key in {"concepts", "practice", "sources"}:
+            elif key == "cards" and isinstance(value, list):
+                # правка карточек: сохранённые приходят с id, новые без (B-014)
+                changes[key] = tuple(
+                    Card(id=str(c.get("id", "")), q=str(c.get("q", "")), a=str(c.get("a", "")))
+                    for c in value
+                    if c.get("q") and c.get("a")
+                )
+            elif key in {"concepts", "practice", "sources", "cards"}:
                 changes[key] = ()
             elif key in seq_fields and isinstance(value, list):
                 changes[key] = tuple(value)
@@ -216,6 +257,8 @@ def draft_to_markdown(uid: str, draft: BlockDraft, meta_extra: dict) -> str:
         "version": meta_extra.get("version", 1),
         "verified": bool(meta_extra.get("verified", False)),
         "review": meta_extra.get("review") or {"ease": 2.5, "interval": 1, "due": None},
+        # карточки-суть: канонически живут в frontmatter (B-014)
+        "cards": [{"id": c.id, "q": c.q, "a": c.a} for c in draft.cards if c.q and c.a],
     }
     fm = yaml.safe_dump(frontmatter, allow_unicode=True, sort_keys=False).strip()
 
@@ -361,6 +404,7 @@ def writer_out_to_draft(out, kind: str) -> BlockDraft:
         title=out.title,
         summary=out.summary,
         kind=kind if kind in {"lesson", "note", "runbook"} else "lesson",
+        cards=tuple(Card(q=c.q, a=c.a) for c in getattr(out, "cards", None) or ()),
         concepts=tuple(Concept(c.term, c.definition) for c in out.concepts),
         theses=tuple(out.theses),
         my_examples=tuple(out.my_examples),
@@ -400,6 +444,7 @@ def dict_of_meta(meta: BlockMeta) -> dict:
         "weak_spots_count": meta.weak_spots_count,
         "path": meta.path,
         "verified": meta.verified,
+        "cards": meta.cards,
     }
 
 

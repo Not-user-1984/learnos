@@ -34,6 +34,13 @@ class SourceOut(BaseModel):
     title: str = ""
 
 
+class CardOut(BaseModel):
+    """Карточка-суть блока (B-014): одна идея, вопрос → короткий ответ."""
+
+    q: str = Field(min_length=8, max_length=200)
+    a: str = Field(min_length=2, max_length=280)
+
+
 class BlockWriterDraft(BaseModel):
     """Структурированный выход block_writer — вход для save_block."""
 
@@ -51,6 +58,7 @@ class BlockWriterDraft(BaseModel):
     tags: list[str] = Field(default_factory=list, max_length=8)
     category_suggestion: str | None = None
     sources: list[SourceOut] = Field(default_factory=list)
+    cards: list[CardOut] = Field(default_factory=list, max_length=5)
 
 
 class CategorizerOutput(BaseModel):
@@ -58,6 +66,12 @@ class CategorizerOutput(BaseModel):
 
     path: str
     new_category_title: str | None = None
+
+
+class CardsOut(BaseModel):
+    """Выход card_writer: 3–5 карточек-сути по готовому блоку (B-014)."""
+
+    cards: list[CardOut] = Field(min_length=3, max_length=5)
 
 
 block_writer = AgentSpec(
@@ -79,6 +93,14 @@ runbook_writer = AgentSpec(
     output_model=BlockWriterDraft,
 )
 
+card_writer = AgentSpec(
+    name="card_writer",
+    description="Собирает 3–5 карточек-суть по готовому блоку: одна идея, ответ ≤2 предложения.",
+    prompt_path=AGENTS_DIR / "card_writer" / "prompt.md",
+    model_role="structured",
+    output_model=CardsOut,
+)
+
 categorizer = AgentSpec(
     name="categorizer",
     description="Подбирает категорию блока из дерева kb/categories.yaml или предлагает новый узел.",
@@ -93,4 +115,5 @@ def register_agents(c) -> None:
     registry: AgentRegistry = c.agent_registry
     registry.register(block_writer)
     registry.register(categorizer)
+    registry.register(card_writer)
     registry.register(runbook_writer)

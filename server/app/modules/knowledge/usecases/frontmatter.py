@@ -1,6 +1,6 @@
 """Разбор frontmatter+тела блока в BlockDraft (B-009: вынесено из service)."""
 
-from ..domain import BlockDraft, Concept, PracticeStep
+from ..domain import BlockDraft, Card, Concept, PracticeStep
 
 
 def draft_from_frontmatter(meta_raw: dict, content: str) -> BlockDraft:
@@ -38,6 +38,11 @@ def draft_from_frontmatter(meta_raw: dict, content: str) -> BlockDraft:
         sources=tuple(
             BlockSource(source=s.get("source", ""), chapter=s.get("chapter"), title=s.get("title", ""))
             for s in (meta_raw.get("sources") or [])
+        ),
+        cards=tuple(
+            Card(id=str(c.get("id", "")), q=str(c.get("q", "")), a=str(c.get("a", "")))
+            for c in (meta_raw.get("cards") or [])
+            if c.get("q") and c.get("a")
         ),
     )
 

@@ -6,10 +6,12 @@ import { Icon } from "@/components/ui/icon";
 import { kindIcon } from "@/lib/format";
 import { api } from "@/lib/api";
 import type { ActivityCard, ChapterCard, SourceDetail } from "@/lib/types";
+import type { DigestBlock } from "@/components/library/book-digest";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { SourceActions } from "@/components/library/source-actions";
 import { ProcessSourceButton } from "@/components/library/process-source-button";
 import { ChapterHistoryButton } from "@/components/library/chapter-history";
+import { BookDigest } from "@/components/library/book-digest";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +38,9 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
     notFound();
   }
   const chapters: ChapterCard[] = source.chapters ?? [];
+  const digestBlocks: DigestBlock[] = (
+    await api<DigestBlock[]>(`/kb/blocks?source=${source.uid}&limit=200`).catch(() => [] as DigestBlock[])
+  ).map((b) => ({ ...b, cards: b.cards ?? [] }));
   const activity: ActivityCard | undefined = (
     await api<ActivityCard[]>("/activities?status=active").catch(() => [] as ActivityCard[])
   ).find((a) => a.source_uid === source.uid);
@@ -111,6 +116,15 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
           <p className="mb-5 rounded-xl border bg-card p-3 text-sm leading-relaxed text-muted-foreground sm:p-4">
             {source.summary}
           </p>
+        )}
+
+        {source.kind === "book" && (
+          <BookDigest
+            sourceUid={source.uid}
+            sourceTitle={source.title}
+            chapters={chapters.map((c) => ({ idx: c.idx, title: c.title }))}
+            blocks={digestBlocks}
+          />
         )}
 
         {chapters.length === 0 ? (
