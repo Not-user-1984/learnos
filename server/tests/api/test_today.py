@@ -4,8 +4,8 @@ from app.modules.learning.infra.tables import activities as activities_table
 from app.modules.library.infra.tables import chapters as chapters_table
 
 
-def _mk_source_with_chapters(container, n: int = 3) -> dict:
-    src = container.library.add_source("book", "Книга дня", url=None)
+def _mk_source_with_chapters(container, n: int = 3, kind: str = "book") -> dict:
+    src = container.library.add_source(kind, "Книга дня", url=None)
     with container.uow() as uow:
         for idx in range(1, n + 1):
             uow.session.execute(
@@ -102,6 +102,42 @@ def test_today_reading_has_kind_for_link(client, container):
 
     out = client.get("/api/today").json()
     assert out["reading"][0]["kind"] == "book"
+
+
+def test_today_reading_video_kind_not_fake_book(client, container):
+    """kind берётся из источника, без дефолта book: видео остаётся видео,
+    неизвестный тип не уводит в PDF-ридер (B-012 fix)."""
+    src = _mk_source_with_chapters(container, kind="video")
+    client.post("/api/activities/mark-read", json={"source": src["uid"], "chapter": 1})
+
+    out = client.get("/api/today").json()
+    assert out["reading"][0]["kind"] == "video"
+
+
+def test_course_items_carry_source_kind(client, container):
+    """Элементы курса с источником несут kind: «Читать» строит ссылку по типу
+    (книга → /read, видео → глава), а не в 404 (B-012 fix)."""
+    src = _mk_source_with_chapters(container, kind="video")
+    course = client.post(
+        "/api/courses",
+        json={"topic": "видео-курс", "items": [{"item_type": "chapter", "source": src["uid"], "chapter": 2}]},
+    ).json()
+
+    full = client.get(f"/api/courses/{course['uid']}").json()
+    item = full["items"][0]
+    assert item["kind"] == "video" and item["source_uid"] == src["uid"]
+
+    book_course = client.post(
+        "/api/courses",
+        json={
+            "topic": "книга-курс",
+            "items": [
+                {"item_type": "chapter", "source": _mk_source_with_chapters(container)["uid"], "chapter": 1}
+            ],
+        },
+    ).json()
+    book_item = client.get(f"/api/courses/{book_course['uid']}").json()["items"][0]
+    assert book_item["kind"] == "book"
 
 
 def test_today_reading_skips_cursor_beyond_total(client, container):

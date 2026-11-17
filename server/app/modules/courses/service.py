@@ -349,8 +349,14 @@ class CoursesService:
             e["done"] = item["status"] in {"done", "read"}
             e["title"], e["hint"] = self._item_title(session, item)
             if item.get("source_id"):
-                # uid источника — для кнопок «Читать»/«Прочитал сам» (B-005)
-                e["source_uid"] = self._repo_source_uid(session, item["source_id"])
+                # uid+kind источника — для кнопок «Читать»/«Прочитал сам» и ссылок
+                # по типу: книга → ридер, видео/статья → глава (B-005/B-012-fix)
+                try:
+                    src = self._library.get_source(item["source_id"])
+                    e["source_uid"] = src["uid"]
+                    e["kind"] = src["kind"]
+                except NotFound:
+                    e["source_uid"] = self._repo_source_uid(session, item["source_id"])
             enriched.append(e)
         passed = sum(1 for i in items if i["status"] in {"done", "read"})
         out = {**course, "items_count": len(items), "items_done": passed}

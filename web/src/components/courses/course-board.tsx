@@ -17,6 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { ConfirmDeleteButton } from "@/components/confirm-delete";
 import { cn } from "@/lib/utils";
 import { MarkReadButton, StartItemButton } from "@/components/today/today-actions";
+import { readingHref } from "@/lib/reading-link";
 
 const STATUS_GROUPS: { key: string; label: string; icon: string }[] = [
   { key: "doing", label: "В работе", icon: "pending" },
@@ -119,8 +120,13 @@ export function CourseBoard({ course }: { course: Course }) {
                       {(item.item_type === "chapter" || item.item_type === "source") && item.source_uid && item.status !== "done" && (
                         <>
                           {item.status !== "doing" && <StartItemButton courseUid={course.uid} itemId={item.id} />}
+                          {/* книга → ридер, видео/статья → глава; без глав/типа → источник (B-012-fix) */}
                           <Link
-                            href={`/library/${item.source_uid}/read${item.chapter_idx ? `?ch=${item.chapter_idx}` : ""}`}
+                            href={readingHref({
+                              sourceUid: item.source_uid,
+                              kind: item.kind,
+                              chapter: item.chapter_idx,
+                            })}
                             className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm transition hover:bg-accent"
                           >
                             <Icon name="auto_stories" size={15} /> Читать
@@ -137,7 +143,7 @@ export function CourseBoard({ course }: { course: Course }) {
                         description="Элемент исчезнет из доски курса. Источник и блоки останутся."
                         successMessage="Элемент удалён"
                         className="opacity-0 transition group-hover:opacity-100"
-                        buttonClassName="rounded-lg p-1.5 text-muted-foreground transition hover:text-rose-500"
+                        buttonClassName="rounded-lg p-1.5 text-muted-foreground transition hover:text-destructive"
                       />
                     </div>
                   </li>

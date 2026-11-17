@@ -12,7 +12,7 @@ import type { CardProps } from "./shared";
 const RISK_COLORS: Record<string, string> = {
   low: "bg-emerald-500/15 text-emerald-500",
   medium: "bg-amber-500/15 text-amber-500",
-  high: "bg-rose-500/15 text-rose-500",
+  high: "bg-destructive/15 text-destructive",
 };
 
 /** Убрать из markdown fenced-блоки, дублирующие карточку command (команда — один раз). */

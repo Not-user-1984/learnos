@@ -92,7 +92,7 @@ function HistoryRow({ conv }: { conv: ConversationItem }) {
         description="Сообщения разговора удалятся безвозвратно. Блоки базы знаний, созданные по нему, останутся."
         successMessage="Разговор удалён"
         className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 transition group-hover:opacity-100"
-        buttonClassName="rounded-lg bg-background/60 p-1.5 text-muted-foreground backdrop-blur transition hover:text-rose-500"
+        buttonClassName="rounded-lg bg-background/60 p-1.5 text-muted-foreground backdrop-blur transition hover:text-destructive"
       />
     </div>
   );

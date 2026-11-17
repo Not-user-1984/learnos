@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/ui/icon";
 import { api } from "@/lib/api";
+import { readingHref } from "@/lib/reading-link";
 import type { TodaySnapshot } from "@/lib/types";
 import { StartItemButton } from "@/components/today/today-actions";
 import { Progress } from "@/components/ui/progress";
@@ -83,17 +84,15 @@ export default async function TodayPage() {
                 </p>
               </div>
               {/* книга — в PDF-ридер на место чтения, видео/статья — в текущую главу;
-                  без глав — на страницу источника (B-012/B-013) */}
+                  без глав или неизвестный тип — страница источника (B-012/B-013) */}
               <Link
-                href={
-                  readingProgress.kind === "book"
-                    ? `/library/${readingProgress.source_uid}/read?ch=${readingProgress.position_chapter}${
-                        readingProgress.position_page ? `&page=${readingProgress.position_page}` : ""
-                      }`
-                    : readingProgress.total_chapters > 0
-                      ? `/library/${readingProgress.source_uid}/${readingProgress.position_chapter}`
-                      : `/library/${readingProgress.source_uid}`
-                }
+                href={readingHref({
+                  sourceUid: readingProgress.source_uid,
+                  kind: readingProgress.kind,
+                  chapter: readingProgress.position_chapter,
+                  page: readingProgress.position_page,
+                  totalChapters: readingProgress.total_chapters,
+                })}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
               >
                 <Icon name="auto_stories" size={16} /> Читать дальше

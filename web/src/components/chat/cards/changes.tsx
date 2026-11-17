@@ -56,7 +56,7 @@ export function PromptChangeCard({ card, conversationUid }: CardProps) {
               d.op === "+"
                 ? "bg-emerald-500/15 px-2 text-emerald-300"
                 : d.op === "-"
-                  ? "bg-rose-500/15 px-2 text-rose-300"
+                  ? "bg-destructive/15 px-2 text-destructive"
                   : "px-2 text-zinc-500"
             }
           >
@@ -143,7 +143,7 @@ export function GitChangeCard({ card, conversationUid }: CardProps) {
                 d.op === "+"
                   ? "bg-emerald-500/15 px-2 text-emerald-300"
                   : d.op === "-"
-                    ? "bg-rose-500/15 px-2 text-rose-300"
+                    ? "bg-destructive/15 px-2 text-destructive"
                     : "px-2 text-zinc-500"
               }
             >

@@ -84,7 +84,8 @@ class TodayService:
                 {
                     "activity_uid": act["uid"],
                     "source_uid": act.get("source_uid"),
-                    "kind": act.get("kind", "book"),
+                    "kind": act.get("kind")
+                    or "",  # без дефолта: неизвестный тип ведёт на страницу источника (B-012-fix)
                     "title": act["title"],
                     "cursor_chapter": act["cursor_chapter"],
                     # место чтения (B-013): «Читать дальше» открывает его, а не курсор

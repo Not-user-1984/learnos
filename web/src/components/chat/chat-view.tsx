@@ -307,7 +307,7 @@ export function ChatView({ conversation, variant = "page", insert, onTimecode }:
               successMessage="Разговор удалён"
               redirectTo="/chat"
               className="ml-auto"
-              buttonClassName="rounded-lg p-1.5 text-muted-foreground transition hover:text-rose-500"
+              buttonClassName="rounded-lg p-1.5 text-muted-foreground transition hover:text-destructive"
             />
           )}
         </header>

@@ -95,7 +95,7 @@ export function ToolChipView({ chip }: { chip: ToolChip }) {
         className={cn(
           "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
           chip.ok === false
-            ? "border-rose-500/40 text-rose-500"
+            ? "border-destructive/40 text-destructive"
             : chip.ok
               ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
               : "text-muted-foreground",

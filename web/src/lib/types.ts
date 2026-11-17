@@ -169,6 +169,7 @@ export type CourseItem = {
   item_type: string;
   source_id: number | null;
   source_uid?: string | null;
+  kind?: string | null;
   chapter_idx: number | null;
   block_uid: string | null;
   note: string | null;
