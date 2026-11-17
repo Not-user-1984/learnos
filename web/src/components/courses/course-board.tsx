@@ -120,7 +120,7 @@ export function CourseBoard({ course }: { course: Course }) {
                         <>
                           {item.status !== "doing" && <StartItemButton courseUid={course.uid} itemId={item.id} />}
                           <Link
-                            href={`/library/${item.source_uid}/read${item.chapter_idx ? `?chapter=${item.chapter_idx}` : ""}`}
+                            href={`/library/${item.source_uid}/read${item.chapter_idx ? `?ch=${item.chapter_idx}` : ""}`}
                             className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm transition hover:bg-accent"
                           >
                             <Icon name="auto_stories" size={15} /> Читать

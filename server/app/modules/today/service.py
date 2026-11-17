@@ -70,16 +70,24 @@ class TodayService:
         return out
 
     def _reading(self, limit: int) -> list[dict]:
-        """Незаконченные книги/видео: продолжить с текущей главы."""
+        """Незаконченные книги/видео: продолжить с текущей главы.
+
+        Курсор за последней главой (залипшая active после пересборки глав)
+        не предлагается — «Читать дальше» вёл бы в несуществующую главу (B-012).
+        """
         out = []
         for act in self._learning.list_activities(status="active"):
+            total = act.get("total_chapters", 0)
+            if total > 0 and act["cursor_chapter"] > total:
+                continue
             out.append(
                 {
                     "activity_uid": act["uid"],
                     "source_uid": act.get("source_uid"),
+                    "kind": act.get("kind", "book"),
                     "title": act["title"],
                     "cursor_chapter": act["cursor_chapter"],
-                    "total_chapters": act.get("total_chapters", 0),
+                    "total_chapters": total,
                 }
             )
             if len(out) >= limit:

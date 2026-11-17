@@ -74,7 +74,9 @@ class LearningService:
             acts = self._acts.list(uow.session, status=status)
         for a in acts:  # прогресс — портами библиотеки, без чужой infra (B-009)
             a["total_chapters"] = self._library.chapters_count(a["source_id"])
-            a["source_uid"] = self._library.source_ref(a["source_id"])["uid"]
+            src = self._library.source_ref(a["source_id"])
+            a["source_uid"] = src["uid"]
+            a["kind"] = src["kind"]  # «Сегодня» ведёт книгу в PDF-ридер, остальное — в главу (B-012)
         return acts
 
     def get_activity(self, ref: str | int) -> dict:

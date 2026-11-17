@@ -358,7 +358,16 @@ export function ChatView({ conversation, variant = "page", insert, onTimecode }:
           {variant === "page" && <ChatCat />}
         </div>
 
-        <StreamErrorBar message={stream.streamError ?? ""} onRetry={() => { stream.setStreamError(null); void send(input || lastSentRef.current); }} />
+        {/* плашка ошибки — только при реальной ошибке стрима; «Повторить» сбрасывает (B-012) */}
+        {stream.streamError && (
+          <StreamErrorBar
+            message={stream.streamError}
+            onRetry={() => {
+              stream.setStreamError(null);
+              void send(input || lastSentRef.current);
+            }}
+          />
+        )}
 
         {/* B-003: один контекстный ряд «что дальше» вместо двух рядов чипов;
             скрыт при стриме и пока есть неотвеченные решения */}

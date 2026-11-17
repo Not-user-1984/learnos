@@ -66,6 +66,19 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
               )}
             </p>
           </div>
+          {source.kind === "book" && (
+            <Link
+              href={`/library/${source.uid}/read${
+                activity && chapters.length > 0
+                  ? `?ch=${Math.min(activity.cursor_chapter, chapters.length)}`
+                  : ""
+              }`}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+              title="Полноэкранный PDF-ридер с оглавлением"
+            >
+              <Icon name="picture_as_pdf" size={16} /> Читать PDF
+            </Link>
+          )}
           <SourceActions sourceUid={source.uid} className="ml-auto" />
           <ProcessSourceButton sourceUid={source.uid} status={source.status} />
         </header>

@@ -77,6 +77,7 @@ export type ActivityCard = {
   uid: string;
   source_id: number;
   source_uid: string;
+  kind: string;
   title: string;
   status: string;
   cursor_chapter: number;
@@ -204,6 +205,7 @@ export type TodaySnapshot = {
   reading: {
     activity_uid: string;
     source_uid: string;
+    kind: string;
     title: string;
     cursor_chapter: number;
     total_chapters: number;

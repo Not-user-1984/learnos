@@ -133,10 +133,10 @@ class LibraryService:
             return {"id": src["id"], "uid": src["uid"], "title": src["title"]}
 
     def source_ref(self, source_id: int) -> dict:
-        """uid+title по id — порт для learning (block_sources урока, B-009)."""
+        """uid+title+kind по id — порт для learning (block_sources урока, ссылки «Сегодня», B-009/B-012)."""
         with self._uow() as uow:
             src = self._sources.get(uow.session, source_id)
-            return {"uid": src["uid"], "title": src["title"]}
+            return {"uid": src["uid"], "title": src["title"], "kind": src["kind"]}
 
     def chapters_count(self, source_id: int) -> int:
         """Число глав источника — порт вместо прямого чтения infra (B-009)."""

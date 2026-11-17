@@ -185,13 +185,14 @@ export function AgentStateBanner({
   );
 }
 
-/** Баннер ошибки агента с «Повторить» (B-009). */
+/** Баннер ошибки агента с «Повторить» (B-009). Без ошибки не рендерится (B-012). */
 export function StreamErrorBar({ message, onRetry }: { message: string; onRetry: () => void }) {
+  if (!message) return null;
   return (
     <div className="mx-auto mb-2 max-w-3xl px-4">
-      <div className="flex items-center gap-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm">
-        <span className="text-rose-500">⚠</span>
-        <span className="flex-1">Ошибка агента: {message}</span>
+      <div className="flex items-center gap-3 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm">
+        <span className="shrink-0 text-destructive">⚠</span>
+        <span className="min-w-0 flex-1">Ошибка агента: {message}</span>
         <Button size="sm" variant="outline" onClick={onRetry}>
           Повторить
         </Button>

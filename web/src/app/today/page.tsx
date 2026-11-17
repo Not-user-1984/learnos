@@ -82,25 +82,36 @@ export default async function TodayPage() {
                   глава {readingProgress.cursor_chapter} из {readingProgress.total_chapters}
                 </p>
               </div>
+              {/* книга — в PDF-ридер, видео/статья — в текущую главу; без глав — на страницу источника (B-012) */}
               <Link
-                href={`/library/${readingProgress.source_uid}/read`}
+                href={
+                  readingProgress.kind === "book"
+                    ? `/library/${readingProgress.source_uid}/read?ch=${readingProgress.cursor_chapter}`
+                    : readingProgress.total_chapters > 0
+                      ? `/library/${readingProgress.source_uid}/${readingProgress.cursor_chapter}`
+                      : `/library/${readingProgress.source_uid}`
+                }
                 className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
               >
                 <Icon name="auto_stories" size={16} /> Читать дальше
               </Link>
             </div>
           ) : (
-            <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              Незаконченных дел нет. Начни{" "}
-              <Link href="/chat" className="text-primary hover:underline">
-                разговор
-              </Link>{" "}
-              или собери{" "}
-              <Link href="/chat" className="text-primary hover:underline">
-                курс
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              <span>Незаконченных дел нет.</span>
+              <Link
+                href="/library"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+              >
+                <Icon name="local_library" size={16} /> Открыть библиотеку
               </Link>
-              .
-            </p>
+              <Link
+                href="/chat"
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition hover:bg-accent"
+              >
+                <Icon name="chat" size={16} /> Начать разговор
+              </Link>
+            </div>
           )}
         </section>
 
