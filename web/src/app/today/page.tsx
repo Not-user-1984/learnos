@@ -82,13 +82,16 @@ export default async function TodayPage() {
                   глава {readingProgress.cursor_chapter} из {readingProgress.total_chapters}
                 </p>
               </div>
-              {/* книга — в PDF-ридер, видео/статья — в текущую главу; без глав — на страницу источника (B-012) */}
+              {/* книга — в PDF-ридер на место чтения, видео/статья — в текущую главу;
+                  без глав — на страницу источника (B-012/B-013) */}
               <Link
                 href={
                   readingProgress.kind === "book"
-                    ? `/library/${readingProgress.source_uid}/read?ch=${readingProgress.cursor_chapter}`
+                    ? `/library/${readingProgress.source_uid}/read?ch=${readingProgress.position_chapter}${
+                        readingProgress.position_page ? `&page=${readingProgress.position_page}` : ""
+                      }`
                     : readingProgress.total_chapters > 0
-                      ? `/library/${readingProgress.source_uid}/${readingProgress.cursor_chapter}`
+                      ? `/library/${readingProgress.source_uid}/${readingProgress.position_chapter}`
                       : `/library/${readingProgress.source_uid}`
                 }
                 className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"

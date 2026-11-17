@@ -1,6 +1,6 @@
 /** Читалка главы с split-view: материал слева, обсуждение справа (B-006). */
 
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { api } from "@/lib/api";
 import type { ActivityCard, SourceDetail } from "@/lib/types";
 import { ChapterSplit } from "@/components/library/chapter-split";
@@ -17,6 +17,10 @@ export default async function ChapterReaderPage({
   const { uid, chapter } = await params;
   const sp = searchParams ? await searchParams : undefined;
   const idx = Number(chapter);
+  // PDF-режим переехал в единый ридер /read (B-013)
+  if (sp?.mode === "pdf") {
+    redirect(`/library/${uid}/read?ch=${idx}`);
+  }
   let source: SourceDetail;
   let text: string;
   try {

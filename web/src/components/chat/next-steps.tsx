@@ -34,12 +34,25 @@ type NextStepsProps = {
   messages: ChatMessage[];
   session: { state: string } | null;
   mode: string;
+  /** Разговор главы (context_ref): доступен «Записать главу в базу» (B-013). */
+  canCommitChapter?: boolean;
+  onCommitChapter?: () => void;
   onSend: (text: string) => void;
   onPrefill: (text: string) => void;
   onStartScenario: (scenario: ChatScenario) => void;
 };
 
-export function NextSteps({ streaming, messages, session, mode, onSend, onPrefill, onStartScenario }: NextStepsProps) {
+export function NextSteps({
+  streaming,
+  messages,
+  session,
+  mode,
+  canCommitChapter,
+  onCommitChapter,
+  onSend,
+  onPrefill,
+  onStartScenario,
+}: NextStepsProps) {
   if (streaming || hasPendingDecision(messages)) return null;
 
   const items: { icon: string; label: string; run: () => void }[] = [];
@@ -47,6 +60,10 @@ export function NextSteps({ streaming, messages, session, mode, onSend, onPrefil
     // в сессии — одно основное действие текущей фазы
     const a = SESSION_ACTIONS[session.state];
     items.push({ icon: a.icon, label: a.label, run: () => onSend(a.text) });
+    // глава-сессия: «что дальше» после фейнмана — записать главу (B-013)
+    if (session.state === "check" && canCommitChapter && onCommitChapter) {
+      items.push({ icon: "library_add", label: "Записать в базу", run: onCommitChapter });
+    }
   } else if (["root", "free", "quick"].includes(mode)) {
     // вне сессии — сценарии с тем же поведением, что на стартовом экране
     for (const s of CHAT_SCENARIOS) {
@@ -55,6 +72,10 @@ export function NextSteps({ streaming, messages, session, mode, onSend, onPrefil
         label: s.label,
         run: () => (s.action.kind === "prefill" ? onPrefill(s.action.text) : onStartScenario(s)),
       });
+    }
+    // разговор главы: короткий путь главы в базу (сессию создаст клик, B-013)
+    if (canCommitChapter && onCommitChapter) {
+      items.push({ icon: "library_add", label: "Записать в базу", run: onCommitChapter });
     }
   }
   if (!items.length) return null;

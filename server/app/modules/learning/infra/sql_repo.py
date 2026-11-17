@@ -169,6 +169,8 @@ def _activity_dict(r) -> dict:
         "title": r.title,
         "status": r.status,
         "cursor_chapter": r.cursor_chapter,
+        "position_chapter": r.position_chapter,
+        "position_page": r.position_page,
         "created_at": r.created_at,
         "updated_at": r.updated_at,
     }

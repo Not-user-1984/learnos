@@ -71,6 +71,14 @@ class MarkChapterDoneArgs(BaseModel):
     )
 
 
+class CommitChapterArgs(BaseModel):
+    """commit_chapter: записать блок из разговора главы (мини-фейнман прошёл)."""
+
+    block_json: dict | None = Field(
+        default=None, description="Явный драфт блока главы (BlockDraft); без него — из транскрипта"
+    )
+
+
 class RefArgs(BaseModel):
     """Ссылка на активность/сессию."""
 
@@ -144,6 +152,15 @@ def learning_tools(c) -> list[ToolSpec]:
         return svc.mark_chapter_done(
             activity_ref=args.activity, chapter=args.chapter, conversation_uid=ctx.conversation_uid
         )
+
+    def commit_chapter(args: CommitChapterArgs, ctx: ToolContext):
+        if not ctx.conversation_uid:
+            raise NotFound("commit_chapter работает только из разговора главы")
+        out = svc.finish_chapter_for_conversation(ctx.conversation_uid, args.block_json)
+        card = out.pop("_card", None)
+        if card:
+            out["_card"] = card
+        return out
 
     def list_activities(args: RefArgs | None, ctx: ToolContext):
         del ctx, args
@@ -222,6 +239,19 @@ def learning_tools(c) -> list[ToolSpec]:
             args_model=MarkChapterDoneArgs,
             handler=mark_chapter_done,
             label="Глава пройдена",
+        ),
+        ToolSpec(
+            name="commit_chapter",
+            module="learning",
+            description=(
+                "Записать главу в базу знаний из разговора главы (B-013): сохраняет блок "
+                "verified с block_sources=(источник, глава), двигает курсор и заводит повторение. "
+                "Вызывай после 1–2 ответов пользователя на фейнман-вопросы (advance: ask → answer); "
+                "без ответа пользователя — не вызывать."
+            ),
+            args_model=CommitChapterArgs,
+            handler=commit_chapter,
+            label="Глава → в базу",
         ),
         ToolSpec(
             name="list_activities",

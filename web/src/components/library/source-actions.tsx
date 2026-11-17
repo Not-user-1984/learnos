@@ -14,11 +14,14 @@ import { cn } from "@/lib/utils";
 
 export function SourceActions({
   sourceUid,
+  sourceKind,
   chapterIdx,
   chapterTitle,
   className,
 }: {
   sourceUid: string;
+  /** Книга ведёт «Быстрый разбор» в единый ридер с чатом главы (B-013). */
+  sourceKind?: string;
   chapterIdx?: number;
   chapterTitle?: string;
   className?: string;
@@ -29,6 +32,11 @@ export function SourceActions({
   const start = async (intent: "review" | "session") => {
     setBusy(intent);
     try {
+      // книга + разбор → тот же чат главы внутри ридера: агент ведёт по главе сам (B-013)
+      if (intent === "review" && sourceKind === "book") {
+        router.push(`/library/${sourceUid}/read?ch=${chapterIdx ?? 1}&discuss=review`);
+        return;
+      }
       const act = await apiPost<{ uid: string }>("/activities", { source: sourceUid });
       const conv = await apiPost<{ uid: string }>("/conversations", {
         activity: act.uid,

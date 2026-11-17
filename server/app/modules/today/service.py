@@ -87,6 +87,9 @@ class TodayService:
                     "kind": act.get("kind", "book"),
                     "title": act["title"],
                     "cursor_chapter": act["cursor_chapter"],
+                    # место чтения (B-013): «Читать дальше» открывает его, а не курсор
+                    "position_chapter": act.get("position_chapter") or act["cursor_chapter"],
+                    "position_page": act.get("position_page"),
                     "total_chapters": total,
                 }
             )

@@ -163,6 +163,22 @@ export function ChatView({ conversation, variant = "page", insert, onTimecode }:
     stream.resume();
   };
 
+  // «Записать в базу» разговора главы (B-013): commit-роут создаёт лёгкую
+  // сессию мини-фейнмана, агент ведёт её и завершает тулом commit_chapter
+  const commitChapter = async () => {
+    const ref = conversation.context_ref;
+    if (!ref) return;
+    const [srcUid, ch] = ref.split(":");
+    try {
+      await apiPost(`/sources/${srcUid}/chapters/${ch}/conversation/commit`, {});
+      await send(
+        "Запиши эту главу в базу знаний: задай мне 1–2 контрольных вопроса «перескажи суть своими словами», выслушай ответы и сохрани блок.",
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "не удалось начать запись главы");
+    }
+  };
+
   // Правда о генерации: пока последнее сообщение без ответа (свой стрим оборвался
   // или генерация идёт независимо от вкладки) — опрашиваем detail каждые 5 с без
   // лимита времени: ответ появился — подхватываем; работает — бейдж; прерван — баннер
@@ -376,6 +392,8 @@ export function ChatView({ conversation, variant = "page", insert, onTimecode }:
           messages={messages}
           session={session}
           mode={conversation.mode}
+          canCommitChapter={Boolean(conversation.context_ref)}
+          onCommitChapter={() => void commitChapter()}
           onSend={(t) => void send(t)}
           onPrefill={setInput}
           onStartScenario={(s) => void startScenario(s)}

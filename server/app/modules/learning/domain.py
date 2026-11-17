@@ -45,18 +45,31 @@ def transition(state: str, event: str) -> str | None:
     raise ValueError(f"событие '{event}' недопустимо в состоянии '{state}'")
 
 
-def can_finish(state: str, status: str, answers: int = 0) -> None:
+def can_finish(state: str, status: str, answers: int = 0, session_kind: str | None = None) -> None:
     """Проверить, что сессию можно завершить.
 
     Фейнман-гейт (R-18 аудита): ядро продукта — «знание рождается через
     понимание», поэтому сессия не закрывается без единого проговора
     (answer-события); раньше это держалось только промптом агента.
 
+    Разговор главы (B-013, kind="chapter") — короткий путь check → done:
+    мини-фейнман там же, но без теории и практики.
+
     Raises:
-        ValueError: не из debrief, уже закрыта или не было ни одного ответа.
+        ValueError: не из debrief (для chapter — не из check), уже закрыта
+            или не было ни одного ответа.
     """
     if status != "active":
         raise ValueError(f"сессия уже {status}")
+    if session_kind == "chapter":
+        if state != "check":
+            raise ValueError(f"finish allowed only from state 'check' (сейчас '{state}')")
+        if answers < 1:
+            raise ValueError(
+                "главу нельзя записать в базу без единого ответа — спроси «перескажи суть своими "
+                "словами», выслушай ответ и вызови commit_chapter"
+            )
+        return
     if state != "debrief":
         raise ValueError(f"finish allowed only from state 'debrief' (сейчас '{state}')")
     if answers < 1:

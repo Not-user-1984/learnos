@@ -69,7 +69,8 @@ class GenerationUseCases:
         out = run_coro_sync(
             self._svc._runtime.run_structured(block_writer, ctx, f"Транскрипт сессии:\n{dialog}")  # noqa: SLF001
         )
-        return self.categorize_draft(writer_out_to_draft(out, kind=session.get("block_kind", "lesson")))
+        block_kind = (session.get("config") or {}).get("block_kind") or session.get("block_kind") or "lesson"
+        return self.categorize_draft(writer_out_to_draft(out, kind=block_kind))
 
     def categorize_draft(self, draft: BlockDraft) -> BlockDraft:
         """Проставить драфту category_suggestion через categorizer (не критично при падении)."""

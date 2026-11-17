@@ -35,6 +35,13 @@ class AdvanceIn(BaseModel):
     payload: dict = {}
 
 
+class PositionIn(BaseModel):
+    """Место чтения книги в активности (B-013): глава + страница PDF."""
+
+    chapter: int
+    page: int | None = None
+
+
 def make_router(svc) -> APIRouter:
     """Роуты обучения."""
     r = APIRouter(tags=["learning"])
@@ -54,6 +61,11 @@ def make_router(svc) -> APIRouter:
     @r.get("/activities/{ref}")
     def get_activity(ref: str):
         return svc.get_activity(ref)
+
+    @r.post("/activities/{ref}/position")
+    def set_position(ref: str, body: PositionIn):
+        """Место чтения от ридера (дебаунс на клиенте): глава + страница (B-013)."""
+        return svc.set_position(ref, body.chapter, body.page)
 
     @r.delete("/activities/{ref}")
     def delete_activity(ref: str):

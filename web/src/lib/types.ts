@@ -81,6 +81,8 @@ export type ActivityCard = {
   title: string;
   status: string;
   cursor_chapter: number;
+  position_chapter: number | null;
+  position_page: number | null;
   total_chapters: number;
   created_at: string;
   updated_at: string;
@@ -154,6 +156,7 @@ export type ConversationDetail = {
   activity_id: number | null;
   chapter_idx: number | null;
   focus_block_uid: string | null;
+  context_ref?: string | null;
   messages: ChatMessage[];
   session: SessionState;
   review_progress?: ReviewProgress | null;
@@ -208,6 +211,8 @@ export type TodaySnapshot = {
     kind: string;
     title: string;
     cursor_chapter: number;
+    position_chapter: number;
+    position_page: number | null;
     total_chapters: number;
   }[];
   review: { due_today: number };

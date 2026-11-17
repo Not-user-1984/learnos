@@ -79,7 +79,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
               <Icon name="picture_as_pdf" size={16} /> Читать PDF
             </Link>
           )}
-          <SourceActions sourceUid={source.uid} className="ml-auto" />
+          <SourceActions sourceUid={source.uid} sourceKind={source.kind} className="ml-auto" />
           <ProcessSourceButton sourceUid={source.uid} status={source.status} />
         </header>
 
@@ -165,7 +165,7 @@ export default async function SourcePage({ params }: { params: Promise<{ uid: st
                         PDF
                       </Link>
                     )}
-                    <SourceActions sourceUid={source.uid} chapterIdx={ch.idx} chapterTitle={ch.title} />
+                    <SourceActions sourceUid={source.uid} sourceKind={source.kind} chapterIdx={ch.idx} chapterTitle={ch.title} />
                   </span>
                 </div>
               </li>

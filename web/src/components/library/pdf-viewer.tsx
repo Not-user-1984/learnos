@@ -7,7 +7,7 @@
  *  (переживает загрузку документа), прыжок = рендер коридора вокруг цели →
  *  уточнение высот холдеров по факту → скролл; после — обычный ленивый режим. */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
@@ -78,7 +78,7 @@ export function PdfViewer({
     scaleRef.current = scale;
   }, [scale]);
 
-  // --- страница: canvas в физическом разрешении, css-размер и высота холдера — по факту ---
+  // --- страница: canvas в физическом разрешении + text-layer поверх (B-013) ---
   const renderPage = useCallback(async (n: number, epoch: number) => {
     const doc = docRef.current;
     const holder = pageRefs.current[n - 1];
@@ -112,6 +112,23 @@ export function PdfViewer({
         holder.style.width = cssW;
         holder.style.height = cssH;
         holder.replaceChildren(canvas);
+        // прозрачный текст поверх canvas: выделение → «Обсудить» (цитата в чат главы)
+        const { TextLayer } = await import("pdfjs-dist");
+        const tl = document.createElement("div");
+        tl.className = "textLayer";
+        tl.dir = "ltr";
+        holder.appendChild(tl);
+        try {
+          const textLayer = new TextLayer({
+            textContentSource: p.streamTextContent(),
+            container: tl,
+            viewport: cssViewport,
+          });
+          await textLayer.render();
+          if (epoch !== renderEpoch.current || !holder.isConnected) tl.remove();
+        } catch {
+          tl.remove(); // текст не извлёкся — страница остаётся читаемой картинкой
+        }
       }
     } catch {
       renderedRef.current.delete(n); // отмена или сбой — можно повторить
@@ -384,9 +401,18 @@ export function PdfViewer({
               ref={(el) => {
                 pageRefs.current[n - 1] = el;
               }}
-              style={{ width: pageW || undefined, height: pageH || undefined }}
+              style={
+                {
+                  width: pageW || undefined,
+                  height: pageH || undefined,
+                  // масштаб text-layer: PDF-единицы → css-пиксели этой страницы
+                  "--total-scale-factor": String(scale || 1),
+                  "--scale-round-x": "1px",
+                  "--scale-round-y": "1px",
+                } as CSSProperties
+              }
               className={cn(
-                "mx-auto mb-3 flex items-center justify-center overflow-hidden rounded bg-white shadow-sm last:mb-0 dark:bg-zinc-100",
+                "relative mx-auto mb-3 flex items-center justify-center overflow-hidden rounded bg-white shadow-sm last:mb-0 dark:bg-zinc-100",
                 !pageH && "min-h-40",
               )}
             >

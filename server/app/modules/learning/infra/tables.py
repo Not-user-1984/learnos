@@ -21,6 +21,9 @@ activities = Table(
     Column("title", Text, nullable=False),
     Column("status", Text, nullable=False, server_default="active"),
     Column("cursor_chapter", Integer, nullable=False, server_default="1"),
+    # место чтения (B-013): где читатель остановился, ≠ курсор прогресса
+    Column("position_chapter", Integer),
+    Column("position_page", Integer),
     Column("created_at", Text, nullable=False),
     Column("updated_at", Text, nullable=False),
 )

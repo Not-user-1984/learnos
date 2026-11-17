@@ -1,5 +1,6 @@
 """B-005: дашборд «Сегодня» и старт сессии по элементу курса из UI."""
 
+from app.modules.learning.infra.tables import activities as activities_table
 from app.modules.library.infra.tables import chapters as chapters_table
 
 
@@ -91,3 +92,29 @@ def test_today_attention_sources(client, container):
         )
     out = client.get("/api/today").json()
     assert any(s["status"] == "processing" for s in out["sources_attention"])
+
+
+def test_today_reading_has_kind_for_link(client, container):
+    """Чтение несёт kind источника — «Читать дальше» ведёт книгу в PDF-ридер,
+    видео/статью — в главу, а не в 404 (B-012)."""
+    src = _mk_source_with_chapters(container)
+    client.post("/api/activities/mark-read", json={"source": src["uid"], "chapter": 1})
+
+    out = client.get("/api/today").json()
+    assert out["reading"][0]["kind"] == "book"
+
+
+def test_today_reading_skips_cursor_beyond_total(client, container):
+    """Залипшая active с курсором за последней главой (пересборка глав)
+    не висит в «Продолжить» — вести больше некуда (B-012)."""
+    src = _mk_source_with_chapters(container)
+    client.post("/api/activities/mark-read", json={"source": src["uid"], "chapter": 1})
+    with container.uow() as uow:
+        uow.session.execute(
+            activities_table.update()
+            .where(activities_table.c.source_id == src["id"])
+            .values(cursor_chapter=99)
+        )
+
+    out = client.get("/api/today").json()
+    assert out["reading"] == []

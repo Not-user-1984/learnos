@@ -294,4 +294,5 @@ def _meta_dict(meta: BlockMeta) -> dict:
         "links": meta.links,
         "weak_spots_count": meta.weak_spots_count,
         "path": meta.path,
+        "verified": meta.verified,
     }

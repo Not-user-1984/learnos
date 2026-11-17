@@ -26,7 +26,7 @@ ENTRY_TOOLS = frozenset(
 
 # инструменты, двигающие курсор книги (активность разговора): после них статус-бар
 # быстрого разбора обновляется событием review_progress
-REVIEW_TOOLS = frozenset({"mark_chapter_done", "finish_session"})
+REVIEW_TOOLS = frozenset({"mark_chapter_done", "finish_session", "commit_chapter"})
 
 free_chat = AgentSpec(
     name="free_chat",
@@ -92,6 +92,7 @@ quick_reviewer = AgentSpec(
             "mark_chapter_done",
             "offer_replies",
             "show_chapter_review",
+            "commit_chapter",
             "send_telegram_text",
             "send_block_to_telegram",
             "send_chapter_to_telegram",
@@ -186,6 +187,8 @@ root = AgentSpec(
         | SESSION_TOOLS
         | ENTRY_TOOLS
         | {"get_session_state", "mark_chapter_done", "get_review_queue", "answer_review"}
+        # «Записать главу в базу» в разговоре главы (B-013)
+        | {"commit_chapter"}
         # разбор главы карточкой: root ведёт интент «review» (единый вход) сам
         | {"show_chapter_review"}
         # состояние LLM и сброс cooldown ключей (BB-005): оркестратор видит свою систему

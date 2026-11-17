@@ -1,8 +1,8 @@
 "use client";
 
-/** Полноэкранный PDF-ридер: тот же PdfViewer + оглавление-шторка, яркость,
- *  клавиатура, навигация по главам. Место чтения живёт в URL (ch + page),
- *  обновляется replaceState без перезагрузки — ссылкой можно поделиться. */
+/** Полноэкранный PDF-ридер (B-013): PDF + text-layer (выделение → цитата в чат),
+ *  оглавление, клавиатура, место чтения на сервере, «Глава прочитана» и
+ *  подсказка «Разобрать главу». Чат главы — справа (ReaderSplit). */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -10,6 +10,7 @@ import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useStored } from "@/lib/use-stored";
+import { apiPost } from "@/lib/api";
 import { PdfViewer } from "./pdf-viewer";
 
 type Chapter = { idx: number; title: string; number?: number | null };
@@ -18,15 +19,38 @@ type Props = {
   sourceUid: string;
   sourceTitle: string;
   chapters: Chapter[];
-  /** Начальные значения из URL. */
+  /** Начальные значения: URL > место чтения активности > глава 1. */
   initialChapter: number;
   initialPage: number | null;
+  /** Активность источника: синхронизация места и «прочитано»; null — читать без прогресса. */
+  activityUid: string | null;
+  /** Главы с idx < cursor уже прочитаны (авто-отметка не нужна). */
+  initialCursor: number;
+  /** Открыть чат главы с этим сообщением сразу (разбор без чтения). */
+  initialDiscuss?: string | null;
+  /** Выделение/кнопки зовут чат главы: цитата или стартовое сообщение. */
+  onDiscuss: (text?: string) => void;
+  /** Текущая глава (по видимой странице) — ключ чата и позиция. */
+  onChapterChange?: (idx: number) => void;
 };
 
 const BRIGHT_KEY = "learnos-pdf-brightness";
 const BRIGHT_EVENT = "learnos-pdf-brightness-change";
+const POSITION_DEBOUNCE = 1500; // мс тишины до отправки места на сервер
+const QUOTE_MAX = 800; // символы цитаты из выделения
 
-export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, initialPage }: Props) {
+export function PdfReader({
+  sourceUid,
+  sourceTitle,
+  chapters,
+  initialChapter,
+  initialPage,
+  activityUid,
+  initialCursor,
+  initialDiscuss,
+  onDiscuss,
+  onChapterChange,
+}: Props) {
   // страницы/номера/секции глав из /outline: строим карты «глава → …»;
   // если page в URL не задан — после загрузки outline проматываем к началу главы
   const [starts, setStarts] = useState<Record<string, number>>({});
@@ -38,6 +62,12 @@ export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, in
   const [brightnessRaw, setBrightness] = useStored(BRIGHT_KEY, BRIGHT_EVENT, "1");
   const brightness = Number(brightnessRaw) || 1;
   const urlSync = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const positionSync = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [readSet, setReadSet] = useState<Set<number>>(new Set()); // главы, отмеченные «прочитано»
+  const [readHint, setReadHint] = useState<number | null>(null); // глава свежепрочитана → «Разобрать?»
+  const [quote, setQuote] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const discussedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,19 +109,58 @@ export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, in
     return ch;
   }, [chapters, current, starts]);
 
-  // место чтения → URL (без перезагрузки)
+  useEffect(() => {
+    onChapterChange?.(currentChapter);
+  }, [currentChapter, onChapterChange]);
+
+  // место чтения → URL (без перезагрузки) + на сервер с дебаунсом (B-013)
   useEffect(() => {
     if (urlSync.current) clearTimeout(urlSync.current);
     urlSync.current = setTimeout(() => {
       const url = `/library/${sourceUid}/read?ch=${currentChapter}&page=${current}`;
       window.history.replaceState(null, "", url);
     }, 400);
+    if (activityUid) {
+      if (positionSync.current) clearTimeout(positionSync.current);
+      positionSync.current = setTimeout(() => {
+        void apiPost(`/activities/${activityUid}/position`, {
+          chapter: currentChapter,
+          page: current,
+        }).catch(() => undefined);
+      }, POSITION_DEBOUNCE);
+    }
     return () => {
       if (urlSync.current) clearTimeout(urlSync.current);
     };
-  }, [currentChapter, current, sourceUid]);
+  }, [currentChapter, current, sourceUid, activityUid]);
+
+  // разбор без чтения: стартовое сообщение в чат главы при входе (B-013)
+  useEffect(() => {
+    if (initialDiscuss && !discussedRef.current) {
+      discussedRef.current = true;
+      onDiscuss(initialDiscuss);
+    }
+  }, [initialDiscuss, onDiscuss]);
+
+  /** Отметить главу прочитанной (один раз за сессию читалки) и предложить разбор. */
+  const markRead = (chapter: number) => {
+    if (readSet.has(chapter)) return;
+    setReadSet((prev) => new Set(prev).add(chapter));
+    if (!activityUid) return; // без активности прогресс не ведём — кнопка просто скрывается
+    void apiPost("/activities/mark-read", { source: sourceUid, chapter })
+      .then(() => setReadHint(chapter))
+      .catch(() =>
+        setReadSet((prev) => {
+          const next = new Set(prev);
+          next.delete(chapter);
+          return next;
+        }),
+      );
+  };
 
   const goToChapter = (idx: number) => {
+    // уход на следующую главу = предыдущая дочитана (один раз, B-013)
+    if (idx === currentChapter + 1) markRead(currentChapter);
     const s = starts[String(idx)];
     if (s) {
       setTarget(s);
@@ -104,6 +173,36 @@ export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, in
     setCurrent(page);
   };
 
+  // --- выделение текста (text-layer) → плашка «Обсудить выделенное» ---
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onSelChange = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) {
+          setQuote(null);
+          return;
+        }
+        const anchor = sel.anchorNode;
+        const node = anchor instanceof Element ? anchor : anchor?.parentElement ?? null;
+        if (!node || !root.contains(node.closest(".textLayer"))) {
+          setQuote(null);
+          return;
+        }
+        const text = sel.toString().replace(/\s+/g, " ").trim();
+        setQuote(text.length >= 8 ? text.slice(0, QUOTE_MAX) : null);
+      }, 250);
+    };
+    document.addEventListener("selectionchange", onSelChange);
+    return () => {
+      document.removeEventListener("selectionchange", onSelChange);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
   /** Подпись главы: номер книги («Глава 3 · Ветвление») или позиция. */
   const chapterName = (c: Chapter): string => {
     const n = c.number ?? numbers[String(c.idx)];
@@ -113,9 +212,10 @@ export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, in
   const chIdxs = chapters.map((c) => c.idx);
   const prevChapter = chIdxs.filter((i) => i < currentChapter).pop();
   const nextChapter = chIdxs.find((i) => i > currentChapter);
+  const chapterRead = readSet.has(currentChapter) || currentChapter < initialCursor;
 
   return (
-    <div className="relative flex h-full min-w-0 flex-col">
+    <div ref={rootRef} className="relative flex h-full min-w-0 flex-col">
       {/* тулбар PdfViewer + обвязка ридера */}
       <PdfViewer
         url={`/api/sources/${sourceUid}/file`}
@@ -136,6 +236,29 @@ export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, in
         }
         toolbarExtra={
           <>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              aria-label="Чат главы"
+              title="Обсудить главу с нейронкой"
+              onClick={() => onDiscuss()}
+            >
+              <Icon name="chat_bubble" size={14} />
+              <span className="hidden sm:inline">Обсудить</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              aria-label="Глава прочитана"
+              title="Отметить главу прочитанной — она попадёт в прогресс книги"
+              disabled={chapterRead || !activityUid}
+              onClick={() => markRead(currentChapter)}
+            >
+              <Icon name={chapterRead ? "task_alt" : "check"} size={14} />
+              <span className="hidden sm:inline">{chapterRead ? "Прочитано" : "Глава прочитана"}</span>
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -207,6 +330,49 @@ export function PdfReader({ sourceUid, sourceTitle, chapters, initialChapter, in
           <span />
         )}
       </nav>
+
+      {/* выделение в text-layer → цитата в чат главы (B-013) */}
+      {quote && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-16 z-20 flex justify-center px-4">
+          <div className="pointer-events-auto flex max-w-lg items-center gap-3 rounded-xl border bg-card px-4 py-2.5 shadow-lg">
+            <Icon name="format_quote" size={16} className="shrink-0 text-primary" />
+            <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground" title={quote}>
+              {quote}
+            </span>
+            <Button
+              size="sm"
+              onClick={() => {
+                onDiscuss(`«${quote}»\n\n`);
+                setQuote(null);
+              }}
+            >
+              Обсудить
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* глава отмечена прочитанной → предложить разбор (можно закрыть) */}
+      {readHint !== null && readHint === currentChapter && (
+        <div className="absolute inset-x-0 bottom-16 z-20 flex justify-center px-4">
+          <div className="flex max-w-lg items-center gap-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-2.5 shadow-lg">
+            <Icon name="task_alt" size={16} className="shrink-0 text-primary" />
+            <span className="min-w-0 flex-1 text-sm">Глава прочитана. Разобрать её с нейронкой?</span>
+            <Button
+              size="sm"
+              onClick={() => {
+                onDiscuss("Разбери эту главу: главное, ключевые понятия и 1–2 вопроса на подумать.");
+                setReadHint(null);
+              }}
+            >
+              Разобрать
+            </Button>
+            <Button size="sm" variant="ghost" aria-label="Закрыть подсказку" onClick={() => setReadHint(null)}>
+              <Icon name="close" size={16} />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* оглавление-шторка */}
       {tocOpen && (

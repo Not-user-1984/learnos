@@ -103,6 +103,11 @@ def make_router(svc, chat=None) -> APIRouter:
         """Разговор главы (get-or-create, B-006): split-view продолжает тот же разговор."""
         return chat.chapter_conversation(ref, idx)
 
+    @r.post("/sources/{ref}/chapters/{idx}/conversation/commit")
+    def commit_chapter_conversation(ref: str, idx: int):
+        """«Записать главу в базу» (B-013): разговор + лёгкая сессия мини-фейнмана."""
+        return chat.commit_chapter_conversation(ref, idx)
+
     @r.get("/jobs/{job_id}", response_model=JobOut)
     def get_job(job_id: int) -> JobOut:
         return JobOut(**svc.get_job(job_id))

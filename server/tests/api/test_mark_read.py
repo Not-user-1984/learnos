@@ -47,6 +47,25 @@ def test_mark_read_last_chapter_finishes(client, container):
     assert out["cursor_chapter"] == TOTAL + 1 and out["status"] == "done"
 
 
+def test_mark_read_self_heals_stuck_cursor(client, container):
+    """Курсор за последней главой при active (глав стало меньше после пересборки):
+    любой mark-read завершает изучение, курсор не двигается назад (B-012)."""
+    from app.modules.learning.infra.tables import activities as activities_table
+
+    src = _book(container)
+    client.post("/api/activities/mark-read", json={"source": src["uid"], "chapter": 1})
+    with container.uow() as uow:
+        uow.session.execute(
+            activities_table.update()
+            .where(activities_table.c.source_id == src["id"])
+            .values(cursor_chapter=TOTAL + 5)
+        )
+
+    out = client.post("/api/activities/mark-read", json={"source": src["uid"], "chapter": 1}).json()
+    assert out["cursor_chapter"] == TOTAL + 5 and out["status"] == "done"
+    assert client.get("/api/activities?status=active").json() == []
+
+
 def test_mark_read_validates_chapter_and_source(client, container):
     """Номер главы вне книги и чужой источник — 409/404, без побочных эффектов."""
     src = _book(container)

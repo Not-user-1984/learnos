@@ -178,6 +178,29 @@ class ChatService:
         with self._uow() as uow:
             return self._convs.get(uow.session, uid).get("activity_id")
 
+    def conversation_info(self, uid: str) -> dict:
+        """id/активность/глава разговора — порт для learning (глава-сессия, B-013)."""
+        with self._uow() as uow:
+            c = self._convs.get(uow.session, uid)
+            return {
+                "id": c["id"],
+                "activity_id": c.get("activity_id"),
+                "chapter_idx": c.get("chapter_idx"),
+                "context_ref": c.get("context_ref"),
+            }
+
+    def commit_chapter_conversation(self, source_ref: str | int, chapter_idx: int) -> dict:
+        """«Записать в базу» из разговора главы (B-013): get-or-create разговора
+        и лёгкой главы-сессии (check → мини-фейнман → commit_chapter)."""
+        conv = self.chapter_conversation(source_ref, chapter_idx)
+        session = self._learning.start_chapter_session(conv["uid"])
+        return {
+            "conversation_uid": conv["uid"],
+            "session_uid": session["session_uid"],
+            "state": session["state"],
+            "kind": "chapter",
+        }
+
     def conversation_uid(self, conversation_id: int) -> str | None:
         """uid разговора по id (для дашборда «Сегодня», B-005)."""
         with self._uow() as uow:

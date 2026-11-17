@@ -151,11 +151,13 @@ class LearningService:
         conversation_id: int | None = None,
         config: dict | None = None,
         course_item_id: int | None = None,
+        state: str = "theory",
     ) -> dict:
         """Начать сессию: обязательно course_id или activity.
 
-        course_item_id — элемент доски курса, который закрывает сессия (B-004):
+        course_item_id — элемент доски курса, который закроет сессия (B-004):
         сохраняется и уходит событием, курсы переводят элемент в doing.
+        state — стартовое состояние машины (для короткого пути главы, B-013).
         """
         if course_id is None and activity_ref is None:
             raise InvalidState("нужен course_id или activity")
@@ -178,7 +180,7 @@ class LearningService:
                 chapter_idx=chapter_idx,
                 idx=idx,
                 status="active",
-                state="theory",
+                state=state,
                 config_json=json.dumps(config or {}, ensure_ascii=False),
                 started_at=now,
                 transcript_json="[]",
@@ -282,8 +284,9 @@ class LearningService:
         with self._uow() as uow:
             s = self._get(uow.session, session_ref)
             answers = sum(1 for e in (s.get("transcript") or []) if e.get("event") == "answer")
+            kind = (s.get("config") or {}).get("kind")
             try:
-                can_finish(s["state"], s["status"], answers=answers)
+                can_finish(s["state"], s["status"], answers=answers, session_kind=kind)
             except ValueError as e:
                 raise InvalidState(str(e)) from e
 
@@ -437,11 +440,73 @@ class LearningService:
             )
         return {"ok": True, **out}
 
+    def set_position(self, activity_ref: str | int, chapter: int, page: int | None = None) -> dict:
+        """Место чтения в активности (B-013): глава + страница PDF от ридера (дебаунс на клиенте).
+
+        Курсор прогресса не трогаем: место — «где читатель», курсор — «что пройдено».
+        """
+        if chapter < 1:
+            raise InvalidState("номер главы должен быть ≥ 1")
+        if page is not None and page < 1:
+            raise InvalidState("номер страницы должен быть ≥ 1")
+        now = now_iso(self._clock)
+        with self._uow() as uow:
+            act = self._acts.get(uow.session, activity_ref)
+            self._acts.update(
+                uow.session,
+                act["id"],
+                position_chapter=chapter,
+                position_page=page,
+                updated_at=now,
+            )
+            return {
+                "ok": True,
+                "activity": act["uid"],
+                "position_chapter": chapter,
+                "position_page": page,
+            }
+
     def session_for_conversation(self, conversation_id: int) -> dict | None:
         """Активная сессия разговора (для агента session-режима)."""
         with self._uow() as uow:
             s = self._sessions.find_by_conversation(uow.session, conversation_id)
             return self._state_out(s) if s else None
+
+    # --- разбор главы (B-013): короткий путь check → done ---
+
+    def start_chapter_session(self, conversation_uid: str) -> dict:
+        """Лёгкая сессия «Записать в базу» для разговора главы (get-or-create).
+
+        Живёт в check (мини-фейнман: 1–2 вопроса «перескажи своими словами»),
+        завершается commit_chapter — блоком с block_sources=(источник, глава).
+        """
+        info = self._chat.conversation_info(conversation_uid)
+        if info.get("activity_id") is None:
+            raise InvalidState("разговор не привязан к активности источника")
+        with self._uow() as uow:
+            existing = self._sessions.find_by_conversation(uow.session, info["id"])
+            if existing is not None:
+                return self._state_out(existing)
+        return self.start_session(
+            activity_ref=info["activity_id"],
+            chapter_idx=info.get("chapter_idx"),
+            conversation_id=info["id"],
+            config={"kind": "chapter", "block_kind": "note"},
+            state="check",
+        )
+
+    def finish_chapter_for_conversation(self, conversation_uid: str, block_draft: dict | None = None) -> dict:
+        """commit_chapter: сохранить блок из разговора главы (мини-фейнман уже прошёл).
+
+        Raises:
+            NotFound: у разговора нет главы-сессии.
+        """
+        info = self._chat.conversation_info(conversation_uid)
+        with self._uow() as uow:
+            s = self._sessions.find_by_conversation(uow.session, info["id"])
+            if s is None or (s.get("config") or {}).get("kind") != "chapter":
+                raise NotFound("у разговора главы нет сессии «Записать в базу» — сначала commit")
+        return self.finish_session(s["uid"], block_draft)
 
     def count_sessions_for_course(self, course_id: int) -> int:
         """Число сессий курса — порт для courses (проверка перед удалением, B-009)."""
@@ -502,10 +567,21 @@ class LearningService:
             return None
 
     def _advance_cursor(self, uow, act: dict, target: int, total: int, now: str) -> dict:
-        """Курсор активности вперёд до target+1 (не назад); выход за total завершает."""
+        """Курсор активности вперёд до target+1 (не назад); выход за total завершает.
+
+        Место чтения следует за прогрессом: следующая глава с начала (B-013).
+        """
         cursor = max(act["cursor_chapter"], target + 1)
         status = "done" if cursor > total > 0 else act["status"]
-        self._acts.update(uow.session, act["id"], cursor_chapter=cursor, status=status, updated_at=now)
+        self._acts.update(
+            uow.session,
+            act["id"],
+            cursor_chapter=cursor,
+            status=status,
+            position_chapter=cursor,
+            position_page=None,
+            updated_at=now,
+        )
         uow.emit(ActivityProgressed(activity_uid=act["uid"], cursor_chapter=cursor, total_chapters=total))
         return {
             "activity": act["uid"],
