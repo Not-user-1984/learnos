@@ -5,6 +5,9 @@
 по задаче через MCP. Дизайн и эталон разбора: `docs/stash.md`. Брать после ревью B-012…B-014.
 
 ## Этапы (каждый — отдельный коммит, проверки зелёные после каждого)
+0. **Хвост B-014**: MCP `update_block` (`server/app/modules/knowledge/tools.py:48`) валидирует `cards` через `CardIn`
+   (как REST `BlockPatchIn`), невалидное → ошибка тула, блок не ломается; тест. Плюс `save_note` с source+chapter →
+   отказ с подсказкой `start_chapter_commit`; удалить мёртвый `ActivityRepository.all_for_conversation`.
 1. **Модуль `modules/stash/`** (domain/service/infra/api/tools/events, своя миграция): карточка по `docs/stash.md`,
    дедуп по нормализованному URL, фиксированные категории + теги. Не связан с library/knowledge (только events/public).
 2. **Разбор (job в JobWorker)**: GitHub → `github_repo`/`github_file` (README, звёзды, pushed_at, archived);

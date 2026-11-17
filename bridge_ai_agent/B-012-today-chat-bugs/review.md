@@ -13,3 +13,7 @@
 
 ## Готово, когда
 Видео в курсе → «Читать» открывает страницу главы; rose-500 в chat/ нет (`grep -rn "rose-" web/src/components/chat`); проверки зелёные.
+
+# Раунд 2 (2026-11-17) — done
+Пункты 1–4 закрыты (общая `web/src/lib/reading-link.ts`, kind из источника, rose → destructive). Проверки: 540 passed, web OK.
+Юнит-теста `readingHref` нет — в web нет тест-раннера, покрыто API-тестами kind. Принято.

@@ -28,3 +28,8 @@ text-layer, редирект `?mode=pdf`, место в activity работаю�
 
 ## Готово, когда
 Пункты 1–8 закрыты тестами, проверки зелёные, п.9 отражён в report.md.
+
+# Раунд 2 (2026-11-17) — done
+Пункты 1–9 закрыты; e2e с живой glm-5.3: чат главы → вопросы → commit_chapter → verified-блок с block_sources.
+Мелочи в бэклог: мёртвый `ActivityRepository.all_for_conversation` (`learning/infra/sql_repo.py:130`);
+`save_note` с source+chapter сервером не запрещён (гард только в промпте); `set_position` при total=0 → 422.
